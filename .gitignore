@@ -1,0 +1,28 @@
+# 의존성
+node_modules/
+
+# 빌드 산출물
+dist/
+build/
+*.zip
+
+# 환경 변수와 키
+.env
+.env.*
+!.env.example
+config.local.js
+config.local.json
+src/config.local.*
+
+# 에디터
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
+npm-debug.log*
