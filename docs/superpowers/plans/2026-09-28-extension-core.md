@@ -410,6 +410,14 @@ git commit -m "feat: 협찬 제외 평점 집계"
 
 ## Task 4: 쿠팡 리뷰 DOM 파서
 
+> **2026-09-29 갱신.** 아래 원문은 쿠팡 DOM을 모르는 상태에서 조사 절차로 작성했다. 실행 중 실제 페이지를 조사해 값이 확정되었고, 확정판은 `.superpowers/sdd/2026-09-28-extension-core/task-4-brief.md` 에 있다. 바뀐 점은 셋이다.
+>
+> - 셀렉터 확정: 컨테이너 `#sdpReview`, 항목 `article[data-review-id]`, 별점 `i[class*="twc-bg-full-star"]`
+> - 별점은 속성이 아니라 **채워진 별 아이콘 개수**로 읽는다. `RATING_SOURCE` 와 `RATING_ATTRIBUTE` 상수는 쓰지 않는다
+> - 본문 셀렉터를 두지 않고 `article.textContent` 를 쓴다. 본문 엘리먼트의 클래스가 Tailwind 유틸이라 스타일 변경만으로 깨지고, 체험단 판별은 문구 위치에 의존하지 않는다
+>
+> `ParsedReview.id` 도 배열 인덱스가 아니라 `data-review-id` 실제 값을 쓴다.
+
 이 태스크는 실제 쿠팡 HTML이 있어야 진행할 수 있다. 픽스처 확보가 첫 단계다.
 
 **Files:**
