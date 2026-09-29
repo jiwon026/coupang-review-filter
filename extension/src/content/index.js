@@ -5,7 +5,7 @@ import { markSponsored, applyFilter } from './filter.js'
 
 const state = {
   hidden: false,
-  lastCount: -1,
+  lastKey: '',
 }
 
 function render() {
@@ -14,8 +14,10 @@ function render() {
 
   const reviews = parseReviews(document)
   if (reviews.length === 0) return
-  if (reviews.length === state.lastCount) return
-  state.lastCount = reviews.length
+
+  const key = reviews.map((review) => review.id).join(',')
+  if (key === state.lastKey) return
+  state.lastKey = key
 
   markSponsored(reviews)
   applyFilter(reviews, state.hidden)
@@ -26,7 +28,7 @@ function render() {
     onToggle: (next) => {
       state.hidden = next
       applyFilter(reviews, next)
-      state.lastCount = -1
+      state.lastKey = ''
       render()
     },
   })
