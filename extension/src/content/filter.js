@@ -1,0 +1,23 @@
+import { isSponsored, SPONSORED_LABEL } from '../core/sponsored.js'
+
+const BADGE_CLASS = 'crf-badge'
+const HIDDEN_CLASS = 'crf-hidden'
+
+export function markSponsored(reviews) {
+  for (const review of reviews) {
+    if (!isSponsored(review.text)) continue
+    if (review.element.querySelector(`.${BADGE_CLASS}`)) continue
+
+    const badge = document.createElement('span')
+    badge.className = BADGE_CLASS
+    badge.textContent = SPONSORED_LABEL
+    review.element.appendChild(badge)
+  }
+}
+
+export function applyFilter(reviews, hidden) {
+  for (const review of reviews) {
+    if (!isSponsored(review.text)) continue
+    review.element.classList.toggle(HIDDEN_CLASS, hidden)
+  }
+}
