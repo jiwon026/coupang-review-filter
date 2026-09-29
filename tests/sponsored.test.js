@@ -17,6 +17,22 @@ describe('isSponsored', () => {
     expect(isSponsored(messy)).toBe(true)
   })
 
+  it('실측된 문구 변형 3종을 모두 잡는다', () => {
+    const variants = [
+      '쿠팡체험단 이벤트로 상품을 무료로 제공 받아 작성한 구매 후기입니다.',
+      '쿠팡체험단 이벤트로 상품을 무료 제공받아 작성한 리뷰입니다.',
+      '쿠팡체험단 이벤트로 상품을 무료로 제공 받아 작성한 구매후기입니다',
+    ]
+    for (const variant of variants) {
+      expect(isSponsored(`좋아요\n${variant}`)).toBe(true)
+    }
+  })
+
+  it('체험단을 언급만 한 일반 리뷰는 잡지 않는다', () => {
+    expect(isSponsored('체험단 후기들만 보고 샀는데 실망했어요')).toBe(false)
+    expect(isSponsored('쿠팡체험단 후기가 너무 많아서 걸러 봤습니다')).toBe(false)
+  })
+
   it('빈 문자열은 false', () => {
     expect(isSponsored('')).toBe(false)
   })

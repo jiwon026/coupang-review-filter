@@ -1,7 +1,13 @@
-import { SELECTORS } from './selectors.js'
+import { SELECTORS, REVIEW_ID_ATTRIBUTE } from './selectors.js'
 
 function extractRating(item) {
   return item.querySelectorAll(SELECTORS.reviewStar).length
+}
+
+function extractId(item, index) {
+  const node = item.querySelector(SELECTORS.reviewIdNode)
+  const id = node ? node.getAttribute(REVIEW_ID_ATTRIBUTE) : null
+  return id || `crf-${index}`
 }
 
 export function findReviewContainer(root) {
@@ -9,20 +15,23 @@ export function findReviewContainer(root) {
 }
 
 export function parseReviews(root) {
-  const items = root.querySelectorAll(SELECTORS.reviewItem)
+  const container = findReviewContainer(root)
+  if (!container) return []
+
+  const items = container.querySelectorAll(SELECTORS.reviewItem)
   const reviews = []
 
-  for (const item of items) {
+  items.forEach((item, index) => {
     const rating = extractRating(item)
-    if (rating < 1 || rating > 5) continue
+    if (rating < 1 || rating > 5) return
 
     reviews.push({
-      id: item.getAttribute('data-review-id'),
+      id: extractId(item, index),
       rating,
       text: item.textContent.trim(),
       element: item,
     })
-  }
+  })
 
   return reviews
 }
