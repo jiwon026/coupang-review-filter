@@ -56,7 +56,10 @@ describe('content 진입점', () => {
     container.innerHTML = `
       <article>
         <i class="twc-bg-full-star"></i>
-        <div>다른 페이지의 리뷰입니다</div>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>다음 페이지의 첫 리뷰입니다</div>
         <div data-review-id="7000001">도움이 돼요</div>
       </article>
       <article>
@@ -65,8 +68,28 @@ describe('content 진입점', () => {
         <i class="twc-bg-full-star"></i>
         <i class="twc-bg-full-star"></i>
         <i class="twc-bg-full-star"></i>
-        <div>또 다른 리뷰입니다</div>
+        <div>두 번째 리뷰입니다</div>
         <div data-review-id="7000002">도움이 돼요</div>
+      </article>
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>세 번째 리뷰입니다</div>
+        <div data-review-id="7000003">도움이 돼요</div>
+      </article>
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>네 번째 리뷰입니다</div>
+        <div data-review-id="7000004">도움이 돼요</div>
+      </article>
+      <article>
+        <div>별점이 없는 항목입니다</div>
+        <div data-review-id="7000005">도움이 돼요</div>
       </article>
     `
     await tick()
