@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSponsored } from '../extension/src/core/sponsored.js'
+import { isSponsored, SPONSORED_MARKERS } from '../extension/src/core/sponsored.js'
 
 const MARKER = '쿠팡체험단 이벤트로 상품을 무료로 제공 받아 작성한 구매 후기입니다.'
 
@@ -41,5 +41,9 @@ describe('isSponsored', () => {
     expect(isSponsored(null)).toBe(false)
     expect(isSponsored(undefined)).toBe(false)
     expect(isSponsored(123)).toBe(false)
+  })
+
+  it('마커는 변형을 포괄하는 접두 앵커다', () => {
+    expect(SPONSORED_MARKERS).toEqual(['쿠팡체험단 이벤트로 상품을 무료'])
   })
 })

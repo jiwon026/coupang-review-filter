@@ -16,7 +16,8 @@ function render() {
   if (reviews.length === 0) return
 
   const key = reviews.map((review) => review.id).join(',')
-  if (key === state.lastKey) return
+  const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
+  if (key === state.lastKey && bannerPresent) return
   state.lastKey = key
 
   markSponsored(reviews)
