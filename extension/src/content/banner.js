@@ -1,0 +1,50 @@
+function formatCount(value) {
+  return value.toLocaleString('ko-KR')
+}
+
+function formatPercent(ratio) {
+  return `${Math.round(ratio * 100)}%`
+}
+
+export function createBanner(summary, options) {
+  const root = document.createElement('div')
+  root.className = 'crf-banner'
+  root.setAttribute('data-crf-banner', '1')
+
+  if (summary.sponsoredCount === 0) {
+    const clean = document.createElement('p')
+    clean.className = 'crf-headline'
+    clean.textContent = `현재 로드된 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
+    root.appendChild(clean)
+    return root
+  }
+
+  const headline = document.createElement('p')
+  headline.className = 'crf-headline'
+  headline.textContent =
+    `리뷰 ${formatCount(summary.total)}개 중 체험단 ${formatCount(summary.sponsoredCount)}개 ` +
+    `(${formatPercent(summary.sponsoredRatio)})`
+  root.appendChild(headline)
+
+  const ratings = document.createElement('p')
+  ratings.className = 'crf-ratings'
+  ratings.textContent =
+    `쿠팡 평점 ${summary.ratingOfficial} → 체험단 제외 ` +
+    `${summary.ratingFiltered === null ? '계산 불가' : summary.ratingFiltered}`
+  root.appendChild(ratings)
+
+  const toggle = document.createElement('button')
+  toggle.type = 'button'
+  toggle.className = 'crf-toggle'
+  toggle.setAttribute('aria-pressed', String(options.hidden))
+  toggle.textContent = options.hidden ? '체험단 리뷰 다시 보기' : '체험단 리뷰 숨기기'
+  toggle.addEventListener('click', () => options.onToggle(!options.hidden))
+  root.appendChild(toggle)
+
+  const scope = document.createElement('p')
+  scope.className = 'crf-scope'
+  scope.textContent = `현재 로드된 리뷰 ${formatCount(summary.total)}개 기준입니다`
+  root.appendChild(scope)
+
+  return root
+}
