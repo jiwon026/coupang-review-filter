@@ -15,19 +15,27 @@ describe('assign', () => {
     expect(VARIANTS).toContain(assign('device-abc', 'default_filter', VARIANTS))
   })
 
-  it('실험 id가 다르면 배정이 독립적이다', () => {
-    const results = new Set()
-    for (let i = 0; i < 200; i += 1) {
-      results.add(assign(`device-${i}`, 'exp_a', VARIANTS))
-      results.add(assign(`device-${i}`, 'exp_b', VARIANTS))
+  it('두 실험의 배정이 서로 독립적이다', () => {
+    const total = 2000
+    let agree = 0
+
+    for (let i = 0; i < total; i += 1) {
+      const deviceId = `device-${i}-${(i * 7919) % 100003}`
+      const filterOn = assign(deviceId, 'default_filter', ['on', 'off']) === 'on'
+      const copyRating = assign(deviceId, 'banner_copy', ['rating', 'ratio']) === 'rating'
+      if (filterOn === copyRating) agree += 1
     }
-    expect(results.size).toBe(2)
+
+    const agreementRate = agree / total
+    expect(agreementRate).toBeGreaterThan(0.45)
+    expect(agreementRate).toBeLessThan(0.55)
   })
 
   it('1000명 기준 분포가 45%에서 55% 사이다', () => {
     let onCount = 0
     for (let i = 0; i < 1000; i += 1) {
-      if (assign(`device-${i}`, 'default_filter', VARIANTS) === 'on') onCount += 1
+      const deviceId = `device-${i}-${(i * 7919) % 100003}`
+      if (assign(deviceId, 'default_filter', VARIANTS) === 'on') onCount += 1
     }
     expect(onCount).toBeGreaterThan(450)
     expect(onCount).toBeLessThan(550)
