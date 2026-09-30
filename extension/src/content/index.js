@@ -5,6 +5,7 @@ import { createBanner } from './banner.js'
 import { markSponsored, applyFilter } from './filter.js'
 import { MESSAGES } from '../shared/messages.js'
 import { EVENTS } from '../shared/events.js'
+import { detectSort } from './sort.js'
 
 const LOG_PREFIX = '[체험단 필터]'
 const PRODUCT_PATH = /\/vp\/products\/(\d+)/
@@ -33,7 +34,11 @@ function track(eventType, properties = {}) {
   // 계측 실패가 제품을 멈추면 안 되므로 예외는 삼키되, 원인은 한 번 알린다.
   // MV3의 sendMessage는 콜백이 없으면 Promise를 반환하므로 동기 예외와 거부를 모두 잡는다.
   try {
-    const pending = chrome.runtime.sendMessage({ type: MESSAGES.TRACK, eventType, properties })
+    const pending = chrome.runtime.sendMessage({
+      type: MESSAGES.TRACK,
+      eventType,
+      properties: { review_sort: detectSort(document), ...properties },
+    })
     if (pending && typeof pending.catch === 'function') pending.catch(reportTrackFailure)
   } catch (error) {
     reportTrackFailure(error)

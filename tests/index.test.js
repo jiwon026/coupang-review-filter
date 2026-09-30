@@ -434,4 +434,22 @@ describe('content 진입점', () => {
     expect(banners(doc)).toHaveLength(1)
     expect(trackedOfType('Banner Rendered')).toHaveLength(1)
   })
+
+  it('모든 이벤트에 현재 정렬을 싣는다', async () => {
+    const withSort = fixture.replace(
+      '<div class="sdp-review twc-pb-[24px]">',
+      `<button class="twc-font-bold">베스트순</button>
+       <button class="twc-font-normal">최신순</button>
+       <div class="sdp-review twc-pb-[24px]">`,
+    )
+    const doc = await boot(withSort)
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    const events = trackedEvents()
+    expect(events.length).toBeGreaterThanOrEqual(2)
+    for (const event of events) {
+      expect(event.properties.review_sort).toBe('best')
+    }
+  })
 })
