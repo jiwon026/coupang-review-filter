@@ -25,3 +25,5 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return false
 })
+
+console.log('[체험단 필터] 백그라운드 준비됨')

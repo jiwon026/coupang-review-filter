@@ -21,11 +21,22 @@ const state = {
 
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
 
+let trackFailureReported = false
+
+function reportTrackFailure(error) {
+  if (trackFailureReported) return
+  trackFailureReported = true
+  console.warn(`${LOG_PREFIX} 이벤트를 백그라운드로 보내지 못했습니다:`, error?.message ?? error)
+}
+
 function track(eventType, properties = {}) {
+  // 계측 실패가 제품을 멈추면 안 되므로 예외는 삼키되, 원인은 한 번 알린다.
+  // MV3의 sendMessage는 콜백이 없으면 Promise를 반환하므로 동기 예외와 거부를 모두 잡는다.
   try {
-    chrome.runtime.sendMessage({ type: MESSAGES.TRACK, eventType, properties })
+    const pending = chrome.runtime.sendMessage({ type: MESSAGES.TRACK, eventType, properties })
+    if (pending && typeof pending.catch === 'function') pending.catch(reportTrackFailure)
   } catch (error) {
-    // 확장 컨텍스트가 무효화된 경우다. 계측만 멈추고 제품은 계속 동작한다
+    reportTrackFailure(error)
   }
 }
 
