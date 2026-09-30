@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "description": "쿠팡 리뷰에서 체험단 제공 리뷰를 걸러내고 협찬을 제외한 평점을 보여줍니다.",
   "permissions": ["storage", "sidePanel"],
+  "background": {
+    "service_worker": "dist/background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://www.coupang.com/vp/products/*"],

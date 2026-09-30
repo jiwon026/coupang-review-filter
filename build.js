@@ -5,6 +5,7 @@ const watch = process.argv.includes('--watch')
 const options = {
   entryPoints: {
     content: 'extension/src/content/index.js',
+    background: 'extension/src/background/index.js',
   },
   bundle: true,
   format: 'iife',
