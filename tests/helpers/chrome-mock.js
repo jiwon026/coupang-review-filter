@@ -1,5 +1,7 @@
 export function installChromeMock(initial = {}) {
   const store = { ...initial }
+  const listeners = []
+  const calls = { sidePanelOpen: [], setPanelBehavior: [] }
 
   const chrome = {
     storage: {
@@ -20,7 +22,24 @@ export function installChromeMock(initial = {}) {
     runtime: {
       setUninstallURL() {},
       getManifest: () => ({ version: '0.1.0' }),
+      onMessage: { addListener: (fn) => listeners.push(fn) },
+      onInstalled: { addListener: () => {} },
     },
+    tabs: {
+      onRemoved: { addListener: () => {} },
+    },
+    sidePanel: {
+      open: (options) => {
+        calls.sidePanelOpen.push(options)
+        return Promise.resolve()
+      },
+      setPanelBehavior: (options) => {
+        calls.setPanelBehavior.push(options)
+        return Promise.resolve()
+      },
+    },
+    __listeners: listeners,
+    __calls: calls,
   }
 
   globalThis.chrome = chrome

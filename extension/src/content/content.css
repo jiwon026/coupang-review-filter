@@ -53,3 +53,13 @@
   color: #8a5300;
   font-size: 12px;
 }
+
+.crf-detail {
+  margin-left: 8px;
+  border: none;
+  background: none;
+  color: #1a6fc4;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+}

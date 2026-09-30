@@ -6,6 +6,7 @@ const options = {
   entryPoints: {
     content: 'extension/src/content/index.js',
     background: 'extension/src/background/index.js',
+    sidepanel: 'extension/src/sidepanel/index.js',
   },
   bundle: true,
   format: 'iife',

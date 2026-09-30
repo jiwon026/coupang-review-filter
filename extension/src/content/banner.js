@@ -43,6 +43,15 @@ export function createBanner(summary, options) {
   toggle.addEventListener('click', () => options.onToggle(!options.hidden))
   root.appendChild(toggle)
 
+  if (typeof options.onDetail === 'function') {
+    const detail = document.createElement('button')
+    detail.type = 'button'
+    detail.className = 'crf-detail'
+    detail.textContent = '자세히 보기'
+    detail.addEventListener('click', () => options.onDetail())
+    root.appendChild(detail)
+  }
+
   const scope = document.createElement('p')
   scope.className = 'crf-scope'
   scope.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 기준입니다`

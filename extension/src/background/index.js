@@ -3,7 +3,36 @@ import { track } from './analytics.js'
 import { getDeviceId } from './identity.js'
 import { assign, EXPERIMENTS } from '../core/experiment.js'
 
+const summaries = new Map()
+
+chrome.tabs.onRemoved.addListener((tabId) => summaries.delete(tabId))
+
+chrome.sidePanel
+  .setPanelBehavior({ openPanelOnActionClick: true })
+  .catch((error) => console.warn('[체험단 필터] 패널 동작을 설정하지 못했습니다:', error?.message))
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === MESSAGES.SUMMARY_UPDATED) {
+    if (sender.tab?.id !== undefined) summaries.set(sender.tab.id, message.summary)
+    return false
+  }
+
+  if (message?.type === MESSAGES.GET_SUMMARY) {
+    sendResponse({ summary: summaries.get(message.tabId) ?? null })
+    return false
+  }
+
+  if (message?.type === MESSAGES.OPEN_PANEL) {
+    // sidePanel.open 은 사용자 제스처 안에서만 동작한다. 제스처를 잃지 않도록
+    // await 없이 리스너 안에서 곧바로 호출한다.
+    if (sender.tab?.windowId !== undefined) {
+      chrome.sidePanel
+        .open({ windowId: sender.tab.windowId })
+        .catch((error) => console.warn('[체험단 필터] 패널을 열지 못했습니다:', error?.message))
+    }
+    return false
+  }
+
   if (message?.type === MESSAGES.TRACK) {
     track(message.eventType, message.properties)
     sendResponse({ ok: true })

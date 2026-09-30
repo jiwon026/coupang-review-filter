@@ -478,4 +478,30 @@ describe('content 진입점', () => {
 
     expect(trackedOfType('Banner Rendered')).toHaveLength(1)
   })
+
+  it('렌더할 때마다 요약을 백그라운드로 보낸다', async () => {
+    await boot(fixture)
+    const updates = sentMessages.filter((message) => message?.type === 'crf:summary-updated')
+    expect(updates.length).toBeGreaterThanOrEqual(1)
+    expect(updates[updates.length - 1].summary.total).toBe(4)
+  })
+
+  it('자세히 보기는 패널 열기를 요청하고 관측을 늘리지 않는다', async () => {
+    const doc = await boot(fixture)
+    banners(doc)[0].querySelector('.crf-detail').click()
+    await tick()
+
+    const opens = sentMessages.filter((message) => message?.type === 'crf:open-panel')
+    expect(opens).toHaveLength(1)
+    expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+  })
+
+  it('토글해도 패널에 최신 요약이 간다', async () => {
+    const doc = await boot(fixture)
+    const before = sentMessages.filter((message) => message?.type === 'crf:summary-updated').length
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+    const after = sentMessages.filter((message) => message?.type === 'crf:summary-updated').length
+    expect(after).toBeGreaterThan(before)
+  })
 })

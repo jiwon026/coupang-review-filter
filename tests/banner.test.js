@@ -73,4 +73,16 @@ describe('createBanner', () => {
     const el = createBanner(summary, { hidden: false, onToggle: () => {} })
     expect(el.textContent).toContain('리뷰 1,204개 중 체험단 341개')
   })
+
+  it('자세히 보기를 누르면 onDetail을 부른다', () => {
+    const onDetail = vi.fn()
+    const el = createBanner(summary, { hidden: false, onToggle: () => {}, onDetail })
+    el.querySelector('.crf-detail').click()
+    expect(onDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('onDetail이 없으면 자세히 보기 버튼을 만들지 않는다', () => {
+    const el = createBanner(summary, { hidden: false, onToggle: () => {} })
+    expect(el.querySelector('.crf-detail')).toBeNull()
+  })
 })

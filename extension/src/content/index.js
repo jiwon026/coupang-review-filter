@@ -32,19 +32,23 @@ function reportTrackFailure(error) {
   console.warn(`${LOG_PREFIX} 이벤트를 백그라운드로 보내지 못했습니다:`, error?.message ?? error)
 }
 
-function track(eventType, properties = {}) {
+function sendToBackground(message) {
   // 계측 실패가 제품을 멈추면 안 되므로 예외는 삼키되, 원인은 한 번 알린다.
   // MV3의 sendMessage는 콜백이 없으면 Promise를 반환하므로 동기 예외와 거부를 모두 잡는다.
   try {
-    const pending = chrome.runtime.sendMessage({
-      type: MESSAGES.TRACK,
-      eventType,
-      properties: { review_sort: detectSort(document), ...properties },
-    })
+    const pending = chrome.runtime.sendMessage(message)
     if (pending && typeof pending.catch === 'function') pending.catch(reportTrackFailure)
   } catch (error) {
     reportTrackFailure(error)
   }
+}
+
+function track(eventType, properties = {}) {
+  sendToBackground({
+    type: MESSAGES.TRACK,
+    eventType,
+    properties: { review_sort: detectSort(document), ...properties },
+  })
 }
 
 function secondsSinceRender() {
@@ -108,6 +112,7 @@ function render({ force = false } = {}) {
 
   const summary = summarize(accumulate(reviews))
   state.lastSummary = summary
+  sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary })
   console.log(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
       `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered} ` +
@@ -145,6 +150,9 @@ function render({ force = false } = {}) {
         pages_seen: state.pagesSeen,
       })
       render({ force: true })
+    },
+    onDetail: () => {
+      sendToBackground({ type: MESSAGES.OPEN_PANEL })
     },
   })
 
