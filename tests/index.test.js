@@ -9,7 +9,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 let lastDom = null
 let sentMessages = []
 
-async function boot(html) {
+async function boot(html, { variants = { default_filter: 'off', banner_copy: 'rating' } } = {}) {
   const dom = new JSDOM(`<body>${html}</body>`, { url: 'https://www.coupang.com/vp/products/1' })
   lastDom = dom
   sentMessages = []
@@ -18,7 +18,7 @@ async function boot(html) {
       sendMessage(message, callback) {
         sentMessages.push(message)
         if (message?.type === 'crf:get-variant') {
-          callback?.({ variants: { default_filter: 'off', banner_copy: 'rating' } })
+          callback?.({ variants })
         }
       },
     },
@@ -395,5 +395,43 @@ describe('content 진입점', () => {
     await tick()
 
     expect(dom.window.document.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
+  })
+
+  it('토글은 관측 지표를 늘리지 않는다', async () => {
+    const doc = await boot(fixture)
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+    expect(trackedOfType('Filter Toggled')).toHaveLength(2)
+    expect(trackedOfType('Filter Toggled')[1].properties.pages_seen).toBe(1)
+  })
+
+  it('default_filter on 변형이 도착하면 필터를 켜되 관측은 늘리지 않는다', async () => {
+    const doc = await boot(fixture, { variants: { default_filter: 'on', banner_copy: 'rating' } })
+
+    expect(banners(doc)[0].querySelector('.crf-toggle').getAttribute('aria-pressed')).toBe('true')
+    expect(doc.querySelectorAll('#sdpReview .crf-hidden')).toHaveLength(2)
+    expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+    expect(trackedOfType('Banner Rendered')[0].properties.pages_seen).toBe(1)
+  })
+
+  it('banner_copy ratio 변형이 도착하면 문구를 바꾸되 관측은 늘리지 않는다', async () => {
+    const doc = await boot(fixture, { variants: { default_filter: 'off', banner_copy: 'ratio' } })
+
+    expect(banners(doc)[0].textContent).toContain('지금까지 본 리뷰의')
+    expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+  })
+
+  it('배너 복구는 관측 지표를 늘리지 않는다', async () => {
+    const doc = await boot(fixture)
+    banners(doc)[0].remove()
+    doc.body.appendChild(doc.createElement('div'))
+    await tick()
+
+    expect(banners(doc)).toHaveLength(1)
+    expect(trackedOfType('Banner Rendered')).toHaveLength(1)
   })
 })

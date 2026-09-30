@@ -68,7 +68,7 @@ function accumulate(reviews) {
   return [...state.seen.values()]
 }
 
-function render() {
+function render({ force = false } = {}) {
   resetIfProductChanged()
 
   const container = findReviewContainer(document)
@@ -81,10 +81,9 @@ function render() {
     .map((review) => `${review.id}:${review.rating}:${review.text.length}`)
     .join(',')
   const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
-  if (key === state.lastKey && bannerPresent) return
+  const reviewSetChanged = key !== state.lastKey
+  if (!reviewSetChanged && bannerPresent && !force) return
   state.lastKey = key
-  state.pagesSeen += 1
-  if (state.renderedAt === 0) state.renderedAt = Date.now()
 
   markSponsored(reviews)
   applyFilter(reviews, state.hidden)
@@ -96,17 +95,23 @@ function render() {
       `[${reviews[0].id}..${reviews[reviews.length - 1].id}]`,
   )
 
-  track(EVENTS.BANNER_RENDERED, {
-    review_count: summary.total,
-    sponsored_count: summary.sponsoredCount,
-    sponsored_ratio: summary.sponsoredRatio,
-    rating_official: summary.ratingOfficial,
-    rating_filtered: summary.ratingFiltered,
-    rating_delta: summary.ratingDelta,
-    page_review_count: reviews.length,
-    page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
-    pages_seen: state.pagesSeen,
-  })
+  // 관측은 리뷰 묶음이 실제로 바뀔 때만 기록한다.
+  // 토글, 변형 도착, 배너 복구는 다시 그리기일 뿐 새 관측이 아니다.
+  if (reviewSetChanged) {
+    state.pagesSeen += 1
+    if (state.renderedAt === 0) state.renderedAt = Date.now()
+    track(EVENTS.BANNER_RENDERED, {
+      review_count: summary.total,
+      sponsored_count: summary.sponsoredCount,
+      sponsored_ratio: summary.sponsoredRatio,
+      rating_official: summary.ratingOfficial,
+      rating_filtered: summary.ratingFiltered,
+      rating_delta: summary.ratingDelta,
+      page_review_count: reviews.length,
+      page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
+      pages_seen: state.pagesSeen,
+    })
+  }
 
   const banner = createBanner(summary, {
     hidden: state.hidden,
@@ -120,8 +125,7 @@ function render() {
         seconds_since_render: secondsSinceRender(),
         pages_seen: state.pagesSeen,
       })
-      state.lastKey = ''
-      render()
+      render({ force: true })
     },
   })
 
@@ -135,13 +139,16 @@ function applyVariants() {
     chrome.runtime.sendMessage({ type: MESSAGES.GET_VARIANT }, (response) => {
       if (!response?.variants) return
 
+      const previousCopy = state.variants.banner_copy
       state.variants = response.variants
+
       const hidden = state.variants.default_filter === 'on'
-      if (hidden === state.hidden) return
+      const hiddenChanged = hidden !== state.hidden
+      const copyChanged = state.variants.banner_copy !== previousCopy
+      if (!hiddenChanged && !copyChanged) return
 
       state.hidden = hidden
-      state.lastKey = ''
-      render()
+      render({ force: true })
     })
   } catch (error) {
     console.warn(`${LOG_PREFIX} 실험 배정을 받지 못했습니다. 기본값으로 동작합니다.`)

@@ -11,13 +11,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === MESSAGES.GET_VARIANT) {
-    getDeviceId().then((deviceId) => {
-      const variants = {}
-      for (const experiment of Object.values(EXPERIMENTS)) {
-        variants[experiment.id] = assign(deviceId, experiment.id, experiment.variants)
-      }
-      sendResponse({ variants })
-    })
+    getDeviceId()
+      .then((deviceId) => {
+        const variants = {}
+        for (const experiment of Object.values(EXPERIMENTS)) {
+          variants[experiment.id] = assign(deviceId, experiment.id, experiment.variants)
+        }
+        sendResponse({ variants })
+      })
+      .catch(() => sendResponse({ variants: null }))
     return true
   }
 
