@@ -281,6 +281,7 @@ describe('content 진입점', () => {
         <i class="twc-bg-full-star"></i>
         <i class="twc-bg-full-star"></i>
         <div>다음 페이지 리뷰입니다</div>
+        <div>쿠팡체험단 이벤트로 상품을 무료로 제공 받아 작성한 구매 후기입니다.</div>
         <div data-review-id="8300001">도움이 돼요</div>
       </article>
     `
