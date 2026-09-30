@@ -452,4 +452,30 @@ describe('content 진입점', () => {
       expect(event.properties.review_sort).toBe('best')
     }
   })
+
+  it('구매 버튼을 누르면 본 리뷰 요약과 함께 Purchase Intent Clicked를 보낸다', async () => {
+    const withBuyBox = `
+      <button class="prod-cart-btn">장바구니 담기</button>
+      <button class="prod-buy-btn"><span class="prod-buy-btn__txt">바로구매</span></button>
+      ${fixture}`
+    const doc = await boot(withBuyBox)
+    doc.querySelector('.prod-buy-btn__txt').click()
+    await tick()
+
+    const events = trackedOfType('Purchase Intent Clicked')
+    expect(events).toHaveLength(1)
+    expect(events[0].properties.intent_kind).toBe('buy_now')
+    expect(events[0].properties.review_count).toBe(4)
+    expect(events[0].properties.pages_seen).toBe(1)
+    expect(events[0].properties.filter_state).toBe('off')
+  })
+
+  it('구매 버튼 클릭이 관측 지표를 늘리지 않는다', async () => {
+    const withBuyBox = `<button class="prod-cart-btn">장바구니 담기</button>${fixture}`
+    const doc = await boot(withBuyBox)
+    doc.querySelector('.prod-cart-btn').click()
+    await tick()
+
+    expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+  })
 })

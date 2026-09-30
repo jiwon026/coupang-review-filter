@@ -18,3 +18,8 @@ export const SORT_LABELS = {
   best: '베스트순',
   latest: '최신순',
 }
+
+export const PURCHASE_SELECTORS = {
+  cart: 'button.prod-cart-btn',
+  buyNow: 'button.prod-buy-btn',
+}

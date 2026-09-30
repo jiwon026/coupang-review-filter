@@ -6,6 +6,7 @@ import { markSponsored, applyFilter } from './filter.js'
 import { MESSAGES } from '../shared/messages.js'
 import { EVENTS } from '../shared/events.js'
 import { detectSort } from './sort.js'
+import { watchPurchaseIntent } from './purchase.js'
 
 const LOG_PREFIX = '[체험단 필터]'
 const PRODUCT_PATH = /\/vp\/products\/(\d+)/
@@ -18,6 +19,7 @@ const state = {
   variants: { default_filter: 'off', banner_copy: 'rating' },
   renderedAt: 0,
   pagesSeen: 0,
+  lastSummary: null,
 }
 
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
@@ -105,6 +107,7 @@ function render({ force = false } = {}) {
   applyFilter(reviews, state.hidden)
 
   const summary = summarize(accumulate(reviews))
+  state.lastSummary = summary
   console.log(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
       `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered} ` +
@@ -175,6 +178,21 @@ function start() {
   render()
   const observer = new MutationObserver(() => render())
   observer.observe(document.body, { childList: true, subtree: true })
+
+  watchPurchaseIntent(document, (kind) => {
+    const summary = state.lastSummary
+    track(EVENTS.PURCHASE_INTENT_CLICKED, {
+      intent_kind: kind,
+      filter_state: state.hidden ? 'on' : 'off',
+      seconds_on_page: secondsSinceRender(),
+      pages_seen: state.pagesSeen,
+      review_count: summary?.total ?? 0,
+      sponsored_ratio: summary?.sponsoredRatio ?? null,
+      rating_official: summary?.ratingOfficial ?? null,
+      rating_filtered: summary?.ratingFiltered ?? null,
+      rating_delta: summary?.ratingDelta ?? null,
+    })
+  })
 
   applyVariants()
 }
