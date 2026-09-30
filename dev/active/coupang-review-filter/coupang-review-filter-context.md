@@ -4,19 +4,25 @@ Last Updated: 2026-09-30 (세션 종료 시점)
 
 ## 내일 가장 먼저 할 것
 
-**Task 8(사이드 패널)은 구현 커밋까지 됐고, 리뷰는 아직이다.**
+**Task 8(사이드 패널) 구현은 끝났고, 태스크 리뷰만 남았다.**
 
-세션 종료 직전 구현 에이전트가 `0b1b6bf feat: 사이드 패널과 실시간 요약 갱신` 을 커밋했고 원격에도 올라갔다. 다만 브리프가 "변이 테스트 전에 먼저 커밋하라" 고 지시했으므로, 에이전트가 **그 뒤 변이 테스트를 돌리던 중에 세션이 끝났을 수 있다.**
+세션 종료 직전 구현 에이전트가 모든 단계를 마쳤다.
+
+- 커밋: `0b1b6bf feat: 사이드 패널과 실시간 요약 갱신` (원격에도 있음)
+- 테스트: 125개 통과. 브리프의 127은 컨트롤러 산수 오류(107+9+4+2+3=125)
+- 변이 N, O, P, Q 전부 기대대로 실패. 공허한 테스트 없음, 테스트 수정 없음
+- permissions `["storage","sidePanel"]` 그대로
+- 리포트: `.superpowers/sdd/2026-09-28-instrumentation/task-8-report.md`
+- 작업 트리 깨끗
 
 재개 절차:
 
-1. `git status --short` 로 작업 트리를 본다. **변경이 있으면 변이가 적용된 채 멈춘 것이다.** 파일이 이미 커밋되어 있으므로 `git checkout -- <파일>` 로 되돌린다. 되돌리기 전에 무엇이 바뀌었는지 `git diff` 로 확인한다
-2. `npm test` 로 127개가 통과하는지 확인한다
-3. `.superpowers/sdd/2026-09-28-instrumentation/task-8-report.md` 가 있는지 본다
-   - **있으면**: 변이 N, O, P, Q 결과가 적혀 있는지 본다. 있으면 Task 8 태스크 리뷰로 간다
-   - **없거나 변이 결과가 없으면**: 변이 테스트를 컨트롤러가 직접 돌리거나 구현 에이전트를 재개해 마무리한 뒤 리뷰로 간다
-4. 리뷰 패키지: `scripts/review-package docs/superpowers/plans/2026-09-28-instrumentation.md c320f96 0b1b6bf`
-5. 브리프: `.superpowers/sdd/2026-09-28-instrumentation/task-8-brief.md`
+1. `git status --short` 가 비었는지, `npm test` 가 125개 통과하는지 확인
+2. 리뷰 패키지 생성: `scripts/review-package docs/superpowers/plans/2026-09-28-instrumentation.md c320f96 0b1b6bf`
+3. Task 8 태스크 리뷰 디스패치. 브리프 `task-8-brief.md`, 리포트 `task-8-report.md`
+4. 리뷰에 알려 줄 구현자 우려: 체험단 0건 배너는 일찍 반환해서 "자세히 보기" 버튼이 없다. 그 경우 패널은 툴바 아이콘으로만 열린다. 결함인지 판정 받을 것
+5. 리뷰 통과 후 사용자에게 실브라우저 검증 요청 (패널 열림, 실시간 갱신, 툴바 아이콘, Panel Opened 도착)
+6. 그다음 Task 9. 계획 문서 판본이 낡았으니 브리프 재작성부터
 
 ## 전체 진행 상황
 
@@ -27,8 +33,8 @@ Last Updated: 2026-09-30 (세션 종료 시점)
 | 계획 2: 계측 | **진행 중** (Task 1~7 완료, 8 중단, 9 남음, 품질 보강 패스 남음) |
 | 계획 3: 랜딩과 배포 | 대기 |
 
-브랜치: `feat/instrumentation` (마지막 완료 커밋 `c320f96`)
-테스트: 107개 통과 (Task 8 완료 시 127개 예정)
+브랜치: `feat/instrumentation` (Task 8 구현 커밋 `0b1b6bf`)
+테스트: 125개 통과 (Task 8 구현 완료, 리뷰 전)
 
 ## 원격 저장소
 
