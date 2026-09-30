@@ -1,4 +1,4 @@
-import { SELECTORS, REVIEW_ID_ATTRIBUTE } from './selectors.js'
+import { SELECTORS, REVIEW_ID_ATTRIBUTE, OWN_BADGE_CLASS } from './selectors.js'
 
 function extractRating(item) {
   return item.querySelectorAll(SELECTORS.reviewStar).length
@@ -8,6 +8,15 @@ function extractId(item, index) {
   const node = item.querySelector(SELECTORS.reviewIdNode)
   const id = node ? node.getAttribute(REVIEW_ID_ATTRIBUTE) : null
   return id || null
+}
+
+function extractText(item) {
+  const full = item.textContent.trim()
+  const badge = item.querySelector(`.${OWN_BADGE_CLASS}`)
+  if (!badge) return full
+
+  const badgeText = badge.textContent
+  return full.endsWith(badgeText) ? full.slice(0, -badgeText.length).trim() : full
 }
 
 export function findReviewContainer(root) {
@@ -31,7 +40,7 @@ export function parseReviews(root) {
       id: stableId || `crf-${index}`,
       hasStableId: stableId !== null,
       rating,
-      text: item.textContent.trim(),
+      text: extractText(item),
       element: item,
     })
   })

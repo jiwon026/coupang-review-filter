@@ -1,15 +1,15 @@
 import { isSponsored, SPONSORED_LABEL } from '../core/sponsored.js'
+import { OWN_BADGE_CLASS } from './selectors.js'
 
-const BADGE_CLASS = 'crf-badge'
 const HIDDEN_CLASS = 'crf-hidden'
 
 export function markSponsored(reviews) {
   for (const review of reviews) {
     if (!isSponsored(review.text)) continue
-    if (review.element.querySelector(`.${BADGE_CLASS}`)) continue
+    if (review.element.querySelector(`.${OWN_BADGE_CLASS}`)) continue
 
     const badge = document.createElement('span')
-    badge.className = BADGE_CLASS
+    badge.className = OWN_BADGE_CLASS
     badge.textContent = SPONSORED_LABEL
     review.element.appendChild(badge)
   }

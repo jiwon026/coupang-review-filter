@@ -266,4 +266,27 @@ describe('content 진입점', () => {
 
     expect(banners(doc)[0].textContent).toContain('체험단 1개')
   })
+
+  it('배지 삽입이 추가 렌더를 유발하지 않는다', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const doc = await boot(fixture)
+
+    const renderLines = () =>
+      spy.mock.calls.map((call) => String(call[0])).filter((m) => m.includes('리뷰 ') && m.includes('체험단 '))
+
+    expect(renderLines()).toHaveLength(1)
+
+    doc.querySelector('#sdpReview').innerHTML = `
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>다음 페이지 리뷰입니다</div>
+        <div data-review-id="8300001">도움이 돼요</div>
+      </article>
+    `
+    await tick()
+
+    expect(renderLines()).toHaveLength(2)
+    spy.mockRestore()
+  })
 })

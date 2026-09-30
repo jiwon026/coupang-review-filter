@@ -100,4 +100,18 @@ describe('parseReviews', () => {
     expect(reviews[0].hasStableId).toBe(false)
     expect(reviews[0].id).toBe('crf-0')
   })
+
+  it('우리가 붙인 배지는 본문에서 제외한다', () => {
+    const article = doc.querySelector('#sdpReview article')
+    const before = parseReviews(doc)[0].text
+
+    const badge = doc.createElement('span')
+    badge.className = 'crf-badge'
+    badge.textContent = '체험단 제공 리뷰'
+    article.appendChild(badge)
+
+    const after = parseReviews(doc)[0].text
+    expect(after).toBe(before)
+    expect(after).not.toContain('체험단 제공 리뷰')
+  })
 })

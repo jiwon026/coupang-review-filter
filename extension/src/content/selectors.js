@@ -6,3 +6,5 @@ export const SELECTORS = {
 }
 
 export const REVIEW_ID_ATTRIBUTE = 'data-review-id'
+
+export const OWN_BADGE_CLASS = 'crf-badge'
