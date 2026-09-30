@@ -14,7 +14,7 @@ export function createBanner(summary, options) {
   if (summary.sponsoredCount === 0) {
     const clean = document.createElement('p')
     clean.className = 'crf-headline'
-    clean.textContent = `현재 로드된 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
+    clean.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
     root.appendChild(clean)
     return root
   }
@@ -43,7 +43,7 @@ export function createBanner(summary, options) {
 
   const scope = document.createElement('p')
   scope.className = 'crf-scope'
-  scope.textContent = `현재 로드된 리뷰 ${formatCount(summary.total)}개 기준입니다`
+  scope.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 기준입니다`
   root.appendChild(scope)
 
   return root

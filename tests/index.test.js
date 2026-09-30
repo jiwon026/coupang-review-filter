@@ -6,8 +6,11 @@ const fixture = readFileSync(new URL('./fixtures/review-section.html', import.me
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+let lastDom = null
+
 async function boot(html) {
   const dom = new JSDOM(`<body>${html}</body>`, { url: 'https://www.coupang.com/vp/products/1' })
+  lastDom = dom
   globalThis.document = dom.window.document
   globalThis.MutationObserver = dom.window.MutationObserver
   vi.resetModules()
@@ -117,5 +120,69 @@ describe('content 진입점', () => {
     expect(messages.some((m) => m.includes('콘텐츠 스크립트 로드됨'))).toBe(true)
     expect(messages.some((m) => m.includes('리뷰 4건, 체험단 2건'))).toBe(true)
     spy.mockRestore()
+  })
+
+  it('리뷰가 교체되면 총계를 누적한다', async () => {
+    const doc = await boot(fixture)
+    expect(banners(doc)[0].textContent).toContain('리뷰 4개')
+
+    const container = doc.querySelector('#sdpReview')
+    container.innerHTML = `
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>다음 페이지 리뷰입니다</div>
+        <div data-review-id="8000001">도움이 돼요</div>
+      </article>
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>또 다른 리뷰입니다</div>
+        <div data-review-id="8000002">도움이 돼요</div>
+      </article>
+    `
+    await tick()
+
+    expect(banners(doc)[0].textContent).toContain('리뷰 6개')
+  })
+
+  it('같은 리뷰가 다시 파싱돼도 총계가 늘지 않는다', async () => {
+    const doc = await boot(fixture)
+    const container = doc.querySelector('#sdpReview')
+    const html = container.innerHTML
+
+    container.innerHTML = '<div>잠시 비었습니다</div>'
+    await tick()
+    container.innerHTML = html
+    await tick()
+
+    expect(banners(doc)[0].textContent).toContain('리뷰 4개')
+  })
+
+  it('상품이 바뀌면 누적을 비운다', async () => {
+    const doc = await boot(fixture)
+    expect(banners(doc)[0].textContent).toContain('리뷰 4개')
+
+    lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+
+    const container = doc.querySelector('#sdpReview')
+    container.innerHTML = `
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>다른 상품의 리뷰입니다</div>
+        <div data-review-id="9900001">도움이 돼요</div>
+      </article>
+    `
+    await tick()
+
+    expect(banners(doc)[0].textContent).toContain('리뷰 1개')
+    expect(banners(doc)[0].textContent).not.toContain('리뷰 5개')
+  })
+
+  it('누적 범위를 문구로 밝힌다', async () => {
+    const doc = await boot(fixture)
+    expect(banners(doc)[0].textContent).toContain('지금까지 확인한 리뷰')
   })
 })

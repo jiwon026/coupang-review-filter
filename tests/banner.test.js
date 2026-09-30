@@ -33,7 +33,7 @@ describe('createBanner', () => {
 
   it('계산 범위를 명시한다', () => {
     const el = createBanner(summary, { hidden: false, onToggle: () => {} })
-    expect(el.textContent).toContain('현재 로드된 리뷰')
+    expect(el.textContent).toContain('지금까지 확인한 리뷰')
   })
 
   it('토글을 누르면 콜백에 반대 상태를 넘긴다', () => {

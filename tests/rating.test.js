@@ -7,6 +7,25 @@ const sponsored = (rating) => ({ rating, text: `좋아요\n${MARKER}` })
 const organic = (rating) => ({ rating, text: '직접 사서 써 봤습니다' })
 
 describe('summarize', () => {
+  it('sponsored 필드가 있으면 본문 대신 그 값을 쓴다', () => {
+    const result = summarize([
+      { rating: 5, text: '본문에는 아무 표기도 없다', sponsored: true },
+      { rating: 3, text: '본문에는 아무 표기도 없다', sponsored: false },
+    ])
+    expect(result.sponsoredCount).toBe(1)
+    expect(result.organicCount).toBe(1)
+    expect(result.ratingFiltered).toBe(3)
+  })
+
+  it('sponsored 필드가 없으면 본문으로 판별한다', () => {
+    const result = summarize([
+      { rating: 5, text: `좋아요
+${MARKER}` },
+      { rating: 3, text: '직접 샀습니다' },
+    ])
+    expect(result.sponsoredCount).toBe(1)
+  })
+
   it('체험단을 제외한 평점을 계산한다', () => {
     const result = summarize([
       sponsored(5), sponsored(5),

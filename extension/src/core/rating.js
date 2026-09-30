@@ -11,10 +11,14 @@ function average(list) {
   return round(sum / list.length, 1)
 }
 
+function isSponsoredRecord(review) {
+  return typeof review.sponsored === 'boolean' ? review.sponsored : isSponsored(review.text)
+}
+
 export function summarize(reviews) {
   const list = Array.isArray(reviews) ? reviews : []
-  const sponsoredList = list.filter((review) => isSponsored(review.text))
-  const organicList = list.filter((review) => !isSponsored(review.text))
+  const sponsoredList = list.filter(isSponsoredRecord)
+  const organicList = list.filter((review) => !isSponsoredRecord(review))
 
   const ratingOfficial = average(list)
   const ratingFiltered = average(organicList)
