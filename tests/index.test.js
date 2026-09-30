@@ -11,6 +11,7 @@ let lastDom = null
 async function boot(html) {
   const dom = new JSDOM(`<body>${html}</body>`, { url: 'https://www.coupang.com/vp/products/1' })
   lastDom = dom
+  globalThis.window = dom.window
   globalThis.document = dom.window.document
   globalThis.MutationObserver = dom.window.MutationObserver
   vi.resetModules()
@@ -150,14 +151,30 @@ describe('content 진입점', () => {
   it('같은 리뷰가 다시 파싱돼도 총계가 늘지 않는다', async () => {
     const doc = await boot(fixture)
     const container = doc.querySelector('#sdpReview')
-    const html = container.innerHTML
+    const original = container.innerHTML
 
-    container.innerHTML = '<div>잠시 비었습니다</div>'
+    container.innerHTML = `
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>다른 페이지 리뷰입니다</div>
+        <div data-review-id="8000001">도움이 돼요</div>
+      </article>
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>또 다른 리뷰입니다</div>
+        <div data-review-id="8000002">도움이 돼요</div>
+      </article>
+    `
     await tick()
-    container.innerHTML = html
+    expect(banners(doc)[0].textContent).toContain('리뷰 6개')
+
+    container.innerHTML = original
     await tick()
 
-    expect(banners(doc)[0].textContent).toContain('리뷰 4개')
+    expect(banners(doc)[0].textContent).toContain('리뷰 6개')
   })
 
   it('상품이 바뀌면 누적을 비운다', async () => {

@@ -29,7 +29,7 @@ export function createBanner(summary, options) {
   const ratings = document.createElement('p')
   ratings.className = 'crf-ratings'
   ratings.textContent =
-    `현재 리뷰 평균 ${summary.ratingOfficial} → 체험단 제외 ` +
+    `리뷰 평균 ${summary.ratingOfficial} → 체험단 제외 ` +
     `${summary.ratingFiltered === null ? '계산 불가' : summary.ratingFiltered}`
   root.appendChild(ratings)
 

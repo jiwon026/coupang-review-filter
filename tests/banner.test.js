@@ -59,7 +59,8 @@ describe('createBanner', () => {
 
   it('평점 라벨이 계산 범위를 정확히 말한다', () => {
     const el = createBanner(summary, { hidden: false, onToggle: () => {} })
-    expect(el.textContent).toContain('현재 리뷰 평균')
+    expect(el.textContent).toContain('리뷰 평균')
+    expect(el.textContent).not.toContain('현재 리뷰 평균')
     expect(el.textContent).not.toContain('쿠팡 평점')
   })
 })

@@ -17,7 +17,7 @@ const state = {
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
 
 function currentProductId() {
-  const matched = document.location.pathname.match(PRODUCT_PATH)
+  const matched = window.location.pathname.match(PRODUCT_PATH)
   return matched ? matched[1] : null
 }
 
