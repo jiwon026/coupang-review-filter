@@ -22,7 +22,11 @@ const state = {
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
 
 function track(eventType, properties = {}) {
-  chrome.runtime.sendMessage({ type: MESSAGES.TRACK, eventType, properties })
+  try {
+    chrome.runtime.sendMessage({ type: MESSAGES.TRACK, eventType, properties })
+  } catch (error) {
+    // 확장 컨텍스트가 무효화된 경우다. 계측만 멈추고 제품은 계속 동작한다
+  }
 }
 
 function secondsSinceRender() {
@@ -126,15 +130,30 @@ function render() {
   container.parentNode.insertBefore(banner, container)
 }
 
-function start() {
-  chrome.runtime.sendMessage({ type: MESSAGES.GET_VARIANT }, (response) => {
-    if (response?.variants) state.variants = response.variants
-    state.hidden = state.variants.default_filter === 'on'
+function applyVariants() {
+  try {
+    chrome.runtime.sendMessage({ type: MESSAGES.GET_VARIANT }, (response) => {
+      if (!response?.variants) return
 
-    render()
-    const observer = new MutationObserver(() => render())
-    observer.observe(document.body, { childList: true, subtree: true })
-  })
+      state.variants = response.variants
+      const hidden = state.variants.default_filter === 'on'
+      if (hidden === state.hidden) return
+
+      state.hidden = hidden
+      state.lastKey = ''
+      render()
+    })
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} 실험 배정을 받지 못했습니다. 기본값으로 동작합니다.`)
+  }
+}
+
+function start() {
+  render()
+  const observer = new MutationObserver(() => render())
+  observer.observe(document.body, { childList: true, subtree: true })
+
+  applyVariants()
 }
 
 if (document.readyState === 'loading') {

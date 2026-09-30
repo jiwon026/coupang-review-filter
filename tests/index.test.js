@@ -352,4 +352,48 @@ describe('content 진입점', () => {
     expect(events[0].properties.to_state).toBe('on')
     expect(events[0].properties.default_state).toBe('off')
   })
+
+  it('변형 응답이 없어도 배너를 렌더한다', async () => {
+    const dom = new JSDOM(`<body>${fixture}</body>`, {
+      url: 'https://www.coupang.com/vp/products/1',
+    })
+    sentMessages = []
+    globalThis.chrome = {
+      runtime: {
+        sendMessage(message) {
+          sentMessages.push(message)
+          // 콜백을 부르지 않는다. 응답 유실 상황
+        },
+      },
+    }
+    globalThis.window = dom.window
+    globalThis.document = dom.window.document
+    globalThis.MutationObserver = dom.window.MutationObserver
+    vi.resetModules()
+    await import('../extension/src/content/index.js')
+    await tick()
+
+    expect(dom.window.document.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
+  })
+
+  it('sendMessage가 던져도 배너를 렌더한다', async () => {
+    const dom = new JSDOM(`<body>${fixture}</body>`, {
+      url: 'https://www.coupang.com/vp/products/1',
+    })
+    globalThis.chrome = {
+      runtime: {
+        sendMessage() {
+          throw new Error('Extension context invalidated.')
+        },
+      },
+    }
+    globalThis.window = dom.window
+    globalThis.document = dom.window.document
+    globalThis.MutationObserver = dom.window.MutationObserver
+    vi.resetModules()
+    await import('../extension/src/content/index.js')
+    await tick()
+
+    expect(dom.window.document.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
+  })
 })
