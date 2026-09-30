@@ -109,4 +109,13 @@ describe('content 진입점', () => {
     const doc = await boot('<div>리뷰 없음</div>')
     expect(banners(doc)).toHaveLength(0)
   })
+
+  it('로드와 렌더를 콘솔로 알린다', async () => {
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await boot(fixture)
+    const messages = spy.mock.calls.map((call) => String(call[0]))
+    expect(messages.some((m) => m.includes('콘텐츠 스크립트 로드됨'))).toBe(true)
+    expect(messages.some((m) => m.includes('리뷰 4건, 체험단 2건'))).toBe(true)
+    spy.mockRestore()
+  })
 })

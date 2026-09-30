@@ -3,10 +3,14 @@ import { summarize } from '../core/rating.js'
 import { createBanner } from './banner.js'
 import { markSponsored, applyFilter } from './filter.js'
 
+const LOG_PREFIX = '[체험단 필터]'
+
 const state = {
   hidden: false,
   lastKey: '',
 }
+
+console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
 
 function render() {
   const container = findReviewContainer(document)
@@ -24,6 +28,11 @@ function render() {
   applyFilter(reviews, state.hidden)
 
   const summary = summarize(reviews)
+  console.log(
+    `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
+      `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered}`,
+  )
+
   const banner = createBanner(summary, {
     hidden: state.hidden,
     onToggle: (next) => {
