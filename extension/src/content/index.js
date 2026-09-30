@@ -30,7 +30,8 @@ function render() {
   const summary = summarize(reviews)
   console.log(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
-      `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered}`,
+      `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered} ` +
+      `[${reviews[0].id}..${reviews[reviews.length - 1].id}]`,
   )
 
   const banner = createBanner(summary, {
