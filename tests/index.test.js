@@ -7,10 +7,22 @@ const fixture = readFileSync(new URL('./fixtures/review-section.html', import.me
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 let lastDom = null
+let sentMessages = []
 
 async function boot(html) {
   const dom = new JSDOM(`<body>${html}</body>`, { url: 'https://www.coupang.com/vp/products/1' })
   lastDom = dom
+  sentMessages = []
+  globalThis.chrome = {
+    runtime: {
+      sendMessage(message, callback) {
+        sentMessages.push(message)
+        if (message?.type === 'crf:get-variant') {
+          callback?.({ variants: { default_filter: 'off', banner_copy: 'rating' } })
+        }
+      },
+    },
+  }
   globalThis.window = dom.window
   globalThis.document = dom.window.document
   globalThis.MutationObserver = dom.window.MutationObserver
@@ -22,6 +34,14 @@ async function boot(html) {
 
 function banners(doc) {
   return doc.querySelectorAll('[data-crf-banner="1"]')
+}
+
+function trackedEvents() {
+  return sentMessages.filter((message) => message?.type === 'crf:track')
+}
+
+function trackedOfType(eventType) {
+  return trackedEvents().filter((message) => message.eventType === eventType)
 }
 
 describe('content 진입점', () => {
@@ -289,5 +309,47 @@ describe('content 진입점', () => {
 
     expect(renderLines()).toHaveLength(2)
     spy.mockRestore()
+  })
+
+  it('첫 렌더에서 Banner Rendered를 보낸다', async () => {
+    await boot(fixture)
+    const events = trackedOfType('Banner Rendered')
+    expect(events).toHaveLength(1)
+    expect(events[0].properties.review_count).toBe(4)
+    expect(events[0].properties.sponsored_count).toBe(2)
+    expect(events[0].properties.page_review_count).toBe(4)
+    expect(events[0].properties.page_sponsored_count).toBe(2)
+    expect(events[0].properties.pages_seen).toBe(1)
+  })
+
+  it('리뷰 묶음이 바뀌면 Banner Rendered를 다시 보내고 pages_seen이 증가한다', async () => {
+    const doc = await boot(fixture)
+
+    doc.querySelector('#sdpReview').innerHTML = `
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>다음 페이지 리뷰입니다</div>
+        <div data-review-id="8400001">도움이 돼요</div>
+      </article>
+    `
+    await tick()
+
+    const events = trackedOfType('Banner Rendered')
+    expect(events).toHaveLength(2)
+    expect(events[1].properties.pages_seen).toBe(2)
+    expect(events[1].properties.review_count).toBe(5)
+    expect(events[1].properties.page_review_count).toBe(1)
+  })
+
+  it('토글하면 Filter Toggled를 보낸다', async () => {
+    const doc = await boot(fixture)
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    const events = trackedOfType('Filter Toggled')
+    expect(events).toHaveLength(1)
+    expect(events[0].properties.to_state).toBe('on')
+    expect(events[0].properties.default_state).toBe('off')
   })
 })

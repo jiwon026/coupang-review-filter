@@ -1,3 +1,25 @@
-import { CONFIG } from '../shared/config.local.js'
+import { MESSAGES } from '../shared/messages.js'
+import { track } from './analytics.js'
+import { getDeviceId } from './identity.js'
+import { assign, EXPERIMENTS } from '../core/experiment.js'
 
-console.log('[체험단 필터] 서비스 워커 시작', CONFIG.amplitudeEndpoint)
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === MESSAGES.TRACK) {
+    track(message.eventType, message.properties)
+    sendResponse({ ok: true })
+    return false
+  }
+
+  if (message?.type === MESSAGES.GET_VARIANT) {
+    getDeviceId().then((deviceId) => {
+      const variants = {}
+      for (const experiment of Object.values(EXPERIMENTS)) {
+        variants[experiment.id] = assign(deviceId, experiment.id, experiment.variants)
+      }
+      sendResponse({ variants })
+    })
+    return true
+  }
+
+  return false
+})

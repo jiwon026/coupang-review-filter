@@ -63,4 +63,14 @@ describe('createBanner', () => {
     expect(el.textContent).not.toContain('현재 리뷰 평균')
     expect(el.textContent).not.toContain('쿠팡 평점')
   })
+
+  it('ratio 변형은 비중을 앞세운다', () => {
+    const el = createBanner(summary, { hidden: false, copyVariant: 'ratio', onToggle: () => {} })
+    expect(el.textContent).toContain('지금까지 본 리뷰의 28%가 체험단입니다')
+  })
+
+  it('변형을 안 주면 기본 문구를 쓴다', () => {
+    const el = createBanner(summary, { hidden: false, onToggle: () => {} })
+    expect(el.textContent).toContain('리뷰 1,204개 중 체험단 341개')
+  })
 })

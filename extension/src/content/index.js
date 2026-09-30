@@ -3,6 +3,8 @@ import { summarize } from '../core/rating.js'
 import { isSponsored } from '../core/sponsored.js'
 import { createBanner } from './banner.js'
 import { markSponsored, applyFilter } from './filter.js'
+import { MESSAGES } from '../shared/messages.js'
+import { EVENTS } from '../shared/events.js'
 
 const LOG_PREFIX = '[체험단 필터]'
 const PRODUCT_PATH = /\/vp\/products\/(\d+)/
@@ -12,9 +14,20 @@ const state = {
   lastKey: '',
   productId: null,
   seen: new Map(),
+  variants: { default_filter: 'off', banner_copy: 'rating' },
+  renderedAt: 0,
+  pagesSeen: 0,
 }
 
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
+
+function track(eventType, properties = {}) {
+  chrome.runtime.sendMessage({ type: MESSAGES.TRACK, eventType, properties })
+}
+
+function secondsSinceRender() {
+  return state.renderedAt === 0 ? 0 : Math.round((Date.now() - state.renderedAt) / 1000)
+}
 
 function currentProductId() {
   const matched = window.location.pathname.match(PRODUCT_PATH)
@@ -27,6 +40,8 @@ function resetIfProductChanged() {
   state.productId = productId
   state.seen.clear()
   state.lastKey = ''
+  state.renderedAt = 0
+  state.pagesSeen = 0
 }
 
 function accumulate(reviews) {
@@ -64,6 +79,8 @@ function render() {
   const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
   if (key === state.lastKey && bannerPresent) return
   state.lastKey = key
+  state.pagesSeen += 1
+  if (state.renderedAt === 0) state.renderedAt = Date.now()
 
   markSponsored(reviews)
   applyFilter(reviews, state.hidden)
@@ -75,11 +92,30 @@ function render() {
       `[${reviews[0].id}..${reviews[reviews.length - 1].id}]`,
   )
 
+  track(EVENTS.BANNER_RENDERED, {
+    review_count: summary.total,
+    sponsored_count: summary.sponsoredCount,
+    sponsored_ratio: summary.sponsoredRatio,
+    rating_official: summary.ratingOfficial,
+    rating_filtered: summary.ratingFiltered,
+    rating_delta: summary.ratingDelta,
+    page_review_count: reviews.length,
+    page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
+    pages_seen: state.pagesSeen,
+  })
+
   const banner = createBanner(summary, {
     hidden: state.hidden,
+    copyVariant: state.variants.banner_copy,
     onToggle: (next) => {
       state.hidden = next
       applyFilter(reviews, next)
+      track(EVENTS.FILTER_TOGGLED, {
+        to_state: next ? 'on' : 'off',
+        default_state: state.variants.default_filter,
+        seconds_since_render: secondsSinceRender(),
+        pages_seen: state.pagesSeen,
+      })
       state.lastKey = ''
       render()
     },
@@ -91,9 +127,14 @@ function render() {
 }
 
 function start() {
-  render()
-  const observer = new MutationObserver(() => render())
-  observer.observe(document.body, { childList: true, subtree: true })
+  chrome.runtime.sendMessage({ type: MESSAGES.GET_VARIANT }, (response) => {
+    if (response?.variants) state.variants = response.variants
+    state.hidden = state.variants.default_filter === 'on'
+
+    render()
+    const observer = new MutationObserver(() => render())
+    observer.observe(document.body, { childList: true, subtree: true })
+  })
 }
 
 if (document.readyState === 'loading') {

@@ -22,8 +22,10 @@ export function createBanner(summary, options) {
   const headline = document.createElement('p')
   headline.className = 'crf-headline'
   headline.textContent =
-    `리뷰 ${formatCount(summary.total)}개 중 체험단 ${formatCount(summary.sponsoredCount)}개 ` +
-    `(${formatPercent(summary.sponsoredRatio)})`
+    options.copyVariant === 'ratio'
+      ? `지금까지 본 리뷰의 ${formatPercent(summary.sponsoredRatio)}가 체험단입니다`
+      : `리뷰 ${formatCount(summary.total)}개 중 체험단 ${formatCount(summary.sponsoredCount)}개 ` +
+        `(${formatPercent(summary.sponsoredRatio)})`
   root.appendChild(headline)
 
   const ratings = document.createElement('p')
