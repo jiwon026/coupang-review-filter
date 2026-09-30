@@ -204,24 +204,19 @@ describe('content 진입점', () => {
   })
 
   it('id 없는 리뷰만 있으면 누적하지 않고 현재 화면만 센다', async () => {
-    const page = (label) => `<div id="sdpReview">
+    const article = (label, stars) => `
       <article>
-        <i class="twc-bg-full-star"></i>
-        <i class="twc-bg-full-star"></i>
-        <div>${label} 첫 리뷰</div>
-      </article>
-      <article>
-        <i class="twc-bg-full-star"></i>
-        <i class="twc-bg-full-star"></i>
-        <i class="twc-bg-full-star"></i>
-        <div>${label} 둘째 리뷰</div>
-      </article>
-    </div>`
+        ${'<i class="twc-bg-full-star"></i>'.repeat(stars)}
+        <div>${label}</div>
+      </article>`
 
-    const doc = await boot(page('1쪽'))
-    expect(banners(doc)[0].textContent).toContain('리뷰 2개')
+    const doc = await boot(
+      `<div id="sdpReview">${article('1쪽 첫 리뷰', 2)}${article('1쪽 둘째 리뷰', 3)}${article('1쪽 셋째 리뷰', 4)}</div>`,
+    )
+    expect(banners(doc)[0].textContent).toContain('리뷰 3개')
 
-    doc.querySelector('#sdpReview').outerHTML = page('2쪽')
+    doc.querySelector('#sdpReview').innerHTML =
+      `${article('2쪽 첫 리뷰', 2)}${article('2쪽 둘째 리뷰', 3)}`
     await tick()
 
     expect(banners(doc)[0].textContent).toContain('리뷰 2개')

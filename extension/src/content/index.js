@@ -59,7 +59,7 @@ function render() {
   if (reviews.length === 0) return
 
   const key = reviews
-    .map((review) => `${review.id}:${review.rating}:${isSponsored(review.text)}`)
+    .map((review) => `${review.id}:${review.rating}:${review.text.length}`)
     .join(',')
   const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
   if (key === state.lastKey && bannerPresent) return
