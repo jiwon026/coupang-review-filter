@@ -865,6 +865,163 @@ git commit -m "feat: 배너와 필터 이벤트 계측"
 
 ---
 
+## Task 6b: 정렬 상태 수집
+
+> **2026-09-30 추가.** 명세 4.4절의 실측 결과로 생긴 태스크다. 같은 상품에서 최신순은 체험단 0/50, 베스트순은 20/50 이었다. 정렬을 기록하지 않으면 이 신호가 집계에서 통째로 사라진다. `rating_delta` 만 보면 "아무 일 없음" 으로 나온다.
+
+**Files:**
+- Modify: `extension/src/content/selectors.js`
+- Create: `extension/src/content/sort.js`
+- Modify: `extension/src/content/index.js`
+- Test: `tests/sort.test.js`
+
+**Interfaces:**
+- Consumes: `SELECTORS` from `content/selectors.js`
+- Produces: `detectSort(root: Document | Element): 'best' | 'latest' | 'unknown'`
+
+### 실측한 탐지 방법
+
+정렬 버튼 두 개가 `#sdpReview` 안에 있고, **활성 버튼만 클래스에 `twc-font-bold` 를 갖는다.** 비활성은 `twc-font-normal` 이다. 컨트롤러가 실제 페이지에서 확인했다.
+
+- [ ] **Step 1: `selectors.js` 에 정렬 상수 추가**
+
+```js
+export const SORT_SELECTORS = {
+  sortButton: 'button',
+  activeClass: 'twc-font-bold',
+}
+
+export const SORT_LABELS = {
+  best: '베스트순',
+  latest: '최신순',
+}
+```
+
+- [ ] **Step 2: 실패하는 테스트 작성**
+
+`tests/sort.test.js`:
+
+```js
+import { describe, it, expect } from 'vitest'
+import { JSDOM } from 'jsdom'
+import { detectSort } from '../extension/src/content/sort.js'
+
+function build(bestClass, latestClass) {
+  return new JSDOM(`<body><div id="sdpReview">
+    <button class="${bestClass}">베스트순</button>
+    <button class="${latestClass}">최신순</button>
+  </div></body>`).window.document
+}
+
+describe('detectSort', () => {
+  it('베스트순이 굵으면 best', () => {
+    expect(detectSort(build('twc-font-bold', 'twc-font-normal'))).toBe('best')
+  })
+
+  it('최신순이 굵으면 latest', () => {
+    expect(detectSort(build('twc-font-normal', 'twc-font-bold'))).toBe('latest')
+  })
+
+  it('둘 다 굵지 않으면 unknown', () => {
+    expect(detectSort(build('twc-font-normal', 'twc-font-normal'))).toBe('unknown')
+  })
+
+  it('버튼이 없으면 unknown', () => {
+    const doc = new JSDOM('<body><div id="sdpReview"></div></body>').window.document
+    expect(detectSort(doc)).toBe('unknown')
+  })
+
+  it('컨테이너가 없으면 unknown', () => {
+    const doc = new JSDOM('<body><div>리뷰 없음</div></body>').window.document
+    expect(detectSort(doc)).toBe('unknown')
+  })
+})
+```
+
+- [ ] **Step 3: 테스트 실패 확인**
+
+Run: `npx vitest run tests/sort.test.js`
+Expected: FAIL. `Failed to resolve import`
+
+- [ ] **Step 4: 구현 작성**
+
+`extension/src/content/sort.js`:
+
+```js
+import { SELECTORS, SORT_SELECTORS, SORT_LABELS } from './selectors.js'
+
+export function detectSort(root) {
+  const container = root.querySelector(SELECTORS.reviewContainer)
+  if (!container) return 'unknown'
+
+  const buttons = [...container.querySelectorAll(SORT_SELECTORS.sortButton)]
+
+  for (const [key, label] of Object.entries(SORT_LABELS)) {
+    const button = buttons.find((element) => element.textContent.trim() === label)
+    if (button && String(button.className).includes(SORT_SELECTORS.activeClass)) return key
+  }
+
+  return 'unknown'
+}
+```
+
+- [ ] **Step 5: 테스트 통과 확인**
+
+Run: `npx vitest run tests/sort.test.js`
+Expected: PASS, 5개 통과
+
+- [ ] **Step 6: `index.js` 에 배선**
+
+상단 import에 추가한다.
+
+```js
+import { detectSort } from './sort.js'
+```
+
+`track` 헬퍼가 모든 이벤트에 정렬을 싣도록 바꾼다.
+
+```js
+function track(eventType, properties = {}) {
+  chrome.runtime.sendMessage({
+    type: MESSAGES.TRACK,
+    eventType,
+    properties: { review_sort: detectSort(document), ...properties },
+  })
+}
+```
+
+`Banner Rendered` 프로퍼티에 이번 페이지 값과 누적 페이지 수를 추가한다. 누적 집계가 들어간 뒤라 `summary` 는 누적 기준이고, 현재 페이지 값은 따로 세야 한다.
+
+```js
+    track(EVENTS.BANNER_RENDERED, {
+      review_count: summary.total,
+      sponsored_count: summary.sponsoredCount,
+      sponsored_ratio: summary.sponsoredRatio,
+      rating_official: summary.ratingOfficial,
+      rating_filtered: summary.ratingFiltered,
+      rating_delta: summary.ratingDelta,
+      page_review_count: reviews.length,
+      page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
+    })
+```
+
+- [ ] **Step 7: 전체 테스트와 커밋**
+
+Run: `npm test`
+
+```bash
+git add extension/src/content/sort.js extension/src/content/selectors.js extension/src/content/index.js tests/sort.test.js
+git commit -m "feat: 리뷰 정렬 상태 수집"
+```
+
+### 분석에 주는 의미
+
+`review_sort` 로 분할한 `page_sponsored_count / page_review_count` 가 이 프로젝트의 핵심 지표가 된다. 상품 수십 개에서 최신순과 베스트순의 협찬 비중 차이가 재현되면, 명세 4.4절의 가설이 검증된다.
+
+`review_sort` 가 `unknown` 인 비율이 치솟으면 쿠팡이 정렬 UI를 바꾼 것이므로 `Extension Error` 와 함께 가드레일로 감시한다.
+
+---
+
 ## Task 7: 구매 의도 감지
 
 **Files:**
