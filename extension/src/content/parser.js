@@ -7,7 +7,7 @@ function extractRating(item) {
 function extractId(item, index) {
   const node = item.querySelector(SELECTORS.reviewIdNode)
   const id = node ? node.getAttribute(REVIEW_ID_ATTRIBUTE) : null
-  return id || `crf-${index}`
+  return id || null
 }
 
 export function findReviewContainer(root) {
@@ -25,8 +25,11 @@ export function parseReviews(root) {
     const rating = extractRating(item)
     if (rating < 1 || rating > 5) return
 
+    const stableId = extractId(item, index)
+
     reviews.push({
-      id: extractId(item, index),
+      id: stableId || `crf-${index}`,
+      hasStableId: stableId !== null,
       rating,
       text: item.textContent.trim(),
       element: item,

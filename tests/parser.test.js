@@ -83,4 +83,21 @@ describe('parseReviews', () => {
     expect(parseReviews(empty)).toEqual([])
     expect(findReviewContainer(empty)).toBeNull()
   })
+
+  it('id 노드가 있으면 hasStableId가 true다', () => {
+    const reviews = parseReviews(doc)
+    for (const review of reviews) {
+      expect(review.hasStableId).toBe(true)
+    }
+  })
+
+  it('id 노드가 없으면 hasStableId가 false다', () => {
+    const noId = new JSDOM(`<body><div id="sdpReview"><article>
+      <i class="twc-bg-full-star"></i><i class="twc-bg-full-star"></i>
+      <div>아이디 없는 리뷰</div>
+    </article></div></body>`).window.document
+    const reviews = parseReviews(noId)
+    expect(reviews[0].hasStableId).toBe(false)
+    expect(reviews[0].id).toBe('crf-0')
+  })
 })

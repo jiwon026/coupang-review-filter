@@ -202,4 +202,73 @@ describe('content 진입점', () => {
     const doc = await boot(fixture)
     expect(banners(doc)[0].textContent).toContain('지금까지 확인한 리뷰')
   })
+
+  it('id 없는 리뷰만 있으면 누적하지 않고 현재 화면만 센다', async () => {
+    const page = (label) => `<div id="sdpReview">
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>${label} 첫 리뷰</div>
+      </article>
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>${label} 둘째 리뷰</div>
+      </article>
+    </div>`
+
+    const doc = await boot(page('1쪽'))
+    expect(banners(doc)[0].textContent).toContain('리뷰 2개')
+
+    doc.querySelector('#sdpReview').outerHTML = page('2쪽')
+    await tick()
+
+    expect(banners(doc)[0].textContent).toContain('리뷰 2개')
+  })
+
+  it('id 있는 리뷰가 섞여 있으면 그것만 누적한다', async () => {
+    const doc = await boot(fixture)
+    expect(banners(doc)[0].textContent).toContain('리뷰 4개')
+
+    doc.querySelector('#sdpReview').innerHTML = `
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>id 있는 새 리뷰</div>
+        <div data-review-id="8100001">도움이 돼요</div>
+      </article>
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>id 없는 새 리뷰</div>
+      </article>
+    `
+    await tick()
+
+    expect(banners(doc)[0].textContent).toContain('리뷰 5개')
+  })
+
+  it('나중의 더 완전한 파싱이 이전 값을 덮어쓴다', async () => {
+    const doc = await boot(`<div id="sdpReview">
+      <article>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <i class="twc-bg-full-star"></i>
+        <div>아직 체험단 표기가 안 채워진 리뷰</div>
+        <div data-review-id="8200001">도움이 돼요</div>
+      </article>
+    </div>`)
+    expect(banners(doc)[0].textContent).toContain('체험단 리뷰가 없습니다')
+
+    doc.querySelector('[data-review-id="8200001"]').insertAdjacentHTML(
+      'beforebegin',
+      '<div>쿠팡체험단 이벤트로 상품을 무료로 제공 받아 작성한 구매 후기입니다.</div>',
+    )
+    await tick()
+
+    expect(banners(doc)[0].textContent).toContain('체험단 1개')
+  })
 })

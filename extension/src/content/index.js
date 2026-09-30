@@ -30,13 +30,22 @@ function resetIfProductChanged() {
 }
 
 function accumulate(reviews) {
-  for (const review of reviews) {
-    if (state.seen.has(review.id)) continue
+  const identified = reviews.filter((review) => review.hasStableId)
+
+  if (identified.length === 0) {
+    return reviews.map((review) => ({
+      rating: review.rating,
+      sponsored: isSponsored(review.text),
+    }))
+  }
+
+  for (const review of identified) {
     state.seen.set(review.id, {
       rating: review.rating,
       sponsored: isSponsored(review.text),
     })
   }
+
   return [...state.seen.values()]
 }
 
@@ -49,7 +58,9 @@ function render() {
   const reviews = parseReviews(document)
   if (reviews.length === 0) return
 
-  const key = reviews.map((review) => review.id).join(',')
+  const key = reviews
+    .map((review) => `${review.id}:${review.rating}:${isSponsored(review.text)}`)
+    .join(',')
   const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
   if (key === state.lastKey && bannerPresent) return
   state.lastKey = key
