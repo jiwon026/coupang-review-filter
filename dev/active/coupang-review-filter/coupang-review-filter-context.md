@@ -4,26 +4,19 @@ Last Updated: 2026-09-30 (세션 종료 시점)
 
 ## 내일 가장 먼저 할 것
 
-**Task 8(사이드 패널)이 작업 중간에 멈춰 있다.** 세션 종료 시점에 구현 에이전트가 파일을 고치던 중이었고 커밋 전이었다.
+**Task 8(사이드 패널)은 구현 커밋까지 됐고, 리뷰는 아직이다.**
 
-세션 종료 시점 작업 트리:
-
-```
- M build.js
- M extension/manifest.json
- M extension/src/background/index.js
- M tests/helpers/chrome-mock.js
-?? extension/src/sidepanel/
-?? tests/background.test.js
-?? tests/sidepanel-view.test.js
-```
+세션 종료 직전 구현 에이전트가 `0b1b6bf feat: 사이드 패널과 실시간 요약 갱신` 을 커밋했고 원격에도 올라갔다. 다만 브리프가 "변이 테스트 전에 먼저 커밋하라" 고 지시했으므로, 에이전트가 **그 뒤 변이 테스트를 돌리던 중에 세션이 끝났을 수 있다.**
 
 재개 절차:
 
-1. `git log --oneline | head -3` 로 `feat: 사이드 패널과 실시간 요약 갱신` 커밋이 있는지 본다
-2. `.superpowers/sdd/2026-09-28-instrumentation/task-8-report.md` 가 있는지 본다
-3. **둘 다 있으면**: 에이전트가 끝낸 것이다. Task 8 태스크 리뷰로 간다
-4. **둘 다 없으면**: 부분 작업이다. 사용자에게 확인한 뒤 부분 변경을 버리고(`git checkout -- build.js extension/manifest.json extension/src/background/index.js tests/helpers/chrome-mock.js` 와 새 파일 삭제) Task 8을 브리프로 처음부터 다시 디스패치한다. 브리프는 자기완결적이다: `.superpowers/sdd/2026-09-28-instrumentation/task-8-brief.md`
+1. `git status --short` 로 작업 트리를 본다. **변경이 있으면 변이가 적용된 채 멈춘 것이다.** 파일이 이미 커밋되어 있으므로 `git checkout -- <파일>` 로 되돌린다. 되돌리기 전에 무엇이 바뀌었는지 `git diff` 로 확인한다
+2. `npm test` 로 127개가 통과하는지 확인한다
+3. `.superpowers/sdd/2026-09-28-instrumentation/task-8-report.md` 가 있는지 본다
+   - **있으면**: 변이 N, O, P, Q 결과가 적혀 있는지 본다. 있으면 Task 8 태스크 리뷰로 간다
+   - **없거나 변이 결과가 없으면**: 변이 테스트를 컨트롤러가 직접 돌리거나 구현 에이전트를 재개해 마무리한 뒤 리뷰로 간다
+4. 리뷰 패키지: `scripts/review-package docs/superpowers/plans/2026-09-28-instrumentation.md c320f96 0b1b6bf`
+5. 브리프: `.superpowers/sdd/2026-09-28-instrumentation/task-8-brief.md`
 
 ## 전체 진행 상황
 
