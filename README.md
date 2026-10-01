@@ -2,13 +2,27 @@
 
 쿠팡 상품 페이지에서 체험단 제공 리뷰를 판별해 배지를 붙이고 숨기며, 협찬을 제외한 평점을 보여주는 크롬 확장입니다.
 
+## 설정
+
+빌드 전에 설정 파일을 만듭니다. PowerShell에서 아래 명령을 실행합니다.
+
+```powershell
+Copy-Item extension/src/shared/config.example.js extension/src/shared/config.local.js
+```
+
+1. `extension/src/shared/config.local.js` 를 연다
+2. `amplitudeApiKey` 에 앰플리튜드 API 키를 넣는다
+
+`config.local.js` 는 git에 올라가지 않습니다. 키를 넣지 않아도 확장은 동작하고, 계측만 꺼집니다.
+
 ## 개발
 
 ```bash
 npm install
-npm run build    # extension/dist/content.js 생성
-npm test         # Vitest
-npm run watch    # 변경 감지 빌드
+npm run build          # content.js, background.js, sidepanel.js 세 번들 생성 (디버그 로그 켜짐)
+npm run build:release  # 같은 세 번들, 디버그 로그 제거
+npm test               # Vitest
+npm run watch          # 변경 감지 빌드 (디버그 로그 켜짐)
 ```
 
 ## 크롬에 로드하기
@@ -30,6 +44,9 @@ npm run watch    # 변경 감지 빌드
 | `extension/src/core/` | 순수 로직. DOM을 모른다 |
 | `extension/src/content/` | 쿠팡 페이지 조작 |
 | `extension/src/content/selectors.js` | 쿠팡 DOM 셀렉터의 유일한 거처 |
+| `extension/src/background/` | 이벤트 전송, 기기 신원, 탭별 요약 저장 |
+| `extension/src/sidepanel/` | 사이드 패널 화면 |
+| `extension/src/shared/` | 이벤트 이름, 메시지 상수, 설정 |
 | `tests/` | Vitest, jsdom |
 
 쿠팡이 마크업을 바꾸면 `selectors.js` 만 고치면 됩니다.
