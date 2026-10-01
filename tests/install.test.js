@@ -90,6 +90,30 @@ describe('설치', () => {
     expect(url.searchParams.get('i')).toBe(String(store.crf_installed_at))
   })
 
+  it('시작 시 설정과 설치 시 설정이 겹쳐도 마지막 setUninstallURL 에 i 가 실린다', async () => {
+    const store = installChromeMock({ crf_device_id: 'dev-1' })
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200 }))
+    // 워커 시작 때의 설정이 설치 시각을 비어 있는 상태로 읽은 뒤 늦게 끝나는 상황을 만든다.
+    const originalGet = chrome.storage.local.get
+    let delayedOnce = false
+    chrome.storage.local.get = (keys) => {
+      const snapshot = originalGet(keys)
+      if (keys !== 'crf_installed_at' || delayedOnce) return snapshot
+      delayedOnce = true
+      return snapshot.then((value) => new Promise((resolve) => setTimeout(() => resolve(value), 30)))
+    }
+    vi.resetModules()
+    await import('../extension/src/background/index.js')
+    await flush()
+
+    await fireInstalled(chrome, { reason: 'install' })
+    await new Promise((resolve) => setTimeout(resolve, 60))
+
+    const urls = chrome.__calls.setUninstallURL
+    expect(urls).toHaveLength(2)
+    expect(new URL(urls[urls.length - 1]).searchParams.get('i')).toBe(String(store.crf_installed_at))
+  })
+
   it('설치 시각 저장이 실패해도 경고만 하고 나머지를 이어간다', async () => {
     const { chrome } = await loadBackground()
     chrome.storage.local.set = () => Promise.reject(new Error('저장 실패'))

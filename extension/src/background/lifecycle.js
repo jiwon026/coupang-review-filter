@@ -34,7 +34,16 @@ export function buildUninstallUrl({ origin, deviceId, version, installedAt }) {
   return url.toString()
 }
 
-export async function configureUninstallUrl() {
+// 첫 설치 때는 워커 시작의 설정과 onInstalled 안의 설정이 겹친다. 먼저 시작한 쪽이 설치 시각을 비어 있는 상태로
+// 읽고 늦게 끝나면 i 없는 주소가 최종값이 된다. 모든 설정 요청을 한 줄로 세워 나중 요청이 나중에 적용되게 한다.
+let uninstallUrlQueue = Promise.resolve()
+
+export function configureUninstallUrl() {
+  uninstallUrlQueue = uninstallUrlQueue.then(applyUninstallUrl)
+  return uninstallUrlQueue
+}
+
+async function applyUninstallUrl() {
   if (!isLandingConfigured(CONFIG.landingOrigin)) return
 
   try {
