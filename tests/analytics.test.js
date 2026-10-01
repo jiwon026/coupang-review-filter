@@ -31,13 +31,35 @@ describe('buildPayload', () => {
     expect(props.review_count).toBe(120)
   })
 
-  it('이벤트 프로퍼티가 공통보다 우선한다', () => {
+  // 콘텐츠 메시지는 타입 검사 없는 신뢰 경계다. 화면 변형과 기록 변형이 같다는 불변식을 관례가 아니라 코드로 지킨다.
+  it('공통 프로퍼티는 이벤트 프로퍼티가 덮어쓸 수 없다', () => {
+    const payload = buildPayload({
+      ...base,
+      commonProperties: { surface: 'extension', exp_default_filter: 'on', app_version: '0.1.0' },
+      properties: { surface: 'sidepanel', exp_default_filter: 'x', app_version: '9.9.9' },
+    })
+    const props = payload.events[0].event_properties
+    expect(props.exp_default_filter).toBe('on')
+    expect(props.surface).toBe('extension')
+    expect(props.app_version).toBe('0.1.0')
+  })
+
+  it('공통에 없는 이벤트 프로퍼티는 그대로 싣는다', () => {
     const payload = buildPayload({
       ...base,
       commonProperties: { surface: 'extension' },
-      properties: { surface: 'sidepanel' },
+      properties: { review_count: 120, filter_state: 'on' },
     })
-    expect(payload.events[0].event_properties.surface).toBe('sidepanel')
+    expect(payload.events[0].event_properties).toEqual({
+      surface: 'extension',
+      review_count: 120,
+      filter_state: 'on',
+    })
+  })
+
+  it('sessionId 를 이벤트 최상위 session_id 에 담는다', () => {
+    const event = buildPayload({ ...base, sessionId: 1699999000000 }).events[0]
+    expect(event.session_id).toBe(1699999000000)
   })
 
   it('user_id가 null이면 필드를 넣지 않는다', () => {
