@@ -1,11 +1,14 @@
 import { MESSAGES } from '../shared/messages.js'
 import { track } from './analytics.js'
 import { getDeviceId } from './identity.js'
+import { saveSummary, loadSummary, removeSummary } from './summaries.js'
 import { assign, EXPERIMENTS } from '../core/experiment.js'
 
-const summaries = new Map()
-
-chrome.tabs.onRemoved.addListener((tabId) => summaries.delete(tabId))
+chrome.tabs.onRemoved.addListener((tabId) => {
+  removeSummary(tabId).catch((error) =>
+    console.warn('[체험단 필터] 요약을 지우지 못했습니다:', error?.message),
+  )
+})
 
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
@@ -13,13 +16,22 @@ chrome.sidePanel
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === MESSAGES.SUMMARY_UPDATED) {
-    if (sender.tab?.id !== undefined) summaries.set(sender.tab.id, message.summary)
+    if (sender.tab?.id !== undefined) {
+      saveSummary(sender.tab.id, message.summary).catch((error) =>
+        console.warn('[체험단 필터] 요약을 저장하지 못했습니다:', error?.message),
+      )
+    }
     return false
   }
 
   if (message?.type === MESSAGES.GET_SUMMARY) {
-    sendResponse({ summary: summaries.get(message.tabId) ?? null })
-    return false
+    loadSummary(message.tabId)
+      .then((summary) => sendResponse({ summary }))
+      .catch((error) => {
+        console.warn('[체험단 필터] 요약을 읽지 못했습니다:', error?.message)
+        sendResponse({ summary: null })
+      })
+    return true
   }
 
   if (message?.type === MESSAGES.OPEN_PANEL) {

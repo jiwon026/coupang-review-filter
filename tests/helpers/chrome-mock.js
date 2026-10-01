@@ -1,6 +1,8 @@
 export function installChromeMock(initial = {}) {
   const store = { ...initial }
+  const sessionStore = {}
   const listeners = []
+  const removedListeners = []
   const calls = { sidePanelOpen: [], setPanelBehavior: [] }
 
   const chrome = {
@@ -18,6 +20,23 @@ export function installChromeMock(initial = {}) {
           Object.assign(store, items)
         },
       },
+      session: {
+        async get(keys) {
+          const list = Array.isArray(keys) ? keys : [keys]
+          const result = {}
+          for (const key of list) {
+            if (key in sessionStore) result[key] = sessionStore[key]
+          }
+          return result
+        },
+        async set(items) {
+          Object.assign(sessionStore, items)
+        },
+        async remove(keys) {
+          const list = Array.isArray(keys) ? keys : [keys]
+          for (const key of list) delete sessionStore[key]
+        },
+      },
     },
     runtime: {
       setUninstallURL() {},
@@ -26,7 +45,7 @@ export function installChromeMock(initial = {}) {
       onInstalled: { addListener: () => {} },
     },
     tabs: {
-      onRemoved: { addListener: () => {} },
+      onRemoved: { addListener: (fn) => removedListeners.push(fn) },
     },
     sidePanel: {
       open: (options) => {
@@ -39,6 +58,8 @@ export function installChromeMock(initial = {}) {
       },
     },
     __listeners: listeners,
+    __removedListeners: removedListeners,
+    __session: sessionStore,
     __calls: calls,
   }
 
