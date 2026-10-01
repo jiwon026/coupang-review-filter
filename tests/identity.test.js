@@ -58,6 +58,29 @@ describe('identity', () => {
     expect(await getDeviceId()).toBe('abc123')
   })
 
+  it('빈 저장소에서 getDeviceId 진행 중에 setDeviceId 를 불러도 설정한 값이 남는다', async () => {
+    const pending = getDeviceId()
+    await setDeviceId('x')
+    await pending
+
+    expect(store.crf_device_id).toBe('x')
+    expect(await getDeviceId()).toBe('x')
+  })
+
+  it('진행 중이던 생성이 실패해도 setDeviceId 는 값을 저장한다', async () => {
+    const originalGet = chrome.storage.local.get
+    chrome.storage.local.get = () => Promise.reject(new Error('읽기 실패'))
+    const pending = getDeviceId()
+    const settled = expect(pending).rejects.toThrow('읽기 실패')
+
+    chrome.storage.local.get = originalGet
+    await setDeviceId('x')
+    await settled
+
+    expect(store.crf_device_id).toBe('x')
+    expect(await getDeviceId()).toBe('x')
+  })
+
   it('user_id는 기본값이 null이다', async () => {
     expect(await getUserId()).toBeNull()
   })

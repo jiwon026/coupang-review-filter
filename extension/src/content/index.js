@@ -95,9 +95,10 @@ function trackScroll() {
 
 // 렌더는 관측만 쌓고, 셀렉터 깨짐 판정은 상품 페이지를 떠날 때 한 번 한다.
 // productId 를 넘기면 떠나는 상품의 번호로 보낸다(같은 탭 안 이동에서 현재 주소는 이미 새 상품이다).
+// 마지막 스크롤은 pagehide 경로(productId 없음)에서만 반영한다. 상품 전환 때의 scrollY 는 이미 새 페이지 값이다.
 function flushHealthSignals(productId) {
   try {
-    trackScroll()
+    if (productId === undefined) trackScroll()
     for (const signal of selectHealthSignals(state.observation)) {
       reportExtensionError(productId === undefined ? signal : { ...signal, product_id: productId })
     }

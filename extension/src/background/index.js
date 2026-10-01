@@ -37,12 +37,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === MESSAGES.GET_SUMMARY) {
+    // 읽기 실패에서만 null 로 응답한다. then(...).catch(...) 로 이으면 sendResponse 가 던질 때 응답이 두 번 나간다.
     loadSummary(message.tabId)
-      .then((summary) => sendResponse({ summary }))
-      .catch((error) => {
-        console.warn('[체험단 필터] 요약을 읽지 못했습니다:', error?.message)
-        sendResponse({ summary: null })
-      })
+      .then(
+        (summary) => sendResponse({ summary }),
+        (error) => {
+          console.warn('[체험단 필터] 요약을 읽지 못했습니다:', error?.message)
+          sendResponse({ summary: null })
+        },
+      )
+      .catch((error) =>
+        console.warn('[체험단 필터] 요약 응답을 보내지 못했습니다:', error?.message),
+      )
     return true
   }
 

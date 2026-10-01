@@ -75,13 +75,18 @@ async function touchDom(doc) {
   await tick()
 }
 
-function setScroll(dom, { scrollY, viewportHeight, documentHeight }) {
+// 스크롤 이벤트 없이 값만 바꾼다(새 페이지가 이미 다른 위치에 있는 상황을 흉내 낸다).
+function defineScroll(dom, { scrollY, viewportHeight, documentHeight }) {
   Object.defineProperty(dom.window, 'scrollY', { value: scrollY, configurable: true })
   Object.defineProperty(dom.window, 'innerHeight', { value: viewportHeight, configurable: true })
   Object.defineProperty(dom.window.document.documentElement, 'scrollHeight', {
     value: documentHeight,
     configurable: true,
   })
+}
+
+function setScroll(dom, position) {
+  defineScroll(dom, position)
   dom.window.dispatchEvent(new dom.window.Event('scroll'))
 }
 
@@ -450,6 +455,41 @@ describe('셀렉터 깨짐 신호', () => {
       pagehide(lastDom)
 
       expect(errorEvents('ReviewContainerNotFound')).toHaveLength(1)
+    })
+
+    it('pagehide 는 스크롤 이벤트 없이 바뀐 마지막 위치도 반영한다', async () => {
+      await boot('<div>리뷰 없음</div>')
+      defineScroll(lastDom, { scrollY: 630, viewportHeight: 100, documentHeight: 1000 })
+      pagehide(lastDom)
+
+      const events = errorEvents('ReviewContainerNotFound')
+      expect(events).toHaveLength(1)
+      expect(events[0].properties.max_scroll_ratio).toBe(0.7)
+    })
+
+    it('상품 전환 순간의 새 페이지 scrollY 가 커도 떠나는 상품은 누적 스크롤로만 판정한다', async () => {
+      const doc = await boot('<div>리뷰 없음</div>')
+      setScroll(lastDom, { scrollY: 270, viewportHeight: 100, documentHeight: 1000 })
+
+      lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+      defineScroll(lastDom, { scrollY: 900, viewportHeight: 100, documentHeight: 1000 })
+      await touchDom(doc)
+
+      expect(errorEvents('ReviewContainerNotFound')).toHaveLength(0)
+    })
+
+    it('상품 전환 시 떠나는 상품의 누적 스크롤이 기준을 넘었으면 앞 상품 번호로 보낸다', async () => {
+      const doc = await boot('<div>리뷰 없음</div>')
+      setScroll(lastDom, { scrollY: 630, viewportHeight: 100, documentHeight: 1000 })
+
+      lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+      defineScroll(lastDom, { scrollY: 0, viewportHeight: 100, documentHeight: 1000 })
+      await touchDom(doc)
+
+      const events = errorEvents('ReviewContainerNotFound')
+      expect(events).toHaveLength(1)
+      expect(events[0].properties.product_id).toBe('1')
+      expect(events[0].properties.max_scroll_ratio).toBe(0.7)
     })
 
     it('문서가 짧아도 스크롤하지 않았으면 보내지 않는다', async () => {

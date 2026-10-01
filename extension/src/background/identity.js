@@ -28,7 +28,9 @@ export function getDeviceId() {
   return deviceIdInFlight
 }
 
+// 진행 중인 생성이 뒤늦게 저장값을 덮지 않도록 그것이 끝난 뒤에 저장한다. 생성의 실패는 저장과 무관하다.
 export async function setDeviceId(id) {
+  if (deviceIdInFlight) await deviceIdInFlight.catch(() => {})
   await chrome.storage.local.set({ [DEVICE_KEY]: id })
 }
 

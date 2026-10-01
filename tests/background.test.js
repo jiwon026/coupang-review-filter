@@ -30,6 +30,19 @@ function dispatch(chrome, message, sender = {}) {
   return { returned: returns, response: hasSync ? Promise.resolve(sync) : asyncResponse }
 }
 
+// 응답이 오지 않는 회귀를 5초 테스트 타임아웃이 아니라 짧은 대기와 명시적 메시지로 드러낸다.
+async function responseWithin(dispatched, ms = 500) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`응답이 오지 않음(${ms}ms 안에 sendResponse 호출 없음)`)), ms)
+  })
+  try {
+    return await Promise.race([dispatched.response, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 async function restartWorker(chrome) {
@@ -111,10 +124,42 @@ describe('background', () => {
     const chrome = await loadBackground()
     chrome.storage.session.get = () => Promise.reject(new Error('읽기 실패'))
 
-    expect(await dispatch(chrome, { type: 'crf:get-summary', tabId: 7 }).response).toEqual({
-      summary: null,
-    })
+    const response = await responseWithin(dispatch(chrome, { type: 'crf:get-summary', tabId: 7 }))
+    expect(response).toEqual({ summary: null })
     expect(warn).toHaveBeenCalled()
+  })
+
+  it('GET_SUMMARY 의 sendResponse 가 던져도 응답을 한 번 더 보내지 않는다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const chrome = await loadBackground()
+    dispatch(chrome, { type: 'crf:summary-updated', summary: { total: 10 } }, { tab: { id: 7 } })
+    await flush()
+    const calls = []
+    const sendResponse = (value) => {
+      calls.push(value)
+      throw new Error('채널이 닫혔습니다')
+    }
+
+    for (const listener of chrome.__listeners) {
+      listener({ type: 'crf:get-summary', tabId: 7 }, {}, sendResponse)
+    }
+    await flush()
+
+    expect(calls).toEqual([{ summary: { total: 10 } }])
+  })
+
+  it('GET_SUMMARY 읽기에 성공하면 sendResponse 를 한 번만 부른다', async () => {
+    const chrome = await loadBackground()
+    dispatch(chrome, { type: 'crf:summary-updated', summary: { total: 10 } }, { tab: { id: 7 } })
+    await flush()
+    const calls = []
+
+    for (const listener of chrome.__listeners) {
+      listener({ type: 'crf:get-summary', tabId: 7 }, {}, (value) => calls.push(value))
+    }
+    await flush()
+
+    expect(calls).toEqual([{ summary: { total: 10 } }])
   })
 
   it('요약을 저장하지 못해도 경고만 하고 멈추지 않는다', async () => {
