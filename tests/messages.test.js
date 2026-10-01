@@ -9,6 +9,7 @@ describe('MESSAGES', () => {
       SUMMARY_UPDATED: 'crf:summary-updated',
       GET_SUMMARY: 'crf:get-summary',
       GET_VARIANT: 'crf:get-variant',
+      CONSUME_PANEL_TRIGGER: 'crf:consume-panel-trigger',
     })
   })
 

@@ -186,6 +186,81 @@ describe('background', () => {
     expect(chrome.__calls.sidePanelOpen).toEqual([{ windowId: 3 }])
   })
 
+  describe('패널을 연 경로(trigger)', () => {
+    const T0 = 1_700_000_000_000
+
+    async function consume(chrome, windowId) {
+      return (await responseWithin(dispatch(chrome, { type: 'crf:consume-panel-trigger', windowId }))).trigger
+    }
+
+    it('배너의 자세히 보기로 연 창에서 패널이 물으면 banner 다', async () => {
+      const chrome = await loadBackground()
+      dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
+      expect(await consume(chrome, 3)).toBe('banner')
+    })
+
+    it('패널 열기는 표시를 남기기 전에 리스너 안에서 동기로 부른다(사용자 제스처 유지)', async () => {
+      const chrome = await loadBackground()
+      const order = []
+      chrome.sidePanel.open = () => {
+        order.push('open')
+        return Promise.resolve()
+      }
+      const originalSet = chrome.storage.session.set
+      chrome.storage.session.set = (items) => {
+        order.push('mark')
+        return originalSet(items)
+      }
+      dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
+      expect(order[0]).toBe('open')
+    })
+
+    it('표시 없이 열린 패널(툴바)은 toolbar 다', async () => {
+      const chrome = await loadBackground()
+      expect(await consume(chrome, 3)).toBe('toolbar')
+    })
+
+    it('다른 창의 표시는 쓰지 않는다', async () => {
+      const chrome = await loadBackground()
+      dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
+      expect(await consume(chrome, 4)).toBe('toolbar')
+      expect(await consume(chrome, 3)).toBe('banner')
+    })
+
+    it('6초 지난 표시는 toolbar 다', async () => {
+      const chrome = await loadBackground()
+      const now = vi.spyOn(Date, 'now').mockReturnValue(T0)
+      dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
+      await flush()
+      now.mockReturnValue(T0 + 6000)
+      expect(await consume(chrome, 3)).toBe('toolbar')
+      now.mockRestore()
+    })
+
+    it('한 번 쓴 표시는 다시 쓰지 않는다', async () => {
+      const chrome = await loadBackground()
+      dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
+      expect(await consume(chrome, 3)).toBe('banner')
+      expect(await consume(chrome, 3)).toBe('toolbar')
+    })
+
+    it('서비스 워커가 재시작돼도 표시를 이어 쓴다', async () => {
+      const chrome = await loadBackground()
+      dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
+      await flush()
+      await restartWorker(chrome)
+      expect(await consume(chrome, 3)).toBe('banner')
+    })
+
+    it('창 id 가 없거나 저장소가 실패하면 unknown 으로 응답한다', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const chrome = await loadBackground()
+      expect(await consume(chrome, undefined)).toBe('unknown')
+      chrome.storage.session.get = () => Promise.reject(new Error('읽기 실패'))
+      expect(await consume(chrome, 3)).toBe('unknown')
+    })
+  })
+
   it('GET_VARIANT 는 { variants: { default_filter, banner_copy } } 모양으로 응답한다', async () => {
     const chrome = await loadBackground()
     const { variants } = await dispatch(chrome, { type: 'crf:get-variant' }).response

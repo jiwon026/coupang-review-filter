@@ -5,6 +5,7 @@ import { getDeviceId } from './identity.js'
 import { saveSummary, loadSummary, removeSummary } from './summaries.js'
 import { assignAll } from '../core/experiment.js'
 import { configureUninstallUrl, handleInstalled } from './lifecycle.js'
+import { markPanelTrigger, consumePanelTrigger } from './panel-trigger.js'
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   removeSummary(tabId).catch((error) =>
@@ -57,11 +58,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // sidePanel.open 은 사용자 제스처 안에서만 동작한다. 제스처를 잃지 않도록
     // await 없이 리스너 안에서 곧바로 호출한다.
     if (sender.tab?.windowId !== undefined) {
+      const windowId = sender.tab.windowId
       chrome.sidePanel
-        .open({ windowId: sender.tab.windowId })
+        .open({ windowId })
         .catch((error) => console.warn('[체험단 필터] 패널을 열지 못했습니다:', error?.message))
+      // 패널이 로드되며 물을 때 배너 경로로 열렸음을 알 수 있게 창별 표시를 남긴다. 열기 호출 뒤에 한다.
+      markPanelTrigger(windowId).catch((error) =>
+        console.warn('[체험단 필터] 패널 열기 경로를 기록하지 못했습니다:', error?.message),
+      )
     }
     return false
+  }
+
+  if (message?.type === MESSAGES.CONSUME_PANEL_TRIGGER) {
+    if (typeof message.windowId !== 'number') {
+      sendResponse({ trigger: 'unknown' })
+      return false
+    }
+    consumePanelTrigger(message.windowId)
+      .then(
+        (trigger) => sendResponse({ trigger }),
+        (error) => {
+          console.warn('[체험단 필터] 패널 열기 경로를 읽지 못했습니다:', error?.message)
+          sendResponse({ trigger: 'unknown' })
+        },
+      )
+      .catch((error) =>
+        console.warn('[체험단 필터] 패널 열기 경로 응답을 보내지 못했습니다:', error?.message),
+      )
+    return true
   }
 
   if (message?.type === MESSAGES.TRACK) {

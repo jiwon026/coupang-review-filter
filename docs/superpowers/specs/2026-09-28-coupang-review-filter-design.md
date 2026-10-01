@@ -316,7 +316,7 @@
 | `Onboarding Viewed` | 없음 |
 | `Onboarding Example Clicked` | 없음 |
 | `Banner Rendered` | `review_count`(누적), `sponsored_count`(누적), `sponsored_ratio`, `rating_official`, `rating_filtered`, `rating_delta`, `page_sponsored_count`(이번 페이지), `pages_seen`, `filter_state`(on / off, 변형이 확정된 뒤 사용자가 실제로 보게 된 상태), `sort_pages_seen`(같은 상품에서 정렬이 바뀌면 1부터 다시 셈), `page_first_review_id`(이번 페이지 첫 리뷰의 공개 id, 폴백 id 면 null), `price_band`, `category_guess` |
-| `Panel Opened` | `trigger` (banner / toolbar), `seconds_since_render` |
+| `Panel Opened` | `trigger` (banner / toolbar, 경로를 알지 못하면 unknown). `seconds_since_render` 는 싣지 않는다(패널은 배너 렌더 시각을 모른다) |
 | `Filter Toggled` | `to_state`, `default_state`, `seconds_since_render` |
 | `Evidence Expanded` | `review_id_hash` |
 | `Panel Review Scrolled` | `depth_bucket` (25/50/75/100), `filter_state` |
