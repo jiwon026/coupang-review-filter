@@ -1,5 +1,6 @@
 import { CONFIG } from '../shared/config.local.js'
 import { getDeviceId, getUserId } from './identity.js'
+import { assignAll } from '../core/experiment.js'
 
 export function buildPayload(input) {
   const event = {
@@ -22,11 +23,17 @@ export function isApiKeyMissing(apiKey) {
   return !apiKey || apiKey.startsWith('PASTE_')
 }
 
-async function commonProperties() {
+function commonProperties(deviceId) {
+  const experiments = {}
+  for (const [id, variant] of Object.entries(assignAll(deviceId))) {
+    experiments[`exp_${id}`] = variant
+  }
+
   return {
     surface: 'extension',
     platform: 'desktop',
     app_version: chrome.runtime.getManifest().version,
+    ...experiments,
   }
 }
 
@@ -37,13 +44,14 @@ export async function track(eventType, properties = {}) {
       return
     }
 
+    const deviceId = await getDeviceId()
     const payload = buildPayload({
       apiKey: CONFIG.amplitudeApiKey,
-      deviceId: await getDeviceId(),
+      deviceId,
       userId: await getUserId(),
       eventType,
       properties,
-      commonProperties: await commonProperties(),
+      commonProperties: commonProperties(deviceId),
       time: Date.now(),
       insertId: crypto.randomUUID(),
     })

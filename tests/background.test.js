@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { installChromeMock } from './helpers/chrome-mock.js'
+import { assignAll } from '../extension/src/core/experiment.js'
 
 async function loadBackground() {
   installChromeMock()
@@ -138,5 +139,22 @@ describe('background', () => {
     const chrome = await loadBackground()
     dispatch(chrome, { type: 'crf:open-panel' }, { tab: { id: 7, windowId: 3 } })
     expect(chrome.__calls.sidePanelOpen).toEqual([{ windowId: 3 }])
+  })
+
+  it('GET_VARIANT 는 { variants: { default_filter, banner_copy } } 모양으로 응답한다', async () => {
+    const chrome = await loadBackground()
+    const { variants } = await dispatch(chrome, { type: 'crf:get-variant' }).response
+    expect(Object.keys(variants).sort()).toEqual(['banner_copy', 'default_filter'])
+  })
+
+  it('GET_VARIANT 응답이 같은 device id 의 assignAll 과 같다', async () => {
+    for (let i = 0; i < 20; i += 1) {
+      const deviceId = `device-${i}-${(i * 7919) % 100003}`
+      installChromeMock({ crf_device_id: deviceId })
+      vi.resetModules()
+      await import('../extension/src/background/index.js')
+      const response = await dispatch(globalThis.chrome, { type: 'crf:get-variant' }).response
+      expect(response).toEqual({ variants: assignAll(deviceId) })
+    }
   })
 })

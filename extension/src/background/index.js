@@ -2,7 +2,7 @@ import { MESSAGES } from '../shared/messages.js'
 import { track } from './analytics.js'
 import { getDeviceId } from './identity.js'
 import { saveSummary, loadSummary, removeSummary } from './summaries.js'
-import { assign, EXPERIMENTS } from '../core/experiment.js'
+import { assignAll } from '../core/experiment.js'
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   removeSummary(tabId).catch((error) =>
@@ -53,13 +53,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === MESSAGES.GET_VARIANT) {
     getDeviceId()
-      .then((deviceId) => {
-        const variants = {}
-        for (const experiment of Object.values(EXPERIMENTS)) {
-          variants[experiment.id] = assign(deviceId, experiment.id, experiment.variants)
-        }
-        sendResponse({ variants })
-      })
+      .then((deviceId) => sendResponse({ variants: assignAll(deviceId) }))
       .catch(() => sendResponse({ variants: null }))
     return true
   }

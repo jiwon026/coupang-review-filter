@@ -26,3 +26,12 @@ export function assign(deviceId, experimentId, variants) {
   const bucket = hash(`${experimentId}:${deviceId}`) % variants.length
   return variants[bucket]
 }
+
+// 화면(GET_VARIANT)과 로그(공통 프로퍼티)가 같은 배정을 쓰도록 계산을 한 곳에 둔다.
+export function assignAll(deviceId) {
+  const variants = {}
+  for (const experiment of Object.values(EXPERIMENTS)) {
+    variants[experiment.id] = assign(deviceId, experiment.id, experiment.variants)
+  }
+  return variants
+}

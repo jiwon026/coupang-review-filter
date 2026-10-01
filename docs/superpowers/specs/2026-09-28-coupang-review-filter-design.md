@@ -282,6 +282,9 @@
 | `exp_banner_copy` | variant | 실험 배정 |
 | `app_version` | 버전 문자열 | 셀렉터 깨짐 추적 |
 | `review_sort` | `best` / `latest` / `unknown` | **4.4절의 핵심 축.** 정렬별 협찬 비중 비교 |
+| `product_id` | 쿠팡 상품 번호 | 상품별 분석, 4.4절 일반화 |
+
+`product_id`는 확장의 콘텐츠 스크립트가 보내는 이벤트에만 붙는다. 사이드 패널 이벤트는 상품을 알지 못하므로 싣지 않는다. 상품 번호는 공개 URL의 일부라 해시하지 않는다.
 
 `is_extension_installed`는 확장이 페이지에 마커를 심어 랜딩에서 감지한다.
 

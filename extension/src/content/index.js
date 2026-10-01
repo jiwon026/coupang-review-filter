@@ -47,7 +47,11 @@ function track(eventType, properties = {}) {
   sendToBackground({
     type: MESSAGES.TRACK,
     eventType,
-    properties: { review_sort: detectSort(document), ...properties },
+    properties: {
+      review_sort: detectSort(document),
+      product_id: currentProductId(),
+      ...properties,
+    },
   })
 }
 

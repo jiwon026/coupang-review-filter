@@ -397,6 +397,40 @@ describe('content 진입점', () => {
     expect(dom.window.document.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
   })
 
+  it('콘텐츠 이벤트에 현재 상품 번호를 product_id 로 싣는다', async () => {
+    const doc = await boot(fixture)
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    const events = trackedEvents()
+    expect(events.length).toBeGreaterThanOrEqual(2)
+    for (const event of events) {
+      expect(event.properties.product_id).toBe('1')
+    }
+  })
+
+  it('상품이 바뀐 뒤 보낸 이벤트는 새 상품 번호를 싣는다', async () => {
+    const doc = await boot(fixture)
+    expect(trackedOfType('Banner Rendered')[0].properties.product_id).toBe('1')
+
+    lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    expect(trackedOfType('Filter Toggled')[0].properties.product_id).toBe('999')
+  })
+
+  it('상품 페이지가 아니면 product_id 는 null 이다', async () => {
+    const doc = await boot(fixture)
+    lastDom.reconfigure({ url: 'https://www.coupang.com/np/search?q=a' })
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    const toggled = trackedOfType('Filter Toggled')[0]
+    expect('product_id' in toggled.properties).toBe(true)
+    expect(toggled.properties.product_id).toBeNull()
+  })
+
   it('토글은 관측 지표를 늘리지 않는다', async () => {
     const doc = await boot(fixture)
     banners(doc)[0].querySelector('.crf-toggle').click()
