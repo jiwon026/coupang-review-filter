@@ -1,6 +1,6 @@
 # 쿠팡 체험단 리뷰 필터: 태스크
 
-Last Updated: 2026-09-30
+Last Updated: 2026-10-01 (세션 종료)
 
 ## 계획 1: 확장 코어 (완료)
 
@@ -29,30 +29,34 @@ Last Updated: 2026-09-30
 - [x] Task 6b: 정렬 상태 수집
 - [x] Task 7: 구매 의도 감지
 - [x] Task 8: 사이드 패널 구현 (0b1b6bf, 125개, 변이 4종 통과)
-- [ ] **Task 8 태스크 리뷰** ← 여기서 재개
-- [ ] Task 8 실브라우저 검증 (패널 열림, 실시간 갱신, 툴바 아이콘, Panel Opened 도착)
-- [ ] Task 9: 설치, 제거, 오류 추적 (계획 문서 판본은 낡음. 브리프 재작성 필요)
-- [ ] 품질 보강 패스 (아래 8개)
-- [ ] 최종 브랜치 리뷰
+- [x] Task 8 태스크 리뷰 (fix round 1: 요약 storage.session 이전, 체험단 0건 배너 자세히 보기. 134개)
+- [x] Task 8 실브라우저 검증 (패널 열림, 실시간 갱신, 1분 뒤 툴바 경로, Panel Opened 도착)
+- [x] Task 8b: 실험 배정(exp_*)과 product_id 를 이벤트에 싣기 (계획 외 추가. b243a9e, 147개)
+- [x] Task 9: 설치, 제거 주소, 오류 추적 (브리프 재작성, fix round 1: 셀렉터 신호를 pagehide 누적 판정으로. a643371, 216개)
+- [x] 품질 보강 패스 (12개, c5fc2a0, 241개)
+- [x] 최종 브랜치 리뷰 (opus, With fixes → fix wave 13항목 5041216, 재리뷰 통과, 301개)
+- [x] 머지 전 실브라우저 확인: 배너 문구, Panel Opened trigger(banner, toolbar), session_id, platform
+- [ ] **review_sort 의심 버그: 최신순 전환 직후 Banner Rendered 가 "best"** ← 여기서 재개 (context 파일 참조)
+- [ ] 남은 실브라우저 확인: 도움이 돼요 클릭(선택), 리뷰 0건 상품, release 빌드 스모크
 - [ ] main 머지, 푸시
 
 ### 품질 보강 패스 항목
 
-- [ ] `config.example.js` 자리표시자를 `PASTE_YOUR_AMPLITUDE_API_KEY_HERE` 로 통일
-- [ ] README에 `config.local.js` 복사 안내 추가
-- [ ] `crf_user_id` 키 이름 검증 테스트
-- [ ] `EVENTS` 전체 값 스냅샷 테스트
-- [ ] `MESSAGES` 검증 테스트
-- [ ] `reportTrackFailure` Promise 거부 경로 테스트
-- [ ] `buildPayload` 가 최상위 `platform` 필드 채우기
-- [ ] 콘솔 로그 `CONFIG.debug` 게이팅 검토 (사용자 규칙 "No console.log in production" 과 충돌 중)
+- [x] `config.example.js` 자리표시자를 `PASTE_YOUR_AMPLITUDE_API_KEY_HERE` 로 통일
+- [x] README에 `config.local.js` 복사 안내 추가
+- [x] `crf_user_id` 키 이름 검증 테스트
+- [x] `EVENTS` 전체 값 스냅샷 테스트
+- [x] `MESSAGES` 검증 테스트
+- [x] `reportTrackFailure` Promise 거부 경로 테스트
+- [x] `buildPayload` 가 최상위 `platform` 필드 채우기
+- [x] 콘솔 로그 `CONFIG.debug` 게이팅 검토 (사용자 규칙 "No console.log in production" 과 충돌 중)
 
 ## 계획 3: 랜딩과 배포 (대기)
 
 - [ ] 계획 문서 재검토. 계획 2보다 더 낡았을 것
 - [ ] 랜딩 페이지, 온보딩, 신원 연결, 모바일 핸드오프
 - [ ] 웹스토어 제출 (심사 1~2주, 일정 앞쪽에 둘 것)
-- [ ] 앰플리튜드 대시보드 (퍼널 4개, 북극성, 가드레일, `Diagnostic Ping` 제외)
+- [ ] 앰플리튜드 대시보드 (exp_* 공통 프로퍼티는 Task 8b 에서 처리됨. 퍼널 4개, 북극성, 가드레일, `Diagnostic Ping` 제외)
 
 ## 제품 수준 후속 과제 (결정 대기)
 
