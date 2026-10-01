@@ -6,6 +6,15 @@ function formatPercent(ratio) {
   return `${Math.round(ratio * 100)}%`
 }
 
+function createDetailButton(onDetail) {
+  const detail = document.createElement('button')
+  detail.type = 'button'
+  detail.className = 'crf-detail'
+  detail.textContent = '자세히 보기'
+  detail.addEventListener('click', () => onDetail())
+  return detail
+}
+
 export function createBanner(summary, options) {
   const root = document.createElement('div')
   root.className = 'crf-banner'
@@ -16,6 +25,7 @@ export function createBanner(summary, options) {
     clean.className = 'crf-headline'
     clean.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
     root.appendChild(clean)
+    if (typeof options.onDetail === 'function') root.appendChild(createDetailButton(options.onDetail))
     return root
   }
 
@@ -43,14 +53,7 @@ export function createBanner(summary, options) {
   toggle.addEventListener('click', () => options.onToggle(!options.hidden))
   root.appendChild(toggle)
 
-  if (typeof options.onDetail === 'function') {
-    const detail = document.createElement('button')
-    detail.type = 'button'
-    detail.className = 'crf-detail'
-    detail.textContent = '자세히 보기'
-    detail.addEventListener('click', () => options.onDetail())
-    root.appendChild(detail)
-  }
+  if (typeof options.onDetail === 'function') root.appendChild(createDetailButton(options.onDetail))
 
   const scope = document.createElement('p')
   scope.className = 'crf-scope'

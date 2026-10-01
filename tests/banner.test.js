@@ -85,4 +85,31 @@ describe('createBanner', () => {
     const el = createBanner(summary, { hidden: false, onToggle: () => {} })
     expect(el.querySelector('.crf-detail')).toBeNull()
   })
+
+  describe('체험단 0건 요약', () => {
+    const clean = {
+      total: 100, sponsoredCount: 0, organicCount: 100, sponsoredRatio: 0,
+      ratingOfficial: 4.5, ratingFiltered: 4.5, ratingDelta: 0,
+    }
+
+    it('onDetail이 있으면 자세히 보기 버튼을 만들고 누르면 onDetail을 부른다', () => {
+      const onDetail = vi.fn()
+      const el = createBanner(clean, { hidden: false, onToggle: () => {}, onDetail })
+      const button = el.querySelector('.crf-detail')
+      expect(button).not.toBeNull()
+      expect(button.textContent).toBe('자세히 보기')
+      button.click()
+      expect(onDetail).toHaveBeenCalledTimes(1)
+    })
+
+    it('숨길 대상이 없으므로 토글은 만들지 않는다', () => {
+      const el = createBanner(clean, { hidden: false, onToggle: () => {}, onDetail: () => {} })
+      expect(el.querySelector('.crf-toggle')).toBeNull()
+    })
+
+    it('onDetail이 없으면 버튼을 만들지 않는다', () => {
+      const el = createBanner(clean, { hidden: false, onToggle: () => {} })
+      expect(el.querySelector('.crf-detail')).toBeNull()
+    })
+  })
 })
