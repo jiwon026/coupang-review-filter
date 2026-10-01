@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, vi, onTestFinished } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 
@@ -367,6 +367,9 @@ describe('content 진입점', () => {
   })
 
   it('변형 응답이 없어도 배너를 렌더한다', async () => {
+    // 응답 대기 타이머가 테스트가 끝난 뒤 다른 테스트의 chrome 모의로 이벤트를 보내지 않게 가짜 타이머로 가둔다.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    onTestFinished(() => vi.useRealTimers())
     const dom = new JSDOM(`<body>${fixture}</body>`, {
       url: 'https://www.coupang.com/vp/products/1',
     })
@@ -384,7 +387,7 @@ describe('content 진입점', () => {
     globalThis.MutationObserver = dom.window.MutationObserver
     vi.resetModules()
     await import('../extension/src/content/index.js')
-    await tick()
+    await vi.advanceTimersByTimeAsync(0)
 
     expect(dom.window.document.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
   })

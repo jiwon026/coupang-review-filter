@@ -191,12 +191,31 @@ describe('렌더 예외 보고', () => {
     globalThis.__crfDetectSortFails = true
     const doc = await boot(fixture)
     await touchDom(doc)
+    // 렌더 예외가 걷힌 뒤에도 정렬 판별은 계속 던진다. 보고 경로의 실패가 배너를 막으면 안 된다.
+    delete globalThis.__crfRenderError
+    await touchDom(doc)
 
     expect(uncaught).toEqual([])
+    expect(banners(doc)).toHaveLength(1)
     const warnings = console.warn.mock.calls.filter((call) =>
       String(call[0]).includes('백그라운드에 메시지를 보내지 못했습니다'),
     )
     expect(warnings).toHaveLength(1)
+  })
+
+  it('정렬 판별이 던져도 배너는 1개이고 토글 뒤 다시 그리기도 정상이다', async () => {
+    delete globalThis.__crfRenderError
+    globalThis.__crfDetectSortFails = true
+    const doc = await boot(fixture)
+    expect(banners(doc)).toHaveLength(1)
+
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    expect(uncaught).toEqual([])
+    expect(banners(doc)).toHaveLength(1)
+    expect(banners(doc)[0].querySelector('.crf-toggle').getAttribute('aria-pressed')).toBe('true')
+    expect(doc.querySelectorAll('#sdpReview .crf-hidden')).toHaveLength(2)
   })
 
   it('예외가 나도 이후 정상 렌더는 배너를 그린다', async () => {
@@ -463,6 +482,51 @@ describe('셀렉터 깨짐 신호', () => {
       pagehide(lastDom)
       expect(errorEvents()).toHaveLength(1)
     })
+
+    it('상품 전환 때 보내는 신호는 새 페이지가 아니라 떠나는 상품의 마지막 관측 정렬을 싣는다', async () => {
+      const buttons = (active) =>
+        `<button class="${active === 'best' ? 'twc-font-bold' : ''}">베스트순</button>` +
+        `<button class="${active === 'latest' ? 'twc-font-bold' : ''}">최신순</button>`
+      const doc = await boot(`<div id="sdpReview">${buttons('latest')}<article>${star}가</article></div>`)
+
+      lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+      doc.querySelector('#sdpReview').innerHTML =
+        `${buttons('best')}<article>${star}나<div data-review-id="31">도움</div></article>`
+      await touchDom(doc)
+
+      const [event] = errorEvents('ReviewIdNotFound')
+      expect(event.properties.product_id).toBe('1')
+      expect(event.properties.review_sort).toBe('latest')
+    })
+  })
+
+  it('떠나는 상품에 관측이 없었으면 상품 전환 신호의 review_sort 는 unknown 이다', async () => {
+    const doc = await boot('<div id="sdpReview"><article>가</article></div>')
+    lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+    doc.querySelector('#sdpReview').innerHTML =
+      `<button class="twc-font-bold">베스트순</button><article>${star}나<div data-review-id="31">도움</div></article>`
+    await touchDom(doc)
+
+    const [event] = errorEvents('ReviewRatingNotFound')
+    expect(event.properties.product_id).toBe('1')
+    expect(event.properties.review_sort).toBe('unknown')
+  })
+
+  it('앞앞 상품의 정렬이 관측 없는 다음 상품의 신호로 새지 않는다', async () => {
+    const doc = await boot(
+      `<div id="sdpReview"><button class="twc-font-bold">최신순</button>` +
+        `<article>${star}가<div data-review-id="11">도움</div></article></div>`,
+    )
+    lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/2' })
+    doc.querySelector('#sdpReview').innerHTML = '<article>별점 없음</article>'
+    await touchDom(doc)
+    lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/3' })
+    doc.querySelector('#sdpReview').innerHTML = `<article>${star}다<div data-review-id="31">도움</div></article>`
+    await touchDom(doc)
+
+    const [event] = errorEvents('ReviewRatingNotFound')
+    expect(event.properties.product_id).toBe('2')
+    expect(event.properties.review_sort).toBe('unknown')
   })
 
   describe('ReviewContainerNotFound', () => {

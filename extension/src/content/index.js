@@ -13,15 +13,28 @@ import { watchPurchaseIntent } from './purchase.js'
 
 const LOG_PREFIX = '[체험단 필터]'
 const PRODUCT_PATH = /\/vp\/products\/(\d+)/
+// 변형 응답이 오지 않을 때 기본값으로 확정하기까지 기다리는 시간.
+const VARIANT_WAIT_MS = 3000
+const DEFAULT_VARIANTS = { default_filter: 'off', banner_copy: 'rating' }
 
 const state = {
   hidden: false,
-  lastKey: '',
+  // 변형이 확정되기 전에 사용자가 토글했으면 도착한 변형이 그 선택을 덮지 않는다.
+  userToggled: false,
+  variants: DEFAULT_VARIANTS,
+  // 확정 전 관측 이벤트는 pendingEvents 에 쌓았다가 확정 뒤 확정된 상태로 보낸다.
+  variantsResolved: false,
+  pendingEvents: [],
+  // 다시 그리기 키(글자 수 포함)와 관측 키(안정 id 면 id 만)를 따로 둔다.
+  redrawKey: '',
+  observationKey: '',
   productId: null,
   seen: new Map(),
-  variants: { default_filter: 'off', banner_copy: 'rating' },
   renderedAt: 0,
   pagesSeen: 0,
+  // 같은 상품에서 마지막으로 관측한 정렬과 그 정렬에서 본 페이지 수.
+  observedSort: null,
+  sortPagesSeen: 0,
   lastSummary: null,
   reportedErrors: new Set(),
   observation: createObservation(),
@@ -30,6 +43,7 @@ const state = {
 /* @__PURE__ */ debugLog(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
 
 let trackFailureReported = false
+let variantTimer = null
 
 function reportTrackFailure(error) {
   if (trackFailureReported) return
@@ -48,16 +62,44 @@ function sendToBackground(message) {
   }
 }
 
-function track(eventType, properties = {}) {
-  sendToBackground({
-    type: MESSAGES.TRACK,
-    eventType,
-    properties: {
+function sendTrack(eventType, properties) {
+  sendToBackground({ type: MESSAGES.TRACK, eventType, properties })
+}
+
+function filterState() {
+  return state.hidden ? 'on' : 'off'
+}
+
+// 이벤트를 만들고 보내는 과정 전체를 보호한다. 정렬 판별, 상품 번호, 프로퍼티 계산이 던져도
+// 렌더나 사용자 동작을 막지 않고 원인은 한 번 알린다. properties 는 객체이거나 같은 보호 안에서 계산할 함수다.
+// afterVariants 를 주면 변형이 확정된 뒤의 값을 보낼 때 계산해 더한다. 확정 전이면 대기열에 둔다.
+function track(eventType, properties = {}, afterVariants = null) {
+  try {
+    const captured = {
       review_sort: detectSort(document),
       product_id: currentProductId(),
-      ...properties,
-    },
-  })
+      ...(typeof properties === 'function' ? properties() : properties),
+    }
+    if (afterVariants && !state.variantsResolved) {
+      state.pendingEvents.push({ eventType, captured, afterVariants })
+      return
+    }
+    sendTrack(eventType, afterVariants ? { ...captured, ...afterVariants() } : captured)
+  } catch (error) {
+    reportTrackFailure(error)
+  }
+}
+
+function flushPendingEvents() {
+  const pending = state.pendingEvents
+  state.pendingEvents = []
+  for (const { eventType, captured, afterVariants } of pending) {
+    try {
+      sendTrack(eventType, { ...captured, ...afterVariants() })
+    } catch (error) {
+      reportTrackFailure(error)
+    }
+  }
 }
 
 // 같은 상품 페이지에서 같은 error_type 과 error_name 조합은 한 번만 보낸다.
@@ -95,13 +137,17 @@ function trackScroll() {
 }
 
 // 렌더는 관측만 쌓고, 셀렉터 깨짐 판정은 상품 페이지를 떠날 때 한 번 한다.
-// productId 를 넘기면 떠나는 상품의 번호로 보낸다(같은 탭 안 이동에서 현재 주소는 이미 새 상품이다).
-// 마지막 스크롤은 pagehide 경로(productId 없음)에서만 반영한다. 상품 전환 때의 scrollY 는 이미 새 페이지 값이다.
-function flushHealthSignals(productId) {
+// leaving 을 넘기면 떠나는 상품의 번호와 마지막 관측 정렬로 보낸다(같은 탭 안 이동에서 현재 주소와 정렬은 이미 새 페이지 값이다).
+// 마지막 스크롤은 pagehide 경로(leaving 없음)에서만 반영한다. 상품 전환 때의 scrollY 는 이미 새 페이지 값이다.
+function flushHealthSignals(leaving) {
   try {
-    if (productId === undefined) trackScroll()
+    if (leaving === undefined) trackScroll()
     for (const signal of selectHealthSignals(state.observation)) {
-      reportExtensionError(productId === undefined ? signal : { ...signal, product_id: productId })
+      reportExtensionError(
+        leaving === undefined
+          ? signal
+          : { ...signal, product_id: leaving.productId, review_sort: leaving.reviewSort },
+      )
     }
   } catch (error) {
     reportTrackFailure(error)
@@ -120,8 +166,14 @@ function observeReviews(container, reviews) {
   if (reviews.some((review) => review.hasStableId)) observation.sawStableId = true
 }
 
+// 첫 배너 이후 경과 초. 배너가 없었으면 null 이다(0 이면 즉시 행동과 구분되지 않는다).
 function secondsSinceRender() {
-  return state.renderedAt === 0 ? 0 : Math.round((Date.now() - state.renderedAt) / 1000)
+  return state.renderedAt === 0 ? null : Math.round((Date.now() - state.renderedAt) / 1000)
+}
+
+// 문서가 열린 뒤 경과한 진짜 페이지 체류 시간(초).
+function secondsOnPage() {
+  return Math.round(performance.now() / 1000)
 }
 
 function currentProductId() {
@@ -133,12 +185,17 @@ function resetIfProductChanged() {
   const productId = currentProductId()
   if (productId === state.productId) return
   // 떠나는 상품의 신호를 먼저 판정하고 나서 비운다. pagehide 만 기다리면 같은 탭 안 이동에서 앞 상품 신호가 사라진다.
-  if (state.productId !== null) flushHealthSignals(state.productId)
+  if (state.productId !== null) {
+    flushHealthSignals({ productId: state.productId, reviewSort: state.observedSort ?? 'unknown' })
+  }
   state.productId = productId
   state.seen.clear()
-  state.lastKey = ''
+  state.redrawKey = ''
+  state.observationKey = ''
   state.renderedAt = 0
   state.pagesSeen = 0
+  state.observedSort = null
+  state.sortPagesSeen = 0
   state.reportedErrors.clear()
   state.observation = createObservation()
 }
@@ -172,6 +229,48 @@ function render(options) {
   }
 }
 
+// 다시 그리기 키: 늦게 채워진 본문(체험단 문구 등)도 다시 판정하도록 글자 수까지 본다.
+function redrawKeyOf(reviews) {
+  return reviews.map((review) => `${review.id}:${review.rating}:${review.text.length}`).join(',')
+}
+
+// 관측 키: 안정 id 가 있으면 id 만 본다. 도움이 돼요, 더보기로 글자 수만 바뀐 같은 페이지를 새 관측으로 세지 않는다.
+// 폴백 id 는 위치 번호라 페이지가 바뀌어도 같으므로 내용까지 본다.
+function observationKeyOf(reviews) {
+  return reviews
+    .map((review) =>
+      review.hasStableId ? review.id : `${review.id}:${review.rating}:${review.text.length}`,
+    )
+    .join(',')
+}
+
+// Banner Rendered 프로퍼티. track 의 보호 안에서 계산한다.
+function observationProperties(reviews, summary, pagesSeen) {
+  const sort = detectSort(document)
+  // 정렬을 바꾸면 쿠팡은 1페이지를 보여 주므로 sort_pages_seen = 1 이 그 정렬의 첫 페이지다.
+  if (sort !== state.observedSort) {
+    state.observedSort = sort
+    state.sortPagesSeen = 0
+  }
+  state.sortPagesSeen += 1
+
+  return {
+    review_sort: sort,
+    review_count: summary.total,
+    sponsored_count: summary.sponsoredCount,
+    sponsored_ratio: summary.sponsoredRatio,
+    rating_official: summary.ratingOfficial,
+    rating_filtered: summary.ratingFiltered,
+    rating_delta: summary.ratingDelta,
+    page_review_count: reviews.length,
+    page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
+    pages_seen: pagesSeen,
+    sort_pages_seen: state.sortPagesSeen,
+    // 같은 페이지 재방문을 분석에서 중복 제거하는 키. 공개 id 만 쓰고 본문은 싣지 않는다.
+    page_first_review_id: reviews[0].hasStableId ? reviews[0].id : null,
+  }
+}
+
 function renderReviews({ force = false } = {}) {
   resetIfProductChanged()
 
@@ -182,12 +281,10 @@ function renderReviews({ force = false } = {}) {
   observeReviews(container, reviews)
   if (reviews.length === 0) return
 
-  const key = reviews
-    .map((review) => `${review.id}:${review.rating}:${review.text.length}`)
-    .join(',')
+  const redrawKey = redrawKeyOf(reviews)
+  const observationKey = observationKeyOf(reviews)
   const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
-  const reviewSetChanged = key !== state.lastKey
-  if (!reviewSetChanged && bannerPresent && !force) return
+  if (redrawKey === state.redrawKey && bannerPresent && !force) return
 
   markSponsored(reviews)
   applyFilter(reviews, state.hidden)
@@ -202,37 +299,38 @@ function renderReviews({ force = false } = {}) {
   )
 
   // 관측은 리뷰 묶음이 실제로 바뀔 때만 기록한다.
-  // 토글, 변형 도착, 배너 복구는 다시 그리기일 뿐 새 관측이 아니다.
-  if (reviewSetChanged) {
+  // 토글, 변형 도착, 배너 복구, 같은 리뷰의 글자 수 변화는 다시 그리기일 뿐 새 관측이 아니다.
+  // filter_state 는 변형이 확정된 뒤 사용자가 실제로 보게 된 상태로 보낸다.
+  if (observationKey !== state.observationKey) {
     state.pagesSeen += 1
     if (state.renderedAt === 0) state.renderedAt = Date.now()
-    track(EVENTS.BANNER_RENDERED, {
-      review_count: summary.total,
-      sponsored_count: summary.sponsoredCount,
-      sponsored_ratio: summary.sponsoredRatio,
-      rating_official: summary.ratingOfficial,
-      rating_filtered: summary.ratingFiltered,
-      rating_delta: summary.ratingDelta,
-      page_review_count: reviews.length,
-      page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
-      pages_seen: state.pagesSeen,
-    })
+    const pagesSeen = state.pagesSeen
+    track(
+      EVENTS.BANNER_RENDERED,
+      () => observationProperties(reviews, summary, pagesSeen),
+      () => ({ filter_state: filterState() }),
+    )
   }
   // 이 앞에서 예외가 나면 같은 묶음을 다음 렌더가 다시 시도하도록 키는 관측 직후에 갱신한다.
-  state.lastKey = key
+  state.observationKey = observationKey
+  state.redrawKey = redrawKey
 
   const banner = createBanner(summary, {
     hidden: state.hidden,
     copyVariant: state.variants.banner_copy,
     onToggle: (next) => {
       state.hidden = next
+      state.userToggled = true
       applyFilter(reviews, next)
-      track(EVENTS.FILTER_TOGGLED, {
-        to_state: next ? 'on' : 'off',
-        default_state: state.variants.default_filter,
-        seconds_since_render: secondsSinceRender(),
-        pages_seen: state.pagesSeen,
-      })
+      track(
+        EVENTS.FILTER_TOGGLED,
+        {
+          to_state: next ? 'on' : 'off',
+          seconds_since_render: secondsSinceRender() ?? 0,
+          pages_seen: state.pagesSeen,
+        },
+        () => ({ default_state: state.variants.default_filter }),
+      )
       render({ force: true })
     },
     onDetail: () => {
@@ -245,24 +343,38 @@ function renderReviews({ force = false } = {}) {
   container.parentNode.insertBefore(banner, container)
 }
 
+// 변형 확정. 응답(변형 없음과 lastError 포함), 응답 대기 시간 초과, 요청 실패 중 먼저 오는 하나만 반영한다.
+function resolveVariants(variants) {
+  if (state.variantsResolved) return
+  state.variantsResolved = true
+  clearTimeout(variantTimer)
+
+  const previousHidden = state.hidden
+  const previousCopy = state.variants.banner_copy
+  if (variants) {
+    state.variants = variants
+    if (!state.userToggled) state.hidden = variants.default_filter === 'on'
+  }
+
+  // 변형을 적용한 뒤 대기열을 순서대로 보낸다. 다시 그리기에서 생길 새 관측은 그 뒤에 나간다.
+  flushPendingEvents()
+
+  if (state.hidden !== previousHidden || state.variants.banner_copy !== previousCopy) {
+    render({ force: true })
+  }
+}
+
 function applyVariants() {
+  variantTimer = setTimeout(() => resolveVariants(null), VARIANT_WAIT_MS)
   try {
     chrome.runtime.sendMessage({ type: MESSAGES.GET_VARIANT }, (response) => {
-      if (!response?.variants) return
-
-      const previousCopy = state.variants.banner_copy
-      state.variants = response.variants
-
-      const hidden = state.variants.default_filter === 'on'
-      const hiddenChanged = hidden !== state.hidden
-      const copyChanged = state.variants.banner_copy !== previousCopy
-      if (!hiddenChanged && !copyChanged) return
-
-      state.hidden = hidden
-      render({ force: true })
+      // 수신 측이 없으면 lastError 가 설정된 채 응답 없이 불린다. 읽어 두어야 확인되지 않은 오류가 남지 않는다.
+      const failed = Boolean(chrome.runtime.lastError)
+      resolveVariants(failed ? null : (response?.variants ?? null))
     })
   } catch (error) {
     console.warn(`${LOG_PREFIX} 실험 배정을 받지 못했습니다. 기본값으로 동작합니다.`)
+    resolveVariants(null)
   }
 }
 
@@ -279,8 +391,9 @@ function start() {
     const summary = state.lastSummary
     track(EVENTS.PURCHASE_INTENT_CLICKED, {
       intent_kind: kind,
-      filter_state: state.hidden ? 'on' : 'off',
-      seconds_on_page: secondsSinceRender(),
+      filter_state: filterState(),
+      seconds_on_page: secondsOnPage(),
+      seconds_since_render: secondsSinceRender(),
       pages_seen: state.pagesSeen,
       review_count: summary?.total ?? 0,
       sponsored_ratio: summary?.sponsoredRatio ?? null,

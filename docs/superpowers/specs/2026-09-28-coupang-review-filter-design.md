@@ -207,6 +207,8 @@
 
 **계측에 주는 함의.** `rating_delta` 만 보면 이 상품은 "아무 일 없음" 으로 집계된다. 실제 신호는 정렬별 협찬 비중 차이이므로, 이벤트에 **현재 정렬 상태**를 담아야 한다. 6.2절과 6.3절에 반영되어 있다.
 
+**정렬별 첫 페이지 비교.** `Banner Rendered` 에서 `sort_pages_seen = 1` 로 정렬별 첫 페이지를 고르고 `page_first_review_id` 로 같은 페이지 재방문을 중복 제거한다. `pages_seen` 은 조회 횟수라 정렬을 바꿔도 계속 늘어나므로 이 비교에 쓰지 않는다.
+
 **제품에 주는 함의(미결정).** 협찬을 걸러 주는 것보다 "최신순으로 보세요"가 사용자에게 더 큰 가치일 수 있다. 클릭 한 번이면 되기 때문이다. 다만 상품 하나의 관측으로 제품 방향을 바꾸지 않는다. 계측 데이터가 쌓인 뒤 판단한다.
 
 ---
@@ -313,12 +315,12 @@
 | `Extension Installed` | `linked_device_id` |
 | `Onboarding Viewed` | 없음 |
 | `Onboarding Example Clicked` | 없음 |
-| `Banner Rendered` | `review_count`(누적), `sponsored_count`(누적), `sponsored_ratio`, `rating_official`, `rating_filtered`, `rating_delta`, `page_sponsored_count`(이번 페이지), `pages_seen`, `price_band`, `category_guess` |
+| `Banner Rendered` | `review_count`(누적), `sponsored_count`(누적), `sponsored_ratio`, `rating_official`, `rating_filtered`, `rating_delta`, `page_sponsored_count`(이번 페이지), `pages_seen`, `filter_state`(on / off, 변형이 확정된 뒤 사용자가 실제로 보게 된 상태), `sort_pages_seen`(같은 상품에서 정렬이 바뀌면 1부터 다시 셈), `page_first_review_id`(이번 페이지 첫 리뷰의 공개 id, 폴백 id 면 null), `price_band`, `category_guess` |
 | `Panel Opened` | `trigger` (banner / toolbar), `seconds_since_render` |
 | `Filter Toggled` | `to_state`, `default_state`, `seconds_since_render` |
 | `Evidence Expanded` | `review_id_hash` |
 | `Panel Review Scrolled` | `depth_bucket` (25/50/75/100), `filter_state` |
-| `Purchase Intent Clicked` | `filter_state`, `rating_delta`, `seconds_on_page`, `reviews_read_depth` |
+| `Purchase Intent Clicked` | `intent_kind`(cart / buy_now), `filter_state`(클릭 순간), `seconds_on_page`(페이지 체류 초, `performance.now()` 기준), `seconds_since_render`(첫 배너 이후 초, 배너가 없었으면 null), `pages_seen`, `review_count`, `sponsored_ratio`, `rating_official`, `rating_filtered`, `rating_delta` |
 | `Extension Removed` | `days_since_install`, `activation_count` |
 | `Extension Error` | `error_type` |
 
