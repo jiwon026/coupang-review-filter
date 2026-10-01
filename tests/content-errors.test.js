@@ -194,12 +194,40 @@ describe('렌더 예외 보고', () => {
     expect(doc.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
   })
 
-  it('오류가 나도 Banner Rendered 와 관측 지표를 늘리지 않는다', async () => {
+  it('예외가 나는 동안에는 Banner Rendered 를 보내지 않는다', async () => {
     await boot(fixture)
     const rendered = sentMessages.filter(
       (message) => message?.type === 'crf:track' && message.eventType === 'Banner Rendered',
     )
     expect(rendered).toHaveLength(0)
+  })
+})
+
+describe('일시 예외 뒤의 관측', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    globalThis.__crfDetectSortFails = false
+  })
+
+  afterEach(() => {
+    delete globalThis.__crfRenderError
+    delete globalThis.__crfDetectSortFails
+    vi.restoreAllMocks()
+  })
+
+  it('첫 렌더에서 한 번 던지고 다음 렌더가 정상이면 Banner Rendered 정확히 1건, pages_seen 1', async () => {
+    globalThis.__crfRenderError = new TypeError('일시 예외')
+    const doc = await boot(fixture)
+    delete globalThis.__crfRenderError
+    await touchDom(doc)
+    await touchDom(doc)
+
+    const rendered = sentMessages.filter(
+      (message) => message?.type === 'crf:track' && message.eventType === 'Banner Rendered',
+    )
+    expect(rendered).toHaveLength(1)
+    expect(rendered[0].properties.pages_seen).toBe(1)
   })
 })
 
@@ -217,47 +245,119 @@ describe('셀렉터 깨짐 신호', () => {
   })
 
   describe('ReviewRatingNotFound', () => {
-    it('별점 없는 article 만 있으면 item_count 와 함께 1건 보낸다', async () => {
+    it('별점이 끝까지 안 붙으면 pagehide 때 최대 item_count 와 함께 1건 보낸다', async () => {
       const doc = await boot(
         '<div id="sdpReview"><article>가</article><article>나</article><article>다</article></div>',
       )
+      doc.querySelector('#sdpReview article').remove()
       await touchDom(doc)
+      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
+
+      pagehide(lastDom)
+      pagehide(lastDom)
 
       const events = errorEvents('ReviewRatingNotFound')
       expect(events).toHaveLength(1)
       expect(events[0].properties.item_count).toBe(3)
     })
 
+    it('별점이 늦게 붙으면 pagehide 때도 보내지 않는다', async () => {
+      const doc = await boot('<div id="sdpReview"><article>가</article></div>')
+      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
+
+      doc.querySelector('#sdpReview article').insertAdjacentHTML('afterbegin', star)
+      await touchDom(doc)
+      pagehide(lastDom)
+
+      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
+    })
+
+    it('렌더만으로는(pagehide 없이) 보내지 않는다', async () => {
+      const doc = await boot('<div id="sdpReview"><article>가</article></div>')
+      await touchDom(doc)
+      await touchDom(doc)
+      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
+    })
+
     it('정상 리뷰면 보내지 않는다', async () => {
       await boot(fixture)
+      pagehide(lastDom)
       expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
     })
 
     it('컨테이너만 있고 리뷰 요소가 없으면 보내지 않는다', async () => {
       await boot('<div id="sdpReview"></div>')
+      pagehide(lastDom)
       expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
     })
 
-    it('상품을 바꾸면 한 번 더 보낸다', async () => {
+    it('상품이 바뀌면 떠나는 상품의 신호를 전환 시점에 앞 상품 번호로 보내고 새 상품 상태는 깨끗하다', async () => {
       const doc = await boot('<div id="sdpReview"><article>가</article></div>')
+      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(0)
+
       lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+      doc.querySelector('#sdpReview').innerHTML =
+        `<article>${star}나<div data-review-id="31">도움</div></article>`
       await touchDom(doc)
 
-      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(2)
+      const events = errorEvents('ReviewRatingNotFound')
+      expect(events).toHaveLength(1)
+      expect(events[0].properties.product_id).toBe('1')
+
+      pagehide(lastDom)
+      expect(errorEvents()).toHaveLength(1)
+    })
+
+    it('상품이 바뀌어도 앞 상품이 정상이었으면 아무것도 보내지 않는다', async () => {
+      const doc = await boot(fixture)
+      lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+      await touchDom(doc)
+      expect(errorEvents()).toHaveLength(0)
     })
   })
 
   describe('ReviewIdNotFound', () => {
-    it('파싱된 리뷰가 모두 id 가 없으면 review_count 와 함께 1건 보낸다', async () => {
+    it('id 노드가 끝까지 없으면 pagehide 때 최대 review_count 와 함께 1건 보낸다', async () => {
       const doc = await boot(
         `<div id="sdpReview"><article>${star}가</article><article>${star}나</article></div>`,
       )
       await touchDom(doc)
-      await touchDom(doc)
+      expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
+
+      pagehide(lastDom)
+      pagehide(lastDom)
 
       const events = errorEvents('ReviewIdNotFound')
       expect(events).toHaveLength(1)
       expect(events[0].properties.review_count).toBe(2)
+    })
+
+    it('id 노드가 늦게 붙으면 pagehide 때도 보내지 않는다', async () => {
+      const doc = await boot(`<div id="sdpReview"><article>${star}가</article></div>`)
+      doc
+        .querySelector('#sdpReview article')
+        .insertAdjacentHTML('beforeend', '<div data-review-id="11">도움</div>')
+      await touchDom(doc)
+      pagehide(lastDom)
+
+      expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
+    })
+
+    it('id 가 한 번 보였다가 사라져도 보내지 않는다(마지막 렌더가 아니라 누적으로 판정)', async () => {
+      const doc = await boot(
+        `<div id="sdpReview"><article>${star}가<div data-review-id="11">도움</div></article></div>`,
+      )
+      doc.querySelector('#sdpReview').innerHTML = `<article>${star}로딩 중</article>`
+      await touchDom(doc)
+      pagehide(lastDom)
+
+      expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
+    })
+
+    it('렌더만으로는(pagehide 없이) 보내지 않는다', async () => {
+      const doc = await boot(`<div id="sdpReview"><article>${star}가</article></div>`)
+      await touchDom(doc)
+      expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
     })
 
     it('일부만 id 가 없으면 보내지 않는다', async () => {
@@ -267,19 +367,42 @@ describe('셀렉터 깨짐 신호', () => {
           <article>${star}나</article>
         </div>`,
       )
+      pagehide(lastDom)
       expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
     })
 
     it('모두 id 가 있는 정상 리뷰면 보내지 않는다', async () => {
       await boot(fixture)
+      pagehide(lastDom)
       expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
+    })
+
+    it('별점도 없어 파싱된 리뷰가 없으면 IdNotFound 가 아니라 RatingNotFound 만 보낸다', async () => {
+      await boot('<div id="sdpReview"><article>가</article></div>')
+      pagehide(lastDom)
+      expect(errorEvents('ReviewIdNotFound')).toHaveLength(0)
+      expect(errorEvents('ReviewRatingNotFound')).toHaveLength(1)
+    })
+
+    it('상품이 바뀌면 떠나는 상품의 신호를 전환 시점에 보낸다', async () => {
+      const doc = await boot(`<div id="sdpReview"><article>${star}가</article></div>`)
+      lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
+      doc.querySelector('#sdpReview').innerHTML =
+        `<article>${star}나<div data-review-id="31">도움</div></article>`
+      await touchDom(doc)
+
+      const events = errorEvents('ReviewIdNotFound')
+      expect(events).toHaveLength(1)
+      expect(events[0].properties.product_id).toBe('1')
+      pagehide(lastDom)
+      expect(errorEvents()).toHaveLength(1)
     })
   })
 
   describe('ReviewContainerNotFound', () => {
-    it('컨테이너가 없고 70% 까지 내려간 뒤 pagehide 가 오면 1건 보낸다', async () => {
+    it('컨테이너가 없고 70% 까지 스크롤한 뒤 pagehide 가 오면 1건 보낸다', async () => {
       const doc = await boot('<div>리뷰 없음</div>')
-      setScroll(lastDom, { scrollY: 600, viewportHeight: 100, documentHeight: 1000 })
+      setScroll(lastDom, { scrollY: 630, viewportHeight: 100, documentHeight: 1000 })
       await touchDom(doc)
       expect(errorEvents('ReviewContainerNotFound')).toHaveLength(0)
 
@@ -291,9 +414,9 @@ describe('셀렉터 깨짐 신호', () => {
       expect(events[0].properties.product_id).toBe('1')
     })
 
-    it('30% 까지만 내려갔으면 보내지 않는다', async () => {
+    it('30% 까지만 스크롤했으면 보내지 않는다', async () => {
       await boot('<div>리뷰 없음</div>')
-      setScroll(lastDom, { scrollY: 200, viewportHeight: 100, documentHeight: 1000 })
+      setScroll(lastDom, { scrollY: 270, viewportHeight: 100, documentHeight: 1000 })
       pagehide(lastDom)
 
       expect(errorEvents('ReviewContainerNotFound')).toHaveLength(0)
@@ -301,7 +424,7 @@ describe('셀렉터 깨짐 신호', () => {
 
     it('컨테이너를 한 번이라도 찾았으면 보내지 않는다', async () => {
       const doc = await boot(fixture)
-      setScroll(lastDom, { scrollY: 600, viewportHeight: 100, documentHeight: 1000 })
+      setScroll(lastDom, { scrollY: 630, viewportHeight: 100, documentHeight: 1000 })
       doc.querySelector('#sdpReview').remove()
       await touchDom(doc)
       pagehide(lastDom)
@@ -322,15 +445,16 @@ describe('셀렉터 깨짐 신호', () => {
 
     it('pagehide 가 여러 번 와도 1건만 보낸다', async () => {
       await boot('<div>리뷰 없음</div>')
-      setScroll(lastDom, { scrollY: 600, viewportHeight: 100, documentHeight: 1000 })
+      setScroll(lastDom, { scrollY: 630, viewportHeight: 100, documentHeight: 1000 })
       pagehide(lastDom)
       pagehide(lastDom)
 
       expect(errorEvents('ReviewContainerNotFound')).toHaveLength(1)
     })
 
-    it('스크롤하지 않았으면 보내지 않는다', async () => {
+    it('문서가 짧아도 스크롤하지 않았으면 보내지 않는다', async () => {
       await boot('<div>리뷰 없음</div>')
+      setScroll(lastDom, { scrollY: 0, viewportHeight: 800, documentHeight: 1000 })
       pagehide(lastDom)
       expect(errorEvents('ReviewContainerNotFound')).toHaveLength(0)
     })

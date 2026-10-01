@@ -1,12 +1,6 @@
 import { parseReviews, findReviewContainer } from './parser.js'
 import { SELECTORS } from './selectors.js'
-import {
-  truncateMessage,
-  scrollRatio,
-  isRatingSelectorBroken,
-  isReviewIdSelectorBroken,
-  isContainerSelectorBroken,
-} from './health.js'
+import { truncateMessage, scrollRatio, createObservation, selectHealthSignals } from './health.js'
 import { summarize } from '../core/rating.js'
 import { isSponsored } from '../core/sponsored.js'
 import { createBanner } from './banner.js'
@@ -29,8 +23,7 @@ const state = {
   pagesSeen: 0,
   lastSummary: null,
   reportedErrors: new Set(),
-  containerFound: false,
-  maxScrollRatio: 0,
+  observation: createObservation(),
 }
 
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
@@ -97,16 +90,32 @@ function currentScrollRatio() {
 }
 
 function trackScroll() {
-  state.maxScrollRatio = Math.max(state.maxScrollRatio, currentScrollRatio())
+  state.observation.maxScrollRatio = Math.max(state.observation.maxScrollRatio, currentScrollRatio())
 }
 
-function reportIfContainerMissing() {
-  trackScroll()
-  if (!isContainerSelectorBroken(state)) return
-  reportExtensionError({
-    error_type: 'ReviewContainerNotFound',
-    max_scroll_ratio: Math.round(state.maxScrollRatio * 100) / 100,
-  })
+// 렌더는 관측만 쌓고, 셀렉터 깨짐 판정은 상품 페이지를 떠날 때 한 번 한다.
+// productId 를 넘기면 떠나는 상품의 번호로 보낸다(같은 탭 안 이동에서 현재 주소는 이미 새 상품이다).
+function flushHealthSignals(productId) {
+  try {
+    trackScroll()
+    for (const signal of selectHealthSignals(state.observation)) {
+      reportExtensionError(productId === undefined ? signal : { ...signal, product_id: productId })
+    }
+  } catch (error) {
+    reportTrackFailure(error)
+  }
+}
+
+function observeReviews(container, reviews) {
+  const observation = state.observation
+  observation.containerFound = true
+  observation.maxItemCount = Math.max(
+    observation.maxItemCount,
+    container.querySelectorAll(SELECTORS.reviewItem).length,
+  )
+  observation.maxParsedCount = Math.max(observation.maxParsedCount, reviews.length)
+  if (reviews.length > 0) observation.parsedAnyReview = true
+  if (reviews.some((review) => review.hasStableId)) observation.sawStableId = true
 }
 
 function secondsSinceRender() {
@@ -121,14 +130,15 @@ function currentProductId() {
 function resetIfProductChanged() {
   const productId = currentProductId()
   if (productId === state.productId) return
+  // 떠나는 상품의 신호를 먼저 판정하고 나서 비운다. pagehide 만 기다리면 같은 탭 안 이동에서 앞 상품 신호가 사라진다.
+  if (state.productId !== null) flushHealthSignals(state.productId)
   state.productId = productId
   state.seen.clear()
   state.lastKey = ''
   state.renderedAt = 0
   state.pagesSeen = 0
   state.reportedErrors.clear()
-  state.containerFound = false
-  state.maxScrollRatio = 0
+  state.observation = createObservation()
 }
 
 function accumulate(reviews) {
@@ -165,20 +175,10 @@ function renderReviews({ force = false } = {}) {
 
   const container = findReviewContainer(document)
   if (!container) return
-  state.containerFound = true
 
   const reviews = parseReviews(document)
-  if (reviews.length === 0) {
-    const itemCount = container.querySelectorAll(SELECTORS.reviewItem).length
-    if (isRatingSelectorBroken({ itemCount, parsedCount: 0 })) {
-      reportExtensionError({ error_type: 'ReviewRatingNotFound', item_count: itemCount })
-    }
-    return
-  }
-
-  if (isReviewIdSelectorBroken(reviews)) {
-    reportExtensionError({ error_type: 'ReviewIdNotFound', review_count: reviews.length })
-  }
+  observeReviews(container, reviews)
+  if (reviews.length === 0) return
 
   const key = reviews
     .map((review) => `${review.id}:${review.rating}:${review.text.length}`)
@@ -186,7 +186,6 @@ function renderReviews({ force = false } = {}) {
   const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
   const reviewSetChanged = key !== state.lastKey
   if (!reviewSetChanged && bannerPresent && !force) return
-  state.lastKey = key
 
   markSponsored(reviews)
   applyFilter(reviews, state.hidden)
@@ -217,6 +216,8 @@ function renderReviews({ force = false } = {}) {
       pages_seen: state.pagesSeen,
     })
   }
+  // 이 앞에서 예외가 나면 같은 묶음을 다음 렌더가 다시 시도하도록 키는 관측 직후에 갱신한다.
+  state.lastKey = key
 
   const banner = createBanner(summary, {
     hidden: state.hidden,
@@ -270,7 +271,7 @@ function start() {
 
   window.addEventListener('scroll', trackScroll, { passive: true })
   // 리뷰는 스크롤해야 지연 로딩되므로, 떠나는 시점에 컨테이너를 못 찾았는지 판정한다.
-  window.addEventListener('pagehide', reportIfContainerMissing)
+  window.addEventListener('pagehide', () => flushHealthSignals())
 
   watchPurchaseIntent(document, (kind) => {
     const summary = state.lastSummary

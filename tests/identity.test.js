@@ -26,6 +26,32 @@ describe('identity', () => {
     expect(store.crf_device_id).toBe(id)
   })
 
+  it('저장소가 빈 상태에서 동시에 두 번 불러도 같은 값을 주고 한 번만 쓴다', async () => {
+    let writes = 0
+    const originalSet = chrome.storage.local.set
+    chrome.storage.local.set = async (items) => {
+      writes += 1
+      return originalSet(items)
+    }
+
+    const [first, second] = await Promise.all([getDeviceId(), getDeviceId()])
+
+    expect(second).toBe(first)
+    expect(writes).toBe(1)
+    expect(store.crf_device_id).toBe(first)
+  })
+
+  it('생성에 실패하면 다음 호출이 다시 시도한다', async () => {
+    const originalGet = chrome.storage.local.get
+    chrome.storage.local.get = () => Promise.reject(new Error('읽기 실패'))
+    await expect(getDeviceId()).rejects.toThrow('읽기 실패')
+
+    chrome.storage.local.get = originalGet
+    const id = await getDeviceId()
+    expect(typeof id).toBe('string')
+    expect(store.crf_device_id).toBe(id)
+  })
+
   it('랜딩에서 받은 id로 덮어쓸 수 있다', async () => {
     await getDeviceId()
     await setDeviceId('abc123')
