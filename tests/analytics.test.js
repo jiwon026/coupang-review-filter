@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildPayload, isApiKeyMissing } from '../extension/src/background/analytics.js'
+import { CONFIG as EXAMPLE_CONFIG } from '../extension/src/shared/config.example.js'
 
 describe('buildPayload', () => {
   const base = {
@@ -48,6 +49,25 @@ describe('buildPayload', () => {
     expect(payload.events[0].user_id).toBe('user-9')
   })
 
+  it('appVersion 을 이벤트 최상위 app_version 에 담는다', () => {
+    const event = buildPayload({ ...base, appVersion: '0.1.0' }).events[0]
+    expect(event.app_version).toBe('0.1.0')
+  })
+
+  it('최상위 platform 은 Chrome Extension 이다', () => {
+    expect(buildPayload({ ...base, appVersion: '0.1.0' }).events[0].platform).toBe('Chrome Extension')
+  })
+
+  it('event_properties 의 platform 과 app_version 은 그대로 둔다', () => {
+    const props = buildPayload({
+      ...base,
+      appVersion: '0.1.0',
+      commonProperties: { platform: 'desktop', app_version: '0.1.0' },
+    }).events[0].event_properties
+    expect(props.platform).toBe('desktop')
+    expect(props.app_version).toBe('0.1.0')
+  })
+
   it('time과 insert_id를 담는다', () => {
     const event = buildPayload(base).events[0]
     expect(event.time).toBe(1700000000000)
@@ -68,5 +88,16 @@ describe('isApiKeyMissing', () => {
 
   it('실제 키는 있는 것으로 본다', () => {
     expect(isApiKeyMissing('0123456789abcdef0123456789abcdef')).toBe(false)
+  })
+})
+
+describe('config.example.js', () => {
+  it('앰플리튜드 키 자리표시자는 미설정으로 판정된다', () => {
+    expect(isApiKeyMissing(EXAMPLE_CONFIG.amplitudeApiKey)).toBe(true)
+    expect(EXAMPLE_CONFIG.amplitudeApiKey).toBe('PASTE_YOUR_AMPLITUDE_API_KEY_HERE')
+  })
+
+  it('landingOrigin 은 example.com 그대로다', () => {
+    expect(EXAMPLE_CONFIG.landingOrigin).toBe('https://example.com')
   })
 })

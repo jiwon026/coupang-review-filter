@@ -6,6 +6,21 @@ describe('EVENTS', () => {
     expect(Object.keys(EVENTS)).toHaveLength(9)
   })
 
+  // 이벤트 이름은 앰플리튜드에 쌓인 데이터의 키다. 바꾸면 과거 데이터와 끊기므로 값 전체를 고정한다.
+  it('EVENTS 전체 값이 명시한 리터럴과 같다', () => {
+    expect(EVENTS).toEqual({
+      EXTENSION_INSTALLED: 'Extension Installed',
+      BANNER_RENDERED: 'Banner Rendered',
+      PANEL_OPENED: 'Panel Opened',
+      FILTER_TOGGLED: 'Filter Toggled',
+      EVIDENCE_EXPANDED: 'Evidence Expanded',
+      PANEL_REVIEW_SCROLLED: 'Panel Review Scrolled',
+      PURCHASE_INTENT_CLICKED: 'Purchase Intent Clicked',
+      EXTENSION_REMOVED: 'Extension Removed',
+      EXTENSION_ERROR: 'Extension Error',
+    })
+  })
+
   it('이벤트 이름이 중복되지 않는다', () => {
     const values = Object.values(EVENTS)
     expect(new Set(values).size).toBe(values.length)

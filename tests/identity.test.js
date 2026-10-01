@@ -62,6 +62,11 @@ describe('identity', () => {
     expect(await getUserId()).toBeNull()
   })
 
+  it('setUserId 는 chrome.storage.local 의 crf_user_id 키에 저장한다', async () => {
+    await setUserId('token-xyz')
+    expect(store.crf_user_id).toBe('token-xyz')
+  })
+
   it('user_id를 저장하고 읽는다', async () => {
     await setUserId('token-xyz')
     expect(await getUserId()).toBe('token-xyz')

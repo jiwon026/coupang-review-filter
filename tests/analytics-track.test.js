@@ -77,3 +77,24 @@ describe('track 의 실험 배정 공통 프로퍼티', () => {
     expect(props.review_count).toBe(7)
   })
 })
+
+describe('track 의 최상위 기기 속성', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('전송 본문 이벤트 최상위에 manifest 버전과 Chrome Extension 을 싣는다', async () => {
+    const { track } = await loadTrack('device-abc')
+    await track('Banner Rendered')
+
+    const event = sent[0].events[0]
+    expect(event.app_version).toBe('0.1.0')
+    expect(event.platform).toBe('Chrome Extension')
+    expect(event.event_properties.platform).toBe('desktop')
+    expect(event.event_properties.app_version).toBe('0.1.0')
+  })
+})
