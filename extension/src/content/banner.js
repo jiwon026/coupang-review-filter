@@ -29,21 +29,28 @@ export function createBanner(summary, options) {
     return root
   }
 
-  const headline = document.createElement('p')
-  headline.className = 'crf-headline'
-  headline.textContent =
-    options.copyVariant === 'ratio'
-      ? `지금까지 본 리뷰의 ${formatPercent(summary.sponsoredRatio)}가 체험단입니다`
-      : `리뷰 ${formatCount(summary.total)}개 중 체험단 ${formatCount(summary.sponsoredCount)}개 ` +
-        `(${formatPercent(summary.sponsoredRatio)})`
-  root.appendChild(headline)
-
-  const ratings = document.createElement('p')
-  ratings.className = 'crf-ratings'
-  ratings.textContent =
+  // banner_copy 실험: 두 변형은 같은 정보를 담고 무엇을 헤드라인(강조)으로 두는지만 다르다.
+  const ratingLine =
     `리뷰 평균 ${summary.ratingOfficial} → 체험단 제외 ` +
     `${summary.ratingFiltered === null ? '계산 불가' : summary.ratingFiltered}`
-  root.appendChild(ratings)
+  const percent = formatPercent(summary.sponsoredRatio)
+  const [headlineText, subText] =
+    options.copyVariant === 'ratio'
+      ? [`지금까지 본 리뷰의 ${percent}가 체험단입니다`, ratingLine]
+      : [
+          ratingLine,
+          `리뷰 ${formatCount(summary.total)}개 중 체험단 ${formatCount(summary.sponsoredCount)}개 (${percent})`,
+        ]
+
+  const headline = document.createElement('p')
+  headline.className = 'crf-headline'
+  headline.textContent = headlineText
+  root.appendChild(headline)
+
+  const sub = document.createElement('p')
+  sub.className = 'crf-sub'
+  sub.textContent = subText
+  root.appendChild(sub)
 
   const toggle = document.createElement('button')
   toggle.type = 'button'

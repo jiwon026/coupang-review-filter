@@ -8,17 +8,18 @@
   line-height: 1.6;
 }
 
+/* banner_copy 실험의 강조 줄. 두 변형은 이 줄에 무엇을 두는지만 다르다. */
 .crf-headline {
   margin: 0 0 6px;
-  font-size: 13px;
-  color: #555;
-}
-
-.crf-ratings {
-  margin: 0 0 10px;
   font-size: 18px;
   font-weight: 600;
   color: #111;
+}
+
+.crf-sub {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #555;
 }
 
 .crf-toggle {

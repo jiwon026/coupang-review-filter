@@ -64,6 +64,47 @@ describe('createBanner', () => {
     expect(el.textContent).not.toContain('쿠팡 평점')
   })
 
+  describe('banner_copy 변형', () => {
+    const lines = (el) => ({
+      headline: el.querySelector('.crf-headline').textContent,
+      sub: el.querySelector('.crf-sub').textContent,
+    })
+
+    it('rating 변형은 평점 변화를 헤드라인으로, 개수와 비중을 보조 줄로 쓴다', () => {
+      const el = createBanner(summary, { hidden: false, copyVariant: 'rating', onToggle: () => {} })
+      expect(lines(el)).toEqual({
+        headline: '리뷰 평균 4.7 → 체험단 제외 4.1',
+        sub: '리뷰 1,204개 중 체험단 341개 (28%)',
+      })
+    })
+
+    it('ratio 변형은 비중을 헤드라인으로, 평점 변화를 보조 줄로 쓴다', () => {
+      const el = createBanner(summary, { hidden: false, copyVariant: 'ratio', onToggle: () => {} })
+      expect(lines(el)).toEqual({
+        headline: '지금까지 본 리뷰의 28%가 체험단입니다',
+        sub: '리뷰 평균 4.7 → 체험단 제외 4.1',
+      })
+    })
+
+    it('체험단 제외 평점을 못 내면 rating 헤드라인에 계산 불가라고 쓴다', () => {
+      const el = createBanner(
+        { ...summary, ratingFiltered: null, ratingDelta: null },
+        { hidden: false, copyVariant: 'rating', onToggle: () => {} },
+      )
+      expect(lines(el).headline).toBe('리뷰 평균 4.7 → 체험단 제외 계산 불가')
+    })
+
+    // 체험단 개수(341)는 정해진 ratio 문구에 없다. 총계(범위 줄)와 비중으로 같은 정보를 전한다.
+    it('두 변형은 같은 숫자를 담고 강조만 다르다', () => {
+      const text = (copyVariant) =>
+        createBanner(summary, { hidden: false, copyVariant, onToggle: () => {} }).textContent
+      for (const value of ['1,204', '28%', '4.7', '4.1']) {
+        expect(text('rating')).toContain(value)
+        expect(text('ratio')).toContain(value)
+      }
+    })
+  })
+
   it('ratio 변형은 비중을 앞세운다', () => {
     const el = createBanner(summary, { hidden: false, copyVariant: 'ratio', onToggle: () => {} })
     expect(el.textContent).toContain('지금까지 본 리뷰의 28%가 체험단입니다')
