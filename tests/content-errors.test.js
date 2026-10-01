@@ -48,7 +48,13 @@ async function boot(html) {
         sentMessages.push(message)
         if (message?.type === 'crf:get-variant') {
           callback?.({ variants: { default_filter: 'off', banner_copy: 'rating' } })
+          return undefined
         }
+        // MV3 에서 수신 측이 없으면 동기 예외가 아니라 거부된 Promise 가 돌아온다.
+        if (globalThis.__crfSendRejects) {
+          return Promise.reject(new Error('Receiving end does not exist.'))
+        }
+        return undefined
       },
     },
   }
@@ -59,6 +65,10 @@ async function boot(html) {
   await import('../extension/src/content/index.js')
   await tick()
   return dom.window.document
+}
+
+function banners(doc) {
+  return doc.querySelectorAll('[data-crf-banner="1"]')
 }
 
 function errorEvents(errorType) {
@@ -184,7 +194,7 @@ describe('렌더 예외 보고', () => {
 
     expect(uncaught).toEqual([])
     const warnings = console.warn.mock.calls.filter((call) =>
-      String(call[0]).includes('이벤트를 백그라운드로 보내지 못했습니다'),
+      String(call[0]).includes('백그라운드에 메시지를 보내지 못했습니다'),
     )
     expect(warnings).toHaveLength(1)
   })
@@ -205,6 +215,57 @@ describe('렌더 예외 보고', () => {
       (message) => message?.type === 'crf:track' && message.eventType === 'Banner Rendered',
     )
     expect(rendered).toHaveLength(0)
+  })
+})
+
+describe('sendMessage 가 거부된 Promise 를 돌려줄 때', () => {
+  const unhandled = []
+  const onUnhandled = (reason) => unhandled.push(reason)
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    delete globalThis.__crfRenderError
+    globalThis.__crfDetectSortFails = false
+    globalThis.__crfSendRejects = true
+    unhandled.length = 0
+    process.on('unhandledRejection', onUnhandled)
+  })
+
+  afterEach(() => {
+    process.off('unhandledRejection', onUnhandled)
+    delete globalThis.__crfSendRejects
+    delete globalThis.__crfDetectSortFails
+    vi.restoreAllMocks()
+  })
+
+  const sendWarnings = () =>
+    console.warn.mock.calls.filter((call) =>
+      String(call[0]).includes('백그라운드에 메시지를 보내지 못했습니다'),
+    )
+
+  it('거부돼도 배너를 렌더하고 미처리 거부를 남기지 않으며 경고는 정확히 한 번이다', async () => {
+    const doc = await boot(fixture)
+    await tick()
+
+    expect(doc.querySelectorAll('[data-crf-banner="1"]')).toHaveLength(1)
+    expect(sentMessages.filter((message) => message?.type === 'crf:track').length).toBeGreaterThan(0)
+    expect(unhandled).toEqual([])
+    expect(sendWarnings()).toHaveLength(1)
+  })
+
+  it('이후 렌더에서 다시 거부돼도 추가 경고 없이 렌더를 계속한다', async () => {
+    const doc = await boot(fixture)
+    await tick()
+    expect(sendWarnings()).toHaveLength(1)
+
+    doc.querySelector('#sdpReview').insertAdjacentHTML('beforeend', '<div>변경</div>')
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    expect(banners(doc)).toHaveLength(1)
+    expect(unhandled).toEqual([])
+    expect(sendWarnings()).toHaveLength(1)
   })
 })
 

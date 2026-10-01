@@ -134,13 +134,24 @@ describe('content 진입점', () => {
     expect(banners(doc)).toHaveLength(0)
   })
 
-  it('로드와 렌더를 콘솔로 알린다', async () => {
+  it('로드와 렌더를 콘솔로 알린다(디버그 빌드)', async () => {
+    vi.stubGlobal('__CRF_DEBUG__', true)
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
     await boot(fixture)
     const messages = spy.mock.calls.map((call) => String(call[0]))
     expect(messages.some((m) => m.includes('콘텐츠 스크립트 로드됨'))).toBe(true)
     expect(messages.some((m) => m.includes('리뷰 4건, 체험단 2건'))).toBe(true)
     spy.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it('운영 빌드(__CRF_DEBUG__ 가 false)에서는 로드와 렌더를 콘솔로 알리지 않는다', async () => {
+    vi.stubGlobal('__CRF_DEBUG__', false)
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    await boot(fixture)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   it('리뷰가 교체되면 총계를 누적한다', async () => {
@@ -288,6 +299,7 @@ describe('content 진입점', () => {
   })
 
   it('배지 삽입이 추가 렌더를 유발하지 않는다', async () => {
+    vi.stubGlobal('__CRF_DEBUG__', true)
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const doc = await boot(fixture)
 
@@ -309,6 +321,7 @@ describe('content 진입점', () => {
 
     expect(renderLines()).toHaveLength(2)
     spy.mockRestore()
+    vi.unstubAllGlobals()
   })
 
   it('첫 렌더에서 Banner Rendered를 보낸다', async () => {

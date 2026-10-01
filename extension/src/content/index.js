@@ -7,6 +7,7 @@ import { createBanner } from './banner.js'
 import { markSponsored, applyFilter } from './filter.js'
 import { MESSAGES } from '../shared/messages.js'
 import { EVENTS } from '../shared/events.js'
+import { debugLog } from '../shared/log.js'
 import { detectSort } from './sort.js'
 import { watchPurchaseIntent } from './purchase.js'
 
@@ -26,14 +27,14 @@ const state = {
   observation: createObservation(),
 }
 
-console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
+/* @__PURE__ */ debugLog(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
 
 let trackFailureReported = false
 
 function reportTrackFailure(error) {
   if (trackFailureReported) return
   trackFailureReported = true
-  console.warn(`${LOG_PREFIX} 이벤트를 백그라운드로 보내지 못했습니다:`, error?.message ?? error)
+  console.warn(`${LOG_PREFIX} 백그라운드에 메시지를 보내지 못했습니다:`, error?.message ?? error)
 }
 
 function sendToBackground(message) {
@@ -194,7 +195,7 @@ function renderReviews({ force = false } = {}) {
   const summary = summarize(accumulate(reviews))
   state.lastSummary = summary
   sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary })
-  console.log(
+  /* @__PURE__ */ debugLog(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
       `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered} ` +
       `[${reviews[0].id}..${reviews[reviews.length - 1].id}]`,

@@ -1,4 +1,5 @@
 import { MESSAGES } from '../shared/messages.js'
+import { debugLog } from '../shared/log.js'
 import { track } from './analytics.js'
 import { getDeviceId } from './identity.js'
 import { saveSummary, loadSummary, removeSummary } from './summaries.js'
@@ -79,4 +80,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false
 })
 
-console.log('[체험단 필터] 백그라운드 준비됨')
+/* @__PURE__ */ debugLog('[체험단 필터] 백그라운드 준비됨')
