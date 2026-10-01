@@ -3,12 +3,24 @@ import { track } from './analytics.js'
 import { getDeviceId } from './identity.js'
 import { saveSummary, loadSummary, removeSummary } from './summaries.js'
 import { assignAll } from '../core/experiment.js'
+import { configureUninstallUrl, handleInstalled } from './lifecycle.js'
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   removeSummary(tabId).catch((error) =>
     console.warn('[체험단 필터] 요약을 지우지 못했습니다:', error?.message),
   )
 })
+
+chrome.runtime.onInstalled.addListener((details) => {
+  handleInstalled(details).catch((error) =>
+    console.warn('[체험단 필터] 설치 처리에 실패했습니다:', error?.message),
+  )
+})
+
+// 워커가 시작될 때마다 제거 주소를 다시 맞춘다. 설정은 확장 업데이트 때 보존되지 않을 수 있다.
+configureUninstallUrl().catch((error) =>
+  console.warn('[체험단 필터] 제거 주소를 설정하지 못했습니다:', error?.message),
+)
 
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })

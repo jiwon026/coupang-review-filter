@@ -1,4 +1,12 @@
 import { parseReviews, findReviewContainer } from './parser.js'
+import { SELECTORS } from './selectors.js'
+import {
+  truncateMessage,
+  scrollRatio,
+  isRatingSelectorBroken,
+  isReviewIdSelectorBroken,
+  isContainerSelectorBroken,
+} from './health.js'
 import { summarize } from '../core/rating.js'
 import { isSponsored } from '../core/sponsored.js'
 import { createBanner } from './banner.js'
@@ -20,6 +28,9 @@ const state = {
   renderedAt: 0,
   pagesSeen: 0,
   lastSummary: null,
+  reportedErrors: new Set(),
+  containerFound: false,
+  maxScrollRatio: 0,
 }
 
 console.log(`${LOG_PREFIX} 콘텐츠 스크립트 로드됨`)
@@ -55,6 +66,49 @@ function track(eventType, properties = {}) {
   })
 }
 
+// 같은 상품 페이지에서 같은 error_type 과 error_name 조합은 한 번만 보낸다.
+// render 는 MutationObserver 가 수시로 부르므로 억제하지 않으면 같은 예외가 이벤트를 폭주시킨다.
+function reportExtensionError(properties) {
+  try {
+    const key = `${properties.error_type}|${properties.error_name ?? ''}`
+    if (state.reportedErrors.has(key)) return
+    state.reportedErrors.add(key)
+    track(EVENTS.EXTENSION_ERROR, properties)
+  } catch (error) {
+    // 보고 경로의 실패가 제품이나 이후 보고를 막으면 안 된다.
+    reportTrackFailure(error)
+  }
+}
+
+function reportRenderException(error) {
+  reportExtensionError({
+    error_type: 'RenderException',
+    error_name: error?.name ?? 'Unknown',
+    error_message: truncateMessage(error?.message),
+  })
+}
+
+function currentScrollRatio() {
+  return scrollRatio({
+    scrollY: window.scrollY,
+    viewportHeight: window.innerHeight,
+    documentHeight: document.documentElement.scrollHeight,
+  })
+}
+
+function trackScroll() {
+  state.maxScrollRatio = Math.max(state.maxScrollRatio, currentScrollRatio())
+}
+
+function reportIfContainerMissing() {
+  trackScroll()
+  if (!isContainerSelectorBroken(state)) return
+  reportExtensionError({
+    error_type: 'ReviewContainerNotFound',
+    max_scroll_ratio: Math.round(state.maxScrollRatio * 100) / 100,
+  })
+}
+
 function secondsSinceRender() {
   return state.renderedAt === 0 ? 0 : Math.round((Date.now() - state.renderedAt) / 1000)
 }
@@ -72,6 +126,9 @@ function resetIfProductChanged() {
   state.lastKey = ''
   state.renderedAt = 0
   state.pagesSeen = 0
+  state.reportedErrors.clear()
+  state.containerFound = false
+  state.maxScrollRatio = 0
 }
 
 function accumulate(reviews) {
@@ -94,14 +151,34 @@ function accumulate(reviews) {
   return [...state.seen.values()]
 }
 
-function render({ force = false } = {}) {
+function render(options) {
+  try {
+    renderReviews(options)
+  } catch (error) {
+    // 콘텐츠 스크립트가 죽으면 이후 페이지 전환에서 아무것도 안 되므로 다시 던지지 않는다.
+    reportRenderException(error)
+  }
+}
+
+function renderReviews({ force = false } = {}) {
   resetIfProductChanged()
 
   const container = findReviewContainer(document)
   if (!container) return
+  state.containerFound = true
 
   const reviews = parseReviews(document)
-  if (reviews.length === 0) return
+  if (reviews.length === 0) {
+    const itemCount = container.querySelectorAll(SELECTORS.reviewItem).length
+    if (isRatingSelectorBroken({ itemCount, parsedCount: 0 })) {
+      reportExtensionError({ error_type: 'ReviewRatingNotFound', item_count: itemCount })
+    }
+    return
+  }
+
+  if (isReviewIdSelectorBroken(reviews)) {
+    reportExtensionError({ error_type: 'ReviewIdNotFound', review_count: reviews.length })
+  }
 
   const key = reviews
     .map((review) => `${review.id}:${review.rating}:${review.text.length}`)
@@ -190,6 +267,10 @@ function start() {
   render()
   const observer = new MutationObserver(() => render())
   observer.observe(document.body, { childList: true, subtree: true })
+
+  window.addEventListener('scroll', trackScroll, { passive: true })
+  // 리뷰는 스크롤해야 지연 로딩되므로, 떠나는 시점에 컨테이너를 못 찾았는지 판정한다.
+  window.addEventListener('pagehide', reportIfContainerMissing)
 
   watchPurchaseIntent(document, (kind) => {
     const summary = state.lastSummary

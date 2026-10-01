@@ -3,7 +3,8 @@ export function installChromeMock(initial = {}) {
   const sessionStore = {}
   const listeners = []
   const removedListeners = []
-  const calls = { sidePanelOpen: [], setPanelBehavior: [] }
+  const installedListeners = []
+  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [] }
 
   const chrome = {
     storage: {
@@ -39,10 +40,13 @@ export function installChromeMock(initial = {}) {
       },
     },
     runtime: {
-      setUninstallURL() {},
+      setUninstallURL: (url) => {
+        calls.setUninstallURL.push(url)
+        return Promise.resolve()
+      },
       getManifest: () => ({ version: '0.1.0' }),
       onMessage: { addListener: (fn) => listeners.push(fn) },
-      onInstalled: { addListener: () => {} },
+      onInstalled: { addListener: (fn) => installedListeners.push(fn) },
     },
     tabs: {
       onRemoved: { addListener: (fn) => removedListeners.push(fn) },
@@ -59,6 +63,7 @@ export function installChromeMock(initial = {}) {
     },
     __listeners: listeners,
     __removedListeners: removedListeners,
+    __installedListeners: installedListeners,
     __session: sessionStore,
     __calls: calls,
   }
