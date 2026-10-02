@@ -1,3 +1,5 @@
+> **대체됨 (2026-10-02).** 이 계획은 실행하지 않는다. 계획 1 직후에 쓰여 현재 코드와 맞지 않고, 동의 없이 수집하는 설계라 웹스토어 정책에도 맞지 않는다. `docs/superpowers/plans/2026-10-02-store-submission.md` 와 명세 11절을 따른다.
+
 # 랜딩과 배포 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
