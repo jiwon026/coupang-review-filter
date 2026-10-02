@@ -13,7 +13,7 @@ Last Updated: 2026-10-02 (계획 3a 작성 시점)
 
 재개 절차:
 
-1. 확장 이름은 `체험단 리뷰 제거기` 로 확정됐다(쿠팡 상표를 이름에 넣지 않는다). 실행 방식은 지금까지처럼 서브에이전트 방식
+1. 확장 이름은 `체험단 리뷰 제거기 for 쿠팡` 으로 확정됐다(사용자 결정). 실행 방식은 지금까지처럼 서브에이전트 방식
 2. `feat/store-submission` 브랜치를 계획 브랜치에서 만들고 superpowers:subagent-driven-development 로 Task 1 부터. 새 SDD 작업 폴더는 `.superpowers/sdd/2026-10-02-store-submission/`
 3. Task 4(온보딩)와 Task 7(아이콘) 전에는 시안을 사용자에게 시각적으로 보여 주고 고르게 한다
 4. Task 10 의 배포, 개발자 등록(5달러), 제출은 사용자가 직접 한다
