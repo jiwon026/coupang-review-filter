@@ -126,5 +126,5 @@ https://crf-review-remover.vercel.app/privacy
 
 - 확장 ID:
 - 스토어 주소:
-- 제출일:
+- 제출일: 2026-10-02 (버전 1.0.0, 홈페이지 URL 은 https://crf-review-remover.vercel.app, 공식 URL 과 지원 URL 은 비움)
 - 심사 결과와 날짜:
