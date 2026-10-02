@@ -34,9 +34,17 @@ export function buildPayload(input) {
 // 쿠팡의 상품 번호와 리뷰 번호 원문은 기기 밖으로 나가지 않는다(명세 11.3). 새 식별자가 생기면 한 줄 추가한다.
 const PSEUDONYMIZED = { product_id: 'product_key', page_first_review_id: 'page_key' }
 
+// 두 번째 방어선. 표에 없는 식별자나 자유 텍스트로 쿠팡 번호가 새지 않게 한다.
+// 6자리 이상 연속한 숫자는 상품 번호나 리뷰 번호일 수 있으므로 # 하나로 바꾼다. 문자열이 아니면 건드리지 않는다.
+const LONG_DIGITS = /\d{6,}/g
+const ID_SUFFIX = /_id$/i
+
 // 원문 키는 항상 지운다. 해시에 실패하면 원문 대신 null 을 보낸다.
 async function minimize(properties) {
   const result = { ...properties }
+  if (typeof result.error_message === 'string') {
+    result.error_message = result.error_message.replace(LONG_DIGITS, '#')
+  }
   for (const [rawKey, safeKey] of Object.entries(PSEUDONYMIZED)) {
     if (!(rawKey in result)) continue
     const raw = result[rawKey]
@@ -46,6 +54,12 @@ async function minimize(properties) {
     } catch {
       result[safeKey] = null
     }
+  }
+  // 표에 없는 _id 접미사 키는 새 식별자를 표에 넣지 않고 추가한 것이다. 실패 시 닫힘으로 지우고 키 이름만 경고한다.
+  for (const key of Object.keys(result)) {
+    if (!ID_SUFFIX.test(key)) continue
+    delete result[key]
+    console.warn(`[체험단 필터] 표에 없는 식별자 키를 보내지 않았습니다: ${key}`)
   }
   return result
 }

@@ -240,6 +240,60 @@ describe('track 의 식별자 최소화', () => {
   })
 })
 
+describe('track 의 최소 수집 두 번째 방어선', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('error_message 의 6자리 이상 연속 숫자는 # 하나로 바뀐다', async () => {
+    const props = await trackedProps('device-abc', {
+      error_message: 'product 7590830589 review 1020990898 failed, 12345 stays, 123456 goes',
+    })
+    expect(props.error_message).toBe('product # review # failed, 12345 stays, # goes')
+    expect(JSON.stringify(props)).not.toContain('7590830589')
+    expect(JSON.stringify(props)).not.toContain('1020990898')
+  })
+
+  it('error_message 가 문자열이 아니면 건드리지 않는다', async () => {
+    expect((await trackedProps('device-abc', { error_message: 1234567890 })).error_message).toBe(1234567890)
+    expect((await trackedProps('device-abc', { error_message: null })).error_message).toBeNull()
+    expect('error_message' in (await trackedProps('device-abc', {}))).toBe(false)
+  })
+
+  it('표에 없는 _id 접미사 키는 제거하고 키 이름만 경고한다(실패 시 닫힘)', async () => {
+    const props = await trackedProps('device-abc', {
+      review_sort: 'best',
+      seller_id: '3000111222',
+      NewThing_ID: 'abc-secret-value',
+    })
+
+    expect('seller_id' in props).toBe(false)
+    expect('NewThing_ID' in props).toBe(false)
+    expect(props.review_sort).toBe('best')
+    const warned = JSON.stringify(console.warn.mock.calls)
+    expect(warned).toContain('seller_id')
+    expect(warned).not.toContain('3000111222')
+    expect(warned).not.toContain('abc-secret-value')
+  })
+
+  it('표에 있는 식별자는 해시로 바뀌어 남고 최종 페이로드에 _id 접미사 키는 하나도 없다', async () => {
+    const props = await trackedProps('device-abc', {
+      product_id: RAW_PRODUCT_ID,
+      page_first_review_id: RAW_REVIEW_ID,
+      seller_id: '3000111222',
+      review_sort: 'best',
+    })
+
+    expect(props.product_key).toMatch(/^[0-9a-f]{16}$/)
+    expect(props.page_key).toMatch(/^[0-9a-f]{16}$/)
+    expect(Object.keys(props).filter((key) => /_id$/i.test(key))).toEqual([])
+  })
+})
+
 describe('track 의 전송 직전 동의 재확인', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
