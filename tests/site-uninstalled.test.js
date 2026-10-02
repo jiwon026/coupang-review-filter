@@ -62,7 +62,6 @@ function loadPage(search, configOverrides = {}) {
     search,
     config: { apiKey: 'test-key', endpoint: ENDPOINT, ...configOverrides },
     now: NOW,
-    randomUUID: () => 'insert-id',
   })
   return dom.window.document
 }
@@ -90,9 +89,16 @@ describe('제거 페이지 전송', () => {
     expect(event.device_id).toBe(DEVICE_ID)
     expect(event.app_version).toBe('0.2.0')
     expect(event.session_id).toBe(NOW)
-    expect(event.insert_id).toBe('insert-id')
+    expect(event.insert_id).toBe(`removed:${DEVICE_ID}`)
     expect(event.event_properties).toEqual({ days_since_install: 3, surface: 'site' })
     expect(globalThis.fetch.mock.calls[0][0]).toBe(ENDPOINT)
+  })
+
+  it('같은 기기 번호로 두 번 로드하면 Extension Removed 의 insert_id 가 같다', () => {
+    loadPage(GOOD_SEARCH)
+    loadPage(GOOD_SEARCH)
+    const ids = sentEvents().map((event) => event.insert_id)
+    expect(ids).toEqual([`removed:${DEVICE_ID}`, `removed:${DEVICE_ID}`])
   })
 
   it('설치 시각을 모르면 days_since_install 없이 보낸다', () => {
@@ -143,6 +149,7 @@ describe('제거 사유 버튼', () => {
     expect(event.event_type).toBe('Removal Reason Selected')
     expect(event.device_id).toBe(DEVICE_ID)
     expect(event.event_properties).toEqual({ reason: 'layout', surface: 'site' })
+    expect(event.insert_id).toBe(`reason:${DEVICE_ID}`)
     expect(doc.body.textContent).toContain(THANKS)
     expect(doc.getElementById('reasons').hidden).toBe(true)
   })

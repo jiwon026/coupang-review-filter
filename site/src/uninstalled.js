@@ -42,19 +42,14 @@ function showThanks(document) {
 }
 
 // 동의했던 사용자(d 가 있는 경우)에게서만 기록한다. d 가 없으면 화면은 같고 아무것도 보내지 않는다.
-export function initUninstalledPage({
-  document,
-  search,
-  config,
-  now = Date.now(),
-  randomUUID = () => crypto.randomUUID(),
-}) {
+export function initUninstalledPage({ document, search, config, now = Date.now() }) {
   const { deviceId, version, installedAt } = parseUninstallParams(search, now)
   const endpoint = config.endpoint || DEFAULT_ENDPOINT
   // 키가 없으면(개발 빌드) 계측이 꺼진다.
   const canSend = Boolean(config.apiKey) && deviceId !== null
 
-  const track = (eventType, properties) => {
+  // insert_id 는 기기당 고정이라 새로고침이나 탭 복원으로 다시 보내도 앰플리튜드가 중복을 걸러 낸다.
+  const track = (eventType, properties, insertId) => {
     if (!canSend) return
     const payload = buildSiteEvent({
       apiKey: config.apiKey,
@@ -63,13 +58,13 @@ export function initUninstalledPage({
       properties,
       appVersion: version,
       now,
-      insertId: randomUUID(),
+      insertId,
     })
     void sendSiteEvent(payload, endpoint)
   }
 
   const days = daysSince(installedAt, now)
-  track(EVENT_REMOVED, days === null ? {} : { days_since_install: days })
+  track(EVENT_REMOVED, days === null ? {} : { days_since_install: days }, `removed:${deviceId}`)
 
   // 사유는 한 번만 받는다. 두 번째부터는 무시한다.
   let answered = false
@@ -79,7 +74,7 @@ export function initUninstalledPage({
       const reason = button.dataset.reason
       if (!REASONS.has(reason)) return
       answered = true
-      track(EVENT_REASON, { reason })
+      track(EVENT_REASON, { reason }, `reason:${deviceId}`)
       showThanks(document)
     })
   }

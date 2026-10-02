@@ -104,7 +104,7 @@ describe('세 페이지 공통', () => {
       const sources = [...doc.querySelectorAll('[src], link[href]')].map(
         (el) => el.getAttribute('src') ?? el.getAttribute('href'),
       )
-      for (const source of sources) expect(source.startsWith('/')).toBe(true)
+      for (const source of sources) expect(source.startsWith('/') && !source.startsWith('//')).toBe(true)
       for (const script of doc.querySelectorAll('script')) expect(script.textContent.trim()).toBe('')
     })
   }
