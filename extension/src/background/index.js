@@ -57,6 +57,20 @@ async function secondsSinceInstall() {
 }
 
 // 동의 저장 뒤의 부수 작업. 실패해도 던지지 않는다. 응답 성패와 무관하게 실행돼야 하므로 응답 전에 시작한다.
+// 열려 있는 패널과 온보딩 페이지가 바뀐 상태를 따라가게 알린다. 받는 쪽이 없으면 거절되므로 삼킨다.
+// 알림 실패가 응답이나 후속 처리를 막으면 안 된다.
+function announceConsent(result) {
+  try {
+    const pending = chrome.runtime.sendMessage({
+      type: MESSAGES.CONSENT_CHANGED,
+      consent: { status: result.status, decidedAt: result.decidedAt },
+    })
+    if (pending && typeof pending.catch === 'function') pending.catch(() => {})
+  } catch {
+    // 받는 쪽이 없거나 컨텍스트가 닫혔다. 정상적인 상황이다.
+  }
+}
+
 async function afterConsentChange(result, source) {
   try {
     await configureUninstallUrl()
@@ -166,6 +180,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (result) => {
           // 패널이나 온보딩 탭이 이미 닫혀 sendResponse 가 던져도 제거 주소 갱신 등은 빠지면 안 된다.
           // 후속 처리를 먼저 시작하고(첫 await 까지 동기 실행) 응답은 그 뒤에 보낸다. 응답 예외는 아래 catch 가 경고한다.
+          announceConsent(result)
           const followUp = afterConsentChange(result, source)
           sendResponse({ consent: { status: result.status, decidedAt: result.decidedAt } })
           return followUp

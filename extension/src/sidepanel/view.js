@@ -53,7 +53,7 @@ const SAVE_ERROR = '설정을 저장하지 못했습니다. 다시 시도해 주
 
 // 요약과는 별도 컨테이너에 그린다. 요약이 실시간으로 갱신돼도 이 구역은 지워지지 않는다.
 // status 가 granted 나 denied 가 아니면 undecided 로 본다.
-export function renderConsent(container, { status, privacyUrl, onChange, onLearnMore, saveFailed = false }) {
+export function renderConsent(container, { status, privacyUrl, onChange, onLearnMore, saveFailed = false, saving = false }) {
   container.replaceChildren()
 
   const copy = Object.hasOwn(CONSENT_COPY, status) ? CONSENT_COPY[status] : CONSENT_COPY.undecided
@@ -64,6 +64,7 @@ export function renderConsent(container, { status, privacyUrl, onChange, onLearn
 
   const action = el('button', 'consent-action', copy.action)
   action.type = 'button'
+  action.disabled = saving
   action.addEventListener('click', () => {
     if (status === 'granted') onChange('denied')
     else if (status === 'denied') onChange('granted')

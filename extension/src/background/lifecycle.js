@@ -1,9 +1,9 @@
 import { SITE, isLandingConfigured } from '../shared/site.js'
+import { ONBOARDING_PATH } from '../shared/pages.js'
 import { getDeviceId, getInstalledAt, setInstalledAt } from './identity.js'
 import { isCollectionAllowed } from './consent.js'
 
 const LOG_PREFIX = '[체험단 필터]'
-const ONBOARDING_PATH = 'src/onboarding/index.html'
 
 function warn(message, error) {
   console.warn(`${LOG_PREFIX} ${message}`, error?.message ?? error)

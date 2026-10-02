@@ -142,6 +142,13 @@ describe('renderConsent', () => {
     expect(buttonByText(container, '보내지 않기')).toBeTruthy()
   })
 
+  it.each(['granted', 'denied', 'undecided'])('saving 이면 %s 의 버튼이 disabled 이고 아니면 활성이다', (status) => {
+    render({ status, saving: true })
+    expect(container.querySelector('button').disabled).toBe(true)
+    render({ status, saving: false })
+    expect(container.querySelector('button').disabled).toBe(false)
+  })
+
   it('saveFailed 가 아니면 오류 문구가 없다', () => {
     render({ status: 'granted' })
     expect(container.textContent).not.toContain(SAVE_ERROR)

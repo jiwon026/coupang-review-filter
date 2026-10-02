@@ -22,6 +22,8 @@ let messageListeners = []
 let activatedListeners = []
 let created = []
 let document
+// 'hold' 응답은 콜백을 붙들어 두었다가 테스트가 원하는 때에 부른다.
+let held = {}
 
 // 가짜 타이머를 쓰는 테스트는 tick 대신 이것으로 대기열을 비운다.
 const settle = () => (vi.isFakeTimers() ? vi.advanceTimersByTimeAsync(0) : tick())
@@ -41,6 +43,7 @@ async function loadPanel({
   messageListeners = []
   activatedListeners = []
   created = []
+  held = {}
   const runtime = {
     lastError: undefined,
     sendMessage(message, callback) {
@@ -55,7 +58,7 @@ async function loadPanel({
           callback?.(trigger)
         }
       }
-      if (message?.type === 'crf:get-consent') reply(consent, callback)
+      if (message?.type === 'crf:get-consent') reply(typeof consent === 'function' ? consent() : consent, callback)
       if (message?.type === 'crf:set-consent') reply(setConsent(message), callback)
       return undefined
     },
@@ -64,6 +67,10 @@ async function loadPanel({
   }
   function reply(value, callback) {
     if (value === 'none') return
+    if (value === 'hold') {
+      held['crf:get-consent'] = callback
+      return
+    }
     if (value === 'lastError') {
       runtime.lastError = { message: 'Receiving end does not exist.' }
       callback?.(undefined)
@@ -89,6 +96,12 @@ async function loadPanel({
   await import('../extension/src/sidepanel/index.js')
   await settle()
   return dom.window.document.getElementById('root')
+}
+
+// 문서의 가시성을 바꾸고 visibilitychange 를 낸다.
+function changeVisibility(state) {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+  document.dispatchEvent(new document.defaultView.Event('visibilitychange'))
 }
 
 const consentBox = () => document.getElementById('consent')
@@ -381,5 +394,190 @@ describe('사이드 패널 배선: 무응답', () => {
     buttonByText('보내지 않기').click()
     await settle()
     expect(ofType('crf:set-consent')).toHaveLength(2)
+  })
+})
+
+describe('사이드 패널 배선: 다른 곳에서 바뀐 동의', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  const changed = (status) => ({ type: 'crf:consent-changed', consent: { status, decidedAt: 5 } })
+
+  it('undecided 로 그려진 뒤 CONSENT_CHANGED granted 를 받으면 보내고 있습니다로 바뀌고 요약은 그대로다', async () => {
+    const root = await loadPanel({ consent: { consent: { status: 'undecided', decidedAt: null } } })
+    const summaryBefore = root.firstChild
+    const textBefore = root.textContent
+
+    deliver(changed('granted'), {})
+
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(buttonByText('보내지 않기')).toBeTruthy()
+    expect(root.firstChild).toBe(summaryBefore)
+    expect(root.textContent).toBe(textBefore)
+  })
+
+  it('CONSENT_CHANGED denied 도 같다', async () => {
+    const root = await loadPanel({ consent: { consent: { status: 'undecided', decidedAt: null } } })
+    const textBefore = root.textContent
+    deliver(changed('denied'), {})
+
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+    expect(buttonByText('보내기')).toBeTruthy()
+    expect(root.textContent).toBe(textBefore)
+  })
+
+  it('CONSENT_CHANGED 를 받으면 이전 오류 문구가 사라진다', async () => {
+    await loadPanel({ setConsent: () => ({ error: 'failed' }) })
+    buttonByText('보내지 않기').click()
+    await settle()
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+
+    deliver(changed('denied'), {})
+    expect(consentBox().textContent).not.toContain(SAVE_ERROR)
+  })
+
+  it.each([
+    ['탭에서 온 발신', changed('denied'), { tab: { id: 5 } }],
+    ['알 수 없는 상태', { type: 'crf:consent-changed', consent: { status: 'maybe' } }, {}],
+    ['consent 없음', { type: 'crf:consent-changed' }, {}],
+  ])('%s 의 CONSENT_CHANGED 는 무시한다', async (_label, message, sender) => {
+    await loadPanel({ consent: grantedReply })
+    deliver(message, sender)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+  })
+
+  it('페이지가 다시 보이면 GET_CONSENT 를 다시 묻고 응답 상태로 그린다', async () => {
+    let current = grantedReply
+    await loadPanel({ consent: () => current })
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+
+    current = { consent: { status: 'denied', decidedAt: 9 } }
+    changeVisibility('visible')
+    await settle()
+
+    expect(ofType('crf:get-consent')).toHaveLength(2)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+  })
+
+  it('페이지가 숨겨질 때는 묻지 않는다', async () => {
+    await loadPanel()
+    changeVisibility('hidden')
+    await settle()
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+  })
+
+  it('다시 보일 때 읽기에 실패하면 지금 화면을 유지한다', async () => {
+    let current = grantedReply
+    await loadPanel({ consent: () => current })
+    current = { consent: { status: 'undecided', decidedAt: null }, error: 'failed' }
+    changeVisibility('visible')
+    await settle()
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+  })
+
+  it('탭 전환만으로는 GET_CONSENT 를 다시 묻지 않는다(가시성 변화와 구분)', async () => {
+    await loadPanel()
+    for (const listener of activatedListeners) listener({ tabId: 5 })
+    await settle()
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+  })
+})
+
+describe('사이드 패널 배선: 늦게 온 응답과 저장 뒤 재확인', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('2초에 undecided 로 그리고 3초에 granted 응답이 오면 동의 상태 화면으로 바뀐다', async () => {
+    await loadPanel({ consent: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보낼지 아직 고르지 않았습니다')
+
+    await vi.advanceTimersByTimeAsync(1000)
+    held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
+    await settle()
+
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(buttonByText('보내지 않기')).toBeTruthy()
+  })
+
+  it('그 사이에 CONSENT_CHANGED 를 받았다면 늦은 응답은 화면을 바꾸지 않는다', async () => {
+    await loadPanel({ consent: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    deliver({ type: 'crf:consent-changed', consent: { status: 'denied', decidedAt: 4 } }, {})
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+
+    held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
+    await settle()
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+  })
+
+  it('늦은 응답이 읽기 실패 표지를 달았으면 화면을 바꾸지 않는다', async () => {
+    await loadPanel({ consent: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    held['crf:get-consent']({ consent: { status: 'undecided', decidedAt: null }, error: 'failed' })
+    await settle()
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보낼지 아직 고르지 않았습니다')
+  })
+
+  it('SET_CONSENT 가 시간 초과로 실패한 뒤 GET_CONSENT 를 다시 묻고 그 상태로 그리되 오류 문구는 남긴다', async () => {
+    let current = grantedReply
+    await loadPanel({ consent: () => current, setConsent: () => 'none' })
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+
+    // 응답은 늦었지만 저장은 됐다.
+    current = { consent: { status: 'denied', decidedAt: 7 } }
+    buttonByText('보내지 않기').click()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(ofType('crf:get-consent')).toHaveLength(2)
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+  })
+
+  it('SET_CONSENT 진행 중에는 버튼이 disabled 이고 끝나면 풀린다', async () => {
+    await loadPanel({ setConsent: () => 'none' })
+    buttonByText('보내지 않기').click()
+    expect(buttonByText('보내지 않기').disabled).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(buttonByText('보내지 않기').disabled).toBe(false)
+  })
+
+  it('성공하면 버튼이 풀린 새 상태를 그린다', async () => {
+    await loadPanel()
+    buttonByText('보내지 않기').click()
+    await settle()
+    expect(buttonByText('보내기').disabled).toBe(false)
+  })
+})
+
+describe('사이드 패널 배선: 초기 읽기 중의 알림', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('초기 응답이 오기 전에 CONSENT_CHANGED 가 왔다면 초기 응답이 화면을 덮지 않는다', async () => {
+    await loadPanel({ consent: 'hold' })
+    deliver({ type: 'crf:consent-changed', consent: { status: 'denied', decidedAt: 4 } }, {})
+    held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
+    await settle()
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
   })
 })

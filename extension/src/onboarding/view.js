@@ -50,10 +50,11 @@ function externalLink(className, href, text) {
   return link
 }
 
-function button(text, onClick) {
+function button(text, onClick, disabled = false) {
   // 선택 버튼은 모두 같은 클래스를 쓴다. 한쪽만 강조해 선택을 유도하지 않는다.
   const node = el('button', 'choice', text)
   node.type = 'button'
+  node.disabled = disabled
   node.addEventListener('click', onClick)
   return node
 }
@@ -87,7 +88,13 @@ function listBox(title, items) {
   return box
 }
 
-function choiceSection({ onChoose, saveFailed }) {
+function saveError() {
+  const error = el('p', 'error', SAVE_ERROR)
+  error.setAttribute('role', 'alert')
+  return error
+}
+
+function choiceSection({ onChoose, saveFailed, saving }) {
   const section = el('section', 'consent')
   section.appendChild(el('h2', null, '익명 사용 통계를 보내 주시겠어요?'))
   section.appendChild(
@@ -102,29 +109,26 @@ function choiceSection({ onChoose, saveFailed }) {
   for (const note of NOTES) section.appendChild(el('p', 'note', note))
 
   const choices = el('div', 'choices')
-  choices.appendChild(button('동의하고 시작', () => onChoose('granted')))
-  choices.appendChild(button('통계 없이 사용', () => onChoose('denied')))
+  choices.appendChild(button('동의하고 시작', () => onChoose('granted'), saving))
+  choices.appendChild(button('통계 없이 사용', () => onChoose('denied'), saving))
   section.appendChild(choices)
 
-  if (saveFailed) {
-    const error = el('p', 'error', SAVE_ERROR)
-    error.setAttribute('role', 'alert')
-    section.appendChild(error)
-  }
+  if (saveFailed) section.appendChild(saveError())
   return section
 }
 
-function doneSection({ status, onChange }) {
+function doneSection({ status, onChange, saving, saveFailed }) {
   const section = el('section', 'consent')
   const message = el('p', 'done', DONE_COPY[status])
   message.setAttribute('role', 'status')
   section.appendChild(message)
-  section.appendChild(button('설정 바꾸기', () => onChange()))
+  section.appendChild(button('설정 바꾸기', () => onChange(), saving))
+  if (saveFailed) section.appendChild(saveError())
   return section
 }
 
 // status 가 granted 나 denied 면 완료 상태, 그 밖에는 선택 화면이다.
-export function renderOnboarding(root, { status, showExample, exampleUrl, privacyUrl, onChoose, onExample, onChange, saveFailed }) {
+export function renderOnboarding(root, { status, showExample, exampleUrl, privacyUrl, onChoose, onExample, onChange, saveFailed, saving = false }) {
   root.replaceChildren()
 
   root.appendChild(intro())
@@ -133,7 +137,7 @@ export function renderOnboarding(root, { status, showExample, exampleUrl, privac
   root.appendChild(el('hr'))
 
   root.appendChild(
-    Object.hasOwn(DONE_COPY, status) ? doneSection({ status, onChange }) : choiceSection({ onChoose, saveFailed }),
+    Object.hasOwn(DONE_COPY, status) ? doneSection({ status, onChange, saving, saveFailed }) : choiceSection({ onChoose, saveFailed, saving }),
   )
 
   if (privacyUrl) {

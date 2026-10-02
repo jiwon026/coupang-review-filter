@@ -368,6 +368,78 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     expect(dispatched.responses).toHaveLength(1)
   })
 
+  it('저장에 성공하면 CONSENT_CHANGED 를 새 상태로 정확히 1건 알린다', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(T0)
+    const { chrome } = await loadBackground()
+    await dispatch(chrome, { type: 'crf:set-consent', status: 'granted', source: 'panel' }, extensionSender())
+      .response
+    await flush()
+
+    expect(chrome.__calls.runtimeSent).toEqual([
+      { type: 'crf:consent-changed', consent: { status: 'granted', decidedAt: T0 } },
+    ])
+
+    await dispatch(chrome, { type: 'crf:set-consent', status: 'denied', source: 'panel' }, extensionSender())
+      .response
+    await flush()
+    expect(chrome.__calls.runtimeSent).toHaveLength(2)
+    expect(chrome.__calls.runtimeSent[1].consent.status).toBe('denied')
+  })
+
+  it('검증 실패(잘못된 값, 콘텐츠 스크립트 발신)에서는 CONSENT_CHANGED 를 알리지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    await dispatch(chrome, { type: 'crf:set-consent', status: 'maybe', source: 'panel' }, extensionSender()).response
+    await dispatch(chrome, { type: 'crf:set-consent', status: 'granted', source: 'panel' }, contentScriptSender())
+      .response
+    await flush()
+    expect(chrome.__calls.runtimeSent).toHaveLength(0)
+  })
+
+  it('저장 실패에서는 CONSENT_CHANGED 를 알리지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    chrome.storage.local.set = () => Promise.reject(new Error('저장 실패'))
+    await dispatch(chrome, { type: 'crf:set-consent', status: 'granted', source: 'panel' }, extensionSender())
+      .response
+    await flush()
+    expect(chrome.__calls.runtimeSent).toHaveLength(0)
+  })
+
+  it.each([
+    ['동기 예외', () => { throw new Error('Extension context invalidated.') }],
+    ['Promise 거부(받는 쪽 없음)', () => Promise.reject(new Error('Could not establish connection. Receiving end does not exist.'))],
+  ])('알림 전송이 실패(%s)해도 응답, 제거 주소 갱신, Extension Installed 는 정상이다', async (_label, failing) => {
+    const { chrome, store } = await loadBackground({ crf_installed_at: T0 - 1000 })
+    vi.spyOn(Date, 'now').mockReturnValue(T0)
+    chrome.runtime.sendMessage = failing
+    const before = chrome.__calls.setUninstallURL.length
+
+    const dispatched = dispatch(
+      chrome,
+      { type: 'crf:set-consent', status: 'granted', source: 'panel' },
+      extensionSender(),
+    )
+    const response = await dispatched.response
+    await flush()
+
+    expect(response).toEqual({ consent: { status: 'granted', decidedAt: T0 } })
+    expect(dispatched.responses).toHaveLength(1)
+    expect(store.crf_consent.status).toBe('granted')
+    expect(chrome.__calls.setUninstallURL.length - before).toBe(1)
+    expect(sentOfType('Extension Installed')).toHaveLength(1)
+  })
+
+  it('백그라운드는 CONSENT_CHANGED 에 응답하지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    const dispatched = dispatch(
+      chrome,
+      { type: 'crf:consent-changed', consent: { status: 'granted', decidedAt: T0 } },
+      extensionSender(),
+    )
+    await flush()
+    expect(dispatched.returns.every((value) => value === false || value === undefined)).toBe(true)
+    expect(dispatched.responses).toHaveLength(0)
+  })
+
   it('GET_CONSENT 는 { consent } 로 응답한다', async () => {
     const { chrome } = await loadBackground()
     const dispatched = dispatch(chrome, { type: 'crf:get-consent' }, extensionSender())

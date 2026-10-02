@@ -282,3 +282,47 @@ describe('온보딩 소스 구조', () => {
     expect(css).not.toMatch(/primary|secondary|muted|ghost/i)
   })
 })
+
+describe('renderOnboarding: 저장 중', () => {
+  beforeEach(() => {
+    const dom = new JSDOM('<body><main id="root"></main></body>')
+    globalThis.document = dom.window.document
+    root = dom.window.document.getElementById('root')
+  })
+
+  const buttons = () => [...root.querySelectorAll('button')]
+  const options = (overrides) => ({
+    status: 'undecided',
+    showExample: true,
+    exampleUrl: EXAMPLE_URL,
+    privacyUrl: null,
+    onChoose: vi.fn(),
+    onExample: vi.fn(),
+    onChange: vi.fn(),
+    ...overrides,
+  })
+
+  it('선택 화면에서 saving 이면 두 선택 버튼이 disabled 다', () => {
+    renderOnboarding(root, options({ saving: true }))
+    expect(buttons().map((button) => button.disabled)).toEqual([true, true])
+  })
+
+  it('완료 화면에서 saving 이면 설정 바꾸기 버튼이 disabled 다', () => {
+    renderOnboarding(root, options({ status: 'granted', saving: true }))
+    expect(buttons().map((button) => button.disabled)).toEqual([true])
+  })
+
+  it('완료 화면에서도 saveFailed 이면 오류 문구를 보인다(저장 뒤 상태를 다시 읽은 경우)', () => {
+    renderOnboarding(root, options({ status: 'denied', saveFailed: true }))
+    expect(root.querySelector('[role="alert"]').textContent).toBe(SAVE_ERROR)
+    renderOnboarding(root, options({ status: 'denied', saveFailed: false }))
+    expect(root.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('saving 이 아니면 버튼이 모두 활성이다', () => {
+    renderOnboarding(root, options({ saving: false }))
+    expect(buttons().every((button) => !button.disabled)).toBe(true)
+    renderOnboarding(root, options({ status: 'denied' }))
+    expect(buttons().every((button) => !button.disabled)).toBe(true)
+  })
+})

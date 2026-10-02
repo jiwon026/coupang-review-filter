@@ -132,6 +132,12 @@ hr {
   background: var(--crf-surface-hover);
 }
 
+.choice:disabled {
+  background: var(--crf-surface);
+  opacity: 0.6;
+  cursor: default;
+}
+
 .done {
   font-weight: 600;
 }

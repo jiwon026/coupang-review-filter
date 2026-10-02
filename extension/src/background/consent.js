@@ -1,8 +1,6 @@
-export const CONSENT = {
-  GRANTED: 'granted',
-  DENIED: 'denied',
-  UNDECIDED: 'undecided',
-}
+import { CONSENT } from '../shared/consent-status.js'
+
+export { CONSENT }
 
 export const CONSENT_KEY = 'crf_consent'
 

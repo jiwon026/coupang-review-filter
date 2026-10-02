@@ -4,21 +4,35 @@ export const GET_CONSENT_TIMEOUT_MS = 2000
 export const SET_CONSENT_TIMEOUT_MS = 5000
 
 // timeoutMs 를 주면 그 안에 응답이 없을 때 거절한다. 주지 않으면 응답이 올 때까지 기다린다.
-export function request(message, { timeoutMs } = {}) {
+// 거절한 뒤에 정상 응답이 도착하면 onLate(response) 를 부른다. 호출부는 더 새로운 정보가 없을 때만 반영한다.
+export function request(message, { timeoutMs, onLate } = {}) {
   return new Promise((resolve, reject) => {
     let timer
+    let timedOut = false
     const finish = (settle, value) => {
       clearTimeout(timer)
       settle(value)
     }
 
     if (timeoutMs !== undefined) {
-      timer = setTimeout(() => reject(new Error('응답 시간이 지났습니다')), timeoutMs)
+      timer = setTimeout(() => {
+        timedOut = true
+        reject(new Error('응답 시간이 지났습니다'))
+      }, timeoutMs)
     }
 
     try {
       chrome.runtime.sendMessage(message, (response) => {
         const error = chrome.runtime.lastError
+        if (timedOut) {
+          if (error || typeof onLate !== 'function') return
+          try {
+            onLate(response)
+          } catch (lateError) {
+            console.warn('[체험단 필터] 늦은 응답을 처리하지 못했습니다:', lateError?.message)
+          }
+          return
+        }
         if (error) finish(reject, new Error(error.message))
         else finish(resolve, response)
       })

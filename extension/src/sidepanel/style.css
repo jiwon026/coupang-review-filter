@@ -93,3 +93,8 @@ h1 {
   margin-left: 12px;
   color: #1a5fd0;
 }
+
+.consent-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

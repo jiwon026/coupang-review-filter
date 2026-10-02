@@ -13,7 +13,7 @@ export function installChromeMock(initial = {}) {
   const listeners = []
   const removedListeners = []
   const installedListeners = []
-  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [], tabsCreate: [] }
+  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [], tabsCreate: [], runtimeSent: [] }
 
   const chrome = {
     storage: {
@@ -58,6 +58,11 @@ export function installChromeMock(initial = {}) {
         return Promise.resolve()
       },
       id: 'test-extension-id',
+      // 받는 쪽이 없으면 실제 크롬은 거절한다. 테스트가 필요하면 이 함수를 바꿔 끼운다.
+      sendMessage: (message) => {
+        calls.runtimeSent.push(message)
+        return Promise.resolve()
+      },
       getURL: (path = '') => `${EXTENSION_ORIGIN}${path}`,
       getManifest: () => ({ version: '0.1.0' }),
       onMessage: { addListener: (fn) => listeners.push(fn) },

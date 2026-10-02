@@ -11,6 +11,7 @@ let sent = []
 let document
 // 'hold' 응답은 콜백을 붙들어 두었다가 테스트가 원하는 때에 부른다.
 let held = {}
+let messageListeners = []
 
 // consent: GET_CONSENT 응답, variants: GET_VARIANT 응답, setConsent: SET_CONSENT 응답을 돌려주는 함수.
 // 값이 'none' 이면 콜백을 아예 부르지 않는다(응답이 오지 않는 상황).
@@ -25,13 +26,16 @@ async function loadOnboarding({
   document.addEventListener('click', (event) => event.preventDefault())
   sent = []
   held = {}
+  messageListeners = []
   const runtime = {
     lastError: undefined,
     sendMessage(message, callback) {
       sent.push(message)
       const reply =
         message?.type === 'crf:get-consent'
-          ? consent
+          ? typeof consent === 'function'
+            ? consent()
+            : consent
           : message?.type === 'crf:get-variant'
             ? variants
             : message?.type === 'crf:set-consent'
@@ -52,6 +56,7 @@ async function loadOnboarding({
       callback?.(reply)
       return undefined
     },
+    onMessage: { addListener: (fn) => messageListeners.push(fn) },
   }
   globalThis.chrome = { runtime }
   globalThis.document = document
@@ -59,6 +64,17 @@ async function loadOnboarding({
   await import('../extension/src/onboarding/index.js')
   await tick()
   return document.getElementById('root')
+}
+
+const deliver = (message, sender = {}) => {
+  for (const listener of messageListeners) listener(message, sender, () => {})
+}
+const changed = (status) => ({ type: 'crf:consent-changed', consent: { status, decidedAt: 5 } })
+
+// 문서의 가시성을 바꾸고 visibilitychange 를 낸다.
+function changeVisibility(state) {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+  document.dispatchEvent(new document.defaultView.Event('visibilitychange'))
 }
 
 const ofType = (type) => sent.filter((message) => message?.type === type)
@@ -107,7 +123,9 @@ describe('온보딩 배선: 로드', () => {
     vi.useFakeTimers()
     const dom = new JSDOM('<body><main id="root"></main></body>')
     globalThis.document = dom.window.document
-    globalThis.chrome = { runtime: { lastError: undefined, sendMessage: () => undefined } }
+    globalThis.chrome = {
+      runtime: { lastError: undefined, sendMessage: () => undefined, onMessage: { addListener() {} } },
+    }
     vi.resetModules()
     await import('../extension/src/onboarding/index.js')
     await vi.advanceTimersByTimeAsync(10_000)
@@ -212,14 +230,17 @@ describe('온보딩 배선: 두 응답을 따로 기다림', () => {
     expect(exampleLink(root)).toBeNull()
   })
 
-  it('늦게 도착한 동의 상태로도 다시 그리지 않는다', async () => {
+  it('늦게 도착한 동의 상태로는 다시 그리되 예시 링크 표시 여부는 그대로다', async () => {
     const root = await load({ consent: 'hold', variants: { variants: { onboarding_example: 'show' } } })
     await vi.advanceTimersByTimeAsync(2000)
     expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(exampleLink(root)).not.toBeNull()
 
     held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
     await vi.advanceTimersByTimeAsync(0)
-    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(buttonByText(root, '동의하고 시작')).toBeUndefined()
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
+    expect(exampleLink(root)).not.toBeNull()
   })
 
   it('두 응답이 모두 제때 오면 타임아웃을 기다리지 않고 바로 그린다', async () => {
@@ -513,5 +534,212 @@ describe('온보딩 배선: 예시 링크', () => {
     exampleLink(root).dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }))
     await tick()
     expect(ofType('crf:set-consent')).toHaveLength(0)
+  })
+})
+
+describe('온보딩 배선: 다른 곳에서 바뀐 동의', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('선택 화면에서 CONSENT_CHANGED denied 를 받으면 거절 완료 화면이 된다', async () => {
+    const root = await loadOnboarding()
+    deliver(changed('denied'))
+
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+    expect(buttonByText(root, '설정 바꾸기')).toBeTruthy()
+    expect(buttonByText(root, '동의하고 시작')).toBeUndefined()
+    expect(ofType('crf:track')).toHaveLength(0)
+  })
+
+  it('선택 화면에서 CONSENT_CHANGED granted 를 받으면 동의 완료 화면이고 Onboarding Viewed 는 1건이다', async () => {
+    const root = await loadOnboarding()
+    deliver(changed('granted'))
+    await tick()
+
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
+    expect(tracked('Onboarding Viewed')).toHaveLength(1)
+
+    deliver(changed('granted'))
+    await tick()
+    expect(tracked('Onboarding Viewed')).toHaveLength(1)
+  })
+
+  it('이 페이지에서 방금 저장한 상태와 같은 알림이 와도 Onboarding Viewed 는 1건이다', async () => {
+    const root = await loadOnboarding()
+    buttonByText(root, '동의하고 시작').click()
+    await tick()
+    deliver(changed('granted'))
+    await tick()
+
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
+    expect(tracked('Onboarding Viewed')).toHaveLength(1)
+  })
+
+  it('알림은 예시 링크 표시 여부를 바꾸지 않는다', async () => {
+    const shown = await loadOnboarding({ variants: { variants: { onboarding_example: 'show' } } })
+    deliver(changed('denied'))
+    expect(exampleLink(shown)).not.toBeNull()
+
+    const hidden = await loadOnboarding({ variants: { variants: { onboarding_example: 'hide' } } })
+    deliver(changed('denied'))
+    expect(exampleLink(hidden)).toBeNull()
+  })
+
+  it('설정 바꾸기로 선택 화면에 있을 때 같은 상태의 알림이 와도 선택 화면을 유지한다', async () => {
+    const root = await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } } })
+    buttonByText(root, '설정 바꾸기').click()
+    await tick()
+    deliver(changed('granted'))
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+  })
+
+  it('다른 상태의 알림이 오면 선택 화면에서도 그 상태의 완료 화면으로 바뀐다', async () => {
+    const root = await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } } })
+    buttonByText(root, '설정 바꾸기').click()
+    await tick()
+    deliver(changed('denied'))
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+  })
+
+  it.each([
+    ['탭에서 온 발신', changed('denied'), { tab: { id: 5 } }],
+    ['알 수 없는 상태', { type: 'crf:consent-changed', consent: { status: 'maybe' } }, {}],
+    ['consent 없음', { type: 'crf:consent-changed' }, {}],
+  ])('%s 의 CONSENT_CHANGED 는 무시한다', async (_label, message, sender) => {
+    const root = await loadOnboarding()
+    deliver(message, sender)
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+  })
+
+  it('페이지가 다시 보이면 GET_CONSENT 를 다시 묻고 응답 상태로 그린다', async () => {
+    let current = { consent: { status: 'undecided', decidedAt: null } }
+    const root = await loadOnboarding({ consent: () => current })
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+
+    current = { consent: { status: 'denied', decidedAt: 9 } }
+    changeVisibility('visible')
+    await tick()
+
+    expect(ofType('crf:get-consent')).toHaveLength(2)
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+  })
+
+  it('페이지가 숨겨질 때는 묻지 않고, 다시 읽기에 실패하면 화면을 유지한다', async () => {
+    let current = { consent: { status: 'undecided', decidedAt: null } }
+    const root = await loadOnboarding({ consent: () => current })
+    changeVisibility('hidden')
+    await tick()
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+
+    current = 'lastError'
+    changeVisibility('visible')
+    await tick()
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+  })
+
+  it('다시 읽은 granted 에서도 Onboarding Viewed 는 1건을 넘지 않는다', async () => {
+    let current = { consent: { status: 'undecided', decidedAt: null } }
+    await loadOnboarding({ consent: () => current })
+    current = { consent: { status: 'granted', decidedAt: 9 } }
+    changeVisibility('visible')
+    await tick()
+    changeVisibility('visible')
+    await tick()
+    expect(tracked('Onboarding Viewed')).toHaveLength(1)
+  })
+})
+
+describe('온보딩 배선: 늦게 온 응답과 저장 뒤 재확인', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('2초에 undecided 로 그리고 3초에 granted 응답이 오면 동의 완료 화면으로 바뀐다(Viewed 1건)', async () => {
+    const root = await loadOnboarding({ consent: 'hold', variants: { variants: { onboarding_example: 'show' } } })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+
+    await vi.advanceTimersByTimeAsync(1000)
+    held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
+    await tick()
+
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
+    expect(buttonByText(root, '설정 바꾸기')).toBeTruthy()
+    expect(tracked('Onboarding Viewed')).toHaveLength(1)
+  })
+
+  it('그 사이에 사용자가 denied 를 저장했다면 늦은 granted 응답이 화면을 바꾸지 않는다', async () => {
+    const root = await loadOnboarding({ consent: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    buttonByText(root, '통계 없이 사용').click()
+    await tick()
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+
+    held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
+    await tick()
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+    expect(tracked('Onboarding Viewed')).toHaveLength(0)
+  })
+
+  it('그 사이에 CONSENT_CHANGED 를 받았다면 늦은 응답은 화면을 바꾸지 않는다', async () => {
+    const root = await loadOnboarding({ consent: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    deliver(changed('denied'))
+    held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
+    await tick()
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+  })
+
+  it('늦게 온 변형 응답은 예시 링크를 나타나게 하지 않는다', async () => {
+    const root = await loadOnboarding({ variants: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    held['crf:get-variant']({ variants: { onboarding_example: 'show' } })
+    await tick()
+    expect(exampleLink(root)).toBeNull()
+  })
+
+  it('SET_CONSENT 가 시간 초과로 실패한 뒤 GET_CONSENT 를 다시 묻고 그 상태로 그리되 오류 문구는 남긴다', async () => {
+    let current = { consent: { status: 'undecided', decidedAt: null } }
+    const root = await loadOnboarding({ consent: () => current, setConsent: () => 'none' })
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+
+    // 응답은 늦었지만 저장은 됐다.
+    current = { consent: { status: 'denied', decidedAt: 7 } }
+    buttonByText(root, '통계 없이 사용').click()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(ofType('crf:get-consent')).toHaveLength(2)
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+    expect(root.textContent).toContain(SAVE_ERROR)
+  })
+
+  it('SET_CONSENT 진행 중에는 선택 버튼이 disabled 이고 끝나면 풀린다', async () => {
+    const root = await loadOnboarding({ setConsent: () => 'none' })
+    buttonByText(root, '동의하고 시작').click()
+    expect(buttonByText(root, '동의하고 시작').disabled).toBe(true)
+    expect(buttonByText(root, '통계 없이 사용').disabled).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(buttonByText(root, '동의하고 시작').disabled).toBe(false)
+    expect(buttonByText(root, '통계 없이 사용').disabled).toBe(false)
+  })
+
+  it('성공하면 완료 화면의 설정 바꾸기 버튼은 활성이다', async () => {
+    const root = await loadOnboarding()
+    buttonByText(root, '동의하고 시작').click()
+    await tick()
+    expect(buttonByText(root, '설정 바꾸기').disabled).toBe(false)
   })
 })

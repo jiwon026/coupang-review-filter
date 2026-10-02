@@ -57,6 +57,54 @@ describe('request', () => {
     expect(settled).toBe(false)
   })
 
+  describe('onLate', () => {
+    it('타임아웃 뒤에 도착한 응답을 onLate 로 넘긴다', async () => {
+      vi.useFakeTimers()
+      let held
+      mockRuntime((_message, callback) => {
+        held = callback
+      })
+      const late = vi.fn()
+      const settled = expect(request({ type: 'a' }, { timeoutMs: 1000, onLate: late })).rejects.toThrow()
+      await vi.advanceTimersByTimeAsync(1000)
+      await settled
+      expect(late).not.toHaveBeenCalled()
+
+      held({ consent: { status: 'granted' } })
+      expect(late).toHaveBeenCalledTimes(1)
+      expect(late).toHaveBeenCalledWith({ consent: { status: 'granted' } })
+    })
+
+    it('제때 온 응답에는 부르지 않는다', async () => {
+      mockRuntime((_message, callback) => callback({ ok: true }))
+      const late = vi.fn()
+      await request({ type: 'a' }, { timeoutMs: 1000, onLate: late })
+      expect(late).not.toHaveBeenCalled()
+    })
+
+    it('타임아웃 뒤 lastError 로 끝나면 부르지 않고, onLate 가 던져도 밖으로 새지 않는다', async () => {
+      vi.useFakeTimers()
+      let held
+      mockRuntime((_message, callback) => {
+        held = callback
+      })
+      const late = vi.fn(() => {
+        throw new Error('onLate 실패')
+      })
+      const settled = expect(request({ type: 'a' }, { timeoutMs: 1000, onLate: late })).rejects.toThrow()
+      await vi.advanceTimersByTimeAsync(1000)
+      await settled
+
+      globalThis.chrome.runtime.lastError = { message: 'closed' }
+      held(undefined)
+      globalThis.chrome.runtime.lastError = undefined
+      expect(late).not.toHaveBeenCalled()
+
+      expect(() => held({ ok: true })).not.toThrow()
+      expect(late).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('동의 요청의 대기 시간은 읽기 2초, 쓰기 5초다', () => {
     expect(GET_CONSENT_TIMEOUT_MS).toBe(2000)
     expect(SET_CONSENT_TIMEOUT_MS).toBe(5000)
