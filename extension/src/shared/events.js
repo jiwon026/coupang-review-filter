@@ -8,4 +8,6 @@ export const EVENTS = {
   PURCHASE_INTENT_CLICKED: 'Purchase Intent Clicked',
   EXTENSION_REMOVED: 'Extension Removed',
   EXTENSION_ERROR: 'Extension Error',
+  ONBOARDING_VIEWED: 'Onboarding Viewed',
+  ONBOARDING_EXAMPLE_CLICKED: 'Onboarding Example Clicked',
 }

@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { EVENTS } from '../extension/src/shared/events.js'
 
 describe('EVENTS', () => {
-  it('설계된 확장 이벤트 9개를 모두 정의한다', () => {
-    expect(Object.keys(EVENTS)).toHaveLength(9)
+  it('설계된 확장 이벤트 11개를 모두 정의한다', () => {
+    expect(Object.keys(EVENTS)).toHaveLength(11)
   })
 
   // 이벤트 이름은 앰플리튜드에 쌓인 데이터의 키다. 바꾸면 과거 데이터와 끊기므로 값 전체를 고정한다.
@@ -18,6 +18,8 @@ describe('EVENTS', () => {
       PURCHASE_INTENT_CLICKED: 'Purchase Intent Clicked',
       EXTENSION_REMOVED: 'Extension Removed',
       EXTENSION_ERROR: 'Extension Error',
+      ONBOARDING_VIEWED: 'Onboarding Viewed',
+      ONBOARDING_EXAMPLE_CLICKED: 'Onboarding Example Clicked',
     })
   })
 

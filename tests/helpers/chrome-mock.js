@@ -13,7 +13,7 @@ export function installChromeMock(initial = {}) {
   const listeners = []
   const removedListeners = []
   const installedListeners = []
-  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [] }
+  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [], tabsCreate: [] }
 
   const chrome = {
     storage: {
@@ -64,6 +64,10 @@ export function installChromeMock(initial = {}) {
       onInstalled: { addListener: (fn) => installedListeners.push(fn) },
     },
     tabs: {
+      create: (options) => {
+        calls.tabsCreate.push(options)
+        return Promise.resolve({ id: calls.tabsCreate.length })
+      },
       onRemoved: { addListener: (fn) => removedListeners.push(fn) },
     },
     sidePanel: {

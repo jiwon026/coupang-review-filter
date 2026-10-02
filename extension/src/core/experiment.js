@@ -1,6 +1,7 @@
 export const EXPERIMENTS = {
   DEFAULT_FILTER: { id: 'default_filter', variants: ['on', 'off'] },
   BANNER_COPY: { id: 'banner_copy', variants: ['rating', 'ratio'] },
+  ONBOARDING_EXAMPLE: { id: 'onboarding_example', variants: ['show', 'hide'] },
 }
 
 function hash(value) {

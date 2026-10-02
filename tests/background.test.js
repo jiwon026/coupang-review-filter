@@ -261,10 +261,10 @@ describe('background', () => {
     })
   })
 
-  it('GET_VARIANT 는 { variants: { default_filter, banner_copy } } 모양으로 응답한다', async () => {
+  it('GET_VARIANT 는 { variants: { default_filter, banner_copy, onboarding_example } } 모양으로 응답한다', async () => {
     const chrome = await loadBackground()
     const { variants } = await dispatch(chrome, { type: 'crf:get-variant' }).response
-    expect(Object.keys(variants).sort()).toEqual(['banner_copy', 'default_filter'])
+    expect(Object.keys(variants).sort()).toEqual(['banner_copy', 'default_filter', 'onboarding_example'])
   })
 
   it('GET_VARIANT 응답이 같은 device id 의 assignAll 과 같다', async () => {

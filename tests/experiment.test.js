@@ -15,15 +15,20 @@ describe('assign', () => {
     expect(VARIANTS).toContain(assign('device-abc', 'default_filter', VARIANTS))
   })
 
-  it('두 실험의 배정이 서로 독립적이다', () => {
+  // 실험 쌍마다 배정이 어긋나는지 본다. 두 실험이 같은 비트를 보면 일치율이 50% 에서 벗어난다.
+  it.each([
+    ['default_filter', ['on', 'off'], 'banner_copy', ['rating', 'ratio']],
+    ['default_filter', ['on', 'off'], 'onboarding_example', ['show', 'hide']],
+    ['banner_copy', ['rating', 'ratio'], 'onboarding_example', ['show', 'hide']],
+  ])('두 실험의 배정이 서로 독립적이다: %s 와 %s', (idA, variantsA, idB, variantsB) => {
     const total = 2000
     let agree = 0
 
     for (let i = 0; i < total; i += 1) {
       const deviceId = `device-${i}-${(i * 7919) % 100003}`
-      const filterOn = assign(deviceId, 'default_filter', ['on', 'off']) === 'on'
-      const copyRating = assign(deviceId, 'banner_copy', ['rating', 'ratio']) === 'rating'
-      if (filterOn === copyRating) agree += 1
+      const first = assign(deviceId, idA, variantsA) === variantsA[0]
+      const second = assign(deviceId, idB, variantsB) === variantsB[0]
+      if (first === second) agree += 1
     }
 
     const agreementRate = agree / total
@@ -45,6 +50,20 @@ describe('assign', () => {
     expect(EXPERIMENTS.DEFAULT_FILTER.id).toBe('default_filter')
     expect(EXPERIMENTS.DEFAULT_FILTER.variants).toEqual(['on', 'off'])
   })
+
+  it('ONBOARDING_EXAMPLE 실험이 정의되어 있다', () => {
+    expect(EXPERIMENTS.ONBOARDING_EXAMPLE).toEqual({ id: 'onboarding_example', variants: ['show', 'hide'] })
+  })
+
+  it('1000명 기준 onboarding_example 분포가 45%에서 55% 사이다', () => {
+    let showCount = 0
+    for (let i = 0; i < 1000; i += 1) {
+      const deviceId = `device-${i}-${(i * 7919) % 100003}`
+      if (assign(deviceId, 'onboarding_example', ['show', 'hide']) === 'show') showCount += 1
+    }
+    expect(showCount).toBeGreaterThan(450)
+    expect(showCount).toBeLessThan(550)
+  })
 })
 
 describe('assignAll', () => {
@@ -52,7 +71,7 @@ describe('assignAll', () => {
 
   it('모든 실험 id를 키로 한 배정을 돌려준다', () => {
     const result = assignAll('device-abc')
-    expect(Object.keys(result).sort()).toEqual(['banner_copy', 'default_filter'])
+    expect(Object.keys(result).sort()).toEqual(['banner_copy', 'default_filter', 'onboarding_example'])
   })
 
   it('각 값이 assign 의 결과와 같다', () => {
@@ -64,7 +83,7 @@ describe('assignAll', () => {
     }
   })
 
-  it('입력 집합에서 두 실험 모두 두 변형이 실제로 나온다', () => {
+  it('입력 집합에서 모든 실험이 모든 변형으로 나뉜다', () => {
     for (const experiment of Object.values(EXPERIMENTS)) {
       const seen = new Set(deviceIds.map((deviceId) => assignAll(deviceId)[experiment.id]))
       expect([...seen].sort()).toEqual([...experiment.variants].sort())

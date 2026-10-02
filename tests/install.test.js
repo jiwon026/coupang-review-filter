@@ -157,6 +157,92 @@ describe('설치', () => {
   })
 })
 
+describe('설치 직후 온보딩', () => {
+  const ONBOARDING_URL = `${EXTENSION_ORIGIN}src/onboarding/index.html`
+
+  beforeEach(() => {
+    mockSite.landingOrigin = 'https://landing.test'
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('reason 이 install 이면 온보딩 페이지를 탭으로 1회 연다', async () => {
+    const { chrome } = await loadBackground({}, 'undecided')
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+
+    await fireInstalled(chrome, { reason: 'install' })
+
+    expect(chrome.__calls.tabsCreate).toEqual([{ url: ONBOARDING_URL }])
+  })
+
+  it('온보딩을 열어도 아무것도 보내지 않는다', async () => {
+    const { chrome } = await loadBackground({}, 'undecided')
+    await fireInstalled(chrome, { reason: 'install' })
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('reason 이 update 면 온보딩을 열지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    await fireInstalled(chrome, { reason: 'update' })
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+  })
+
+  it('reason 이 chrome_update 면 온보딩을 열지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    await fireInstalled(chrome, { reason: 'chrome_update' })
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+  })
+
+  it('설치 시각 저장과 제거 주소 설정을 마친 뒤에 연다', async () => {
+    const { chrome, store } = await loadBackground()
+    const seen = []
+    chrome.tabs.create = (options) => {
+      seen.push({
+        installedAtSaved: typeof store.crf_installed_at === 'number',
+        uninstallUrlCalls: chrome.__calls.setUninstallURL.length,
+      })
+      chrome.__calls.tabsCreate.push(options)
+      return Promise.resolve({ id: 1 })
+    }
+    const uninstallCallsBefore = chrome.__calls.setUninstallURL.length
+
+    await fireInstalled(chrome, { reason: 'install' })
+
+    expect(seen).toEqual([{ installedAtSaved: true, uninstallUrlCalls: uninstallCallsBefore + 1 }])
+  })
+
+  it('tabs.create 가 거부돼도 handleInstalled 는 던지지 않고 경고만 한다', async () => {
+    await loadBackground()
+    chrome.tabs.create = () => Promise.reject(new Error('탭 열기 거부'))
+    const { handleInstalled } = await import('../extension/src/background/lifecycle.js')
+
+    await expect(handleInstalled({ reason: 'install' })).resolves.toBeUndefined()
+    expect(console.warn).toHaveBeenCalled()
+  })
+
+  it('tabs.create 가 동기적으로 던져도 handleInstalled 는 던지지 않는다', async () => {
+    await loadBackground()
+    chrome.tabs.create = () => {
+      throw new Error('탭 열기 예외')
+    }
+    const { handleInstalled } = await import('../extension/src/background/lifecycle.js')
+
+    await expect(handleInstalled({ reason: 'install' })).resolves.toBeUndefined()
+    expect(console.warn).toHaveBeenCalled()
+  })
+
+  it('설치 시각 저장이 실패해도 온보딩은 열린다', async () => {
+    const { chrome } = await loadBackground({}, 'undecided')
+    chrome.storage.local.set = () => Promise.reject(new Error('저장 실패'))
+    await fireInstalled(chrome, { reason: 'install' })
+    expect(chrome.__calls.tabsCreate).toHaveLength(1)
+  })
+})
+
 describe('제거 주소', () => {
   beforeEach(() => {
     mockSite.landingOrigin = 'https://landing.test'

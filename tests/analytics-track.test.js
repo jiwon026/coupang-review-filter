@@ -43,10 +43,11 @@ describe('track 의 실험 배정 공통 프로퍼티', () => {
     vi.restoreAllMocks()
   })
 
-  it('exp_default_filter 와 exp_banner_copy 를 모든 이벤트에 싣는다', async () => {
+  it('exp_default_filter, exp_banner_copy, exp_onboarding_example 을 모든 이벤트에 싣는다', async () => {
     const props = await trackedProps('device-abc')
     expect(['on', 'off']).toContain(props.exp_default_filter)
     expect(['rating', 'ratio']).toContain(props.exp_banner_copy)
+    expect(['show', 'hide']).toContain(props.exp_onboarding_example)
   })
 
   it('값이 같은 device id 의 assignAll 결과와 같다', async () => {
@@ -56,8 +57,10 @@ describe('track 의 실험 배정 공통 프로퍼티', () => {
       const assigned = assignAll(deviceId)
       expect(props.exp_default_filter).toBe(assigned.default_filter)
       expect(props.exp_banner_copy).toBe(assigned.banner_copy)
+      expect(props.exp_onboarding_example).toBe(assigned.onboarding_example)
       seen.default_filter.add(props.exp_default_filter)
       seen.banner_copy.add(props.exp_banner_copy)
+      seen.onboarding_example.add(props.exp_onboarding_example)
     }
     // 한 변형만 나오는 입력 집합이면 위 비교는 두 변형의 일관성을 보지 못한다(공허 방지).
     for (const experiment of Object.values(EXPERIMENTS)) {
@@ -69,11 +72,13 @@ describe('track 의 실험 배정 공통 프로퍼티', () => {
     const props = await trackedProps('device-abc', {
       exp_default_filter: 'x',
       exp_banner_copy: 'x',
+      exp_onboarding_example: 'x',
       surface: 'x',
     })
     const assigned = assignAll('device-abc')
     expect(props.exp_default_filter).toBe(assigned.default_filter)
     expect(props.exp_banner_copy).toBe(assigned.banner_copy)
+    expect(props.exp_onboarding_example).toBe(assigned.onboarding_example)
     expect(props.surface).toBe('extension')
   })
 

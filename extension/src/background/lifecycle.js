@@ -3,6 +3,7 @@ import { getDeviceId, getInstalledAt, setInstalledAt } from './identity.js'
 import { isCollectionAllowed } from './consent.js'
 
 const LOG_PREFIX = '[체험단 필터]'
+const ONBOARDING_PATH = 'src/onboarding/index.html'
 
 function warn(message, error) {
   console.warn(`${LOG_PREFIX} ${message}`, error?.message ?? error)
@@ -45,6 +46,15 @@ async function applyUninstallUrl() {
   }
 }
 
+// 설치 직후 동의를 받는 온보딩 탭을 연다. tabs.create 는 tabs 권한이 필요 없다. 실패해도 설치 처리는 이어간다.
+async function openOnboarding() {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL(ONBOARDING_PATH) })
+  } catch (error) {
+    warn('온보딩 페이지를 열지 못했습니다:', error)
+  }
+}
+
 export async function handleInstalled(details) {
   if (details?.reason !== 'install') return
 
@@ -57,4 +67,6 @@ export async function handleInstalled(details) {
   // configureUninstallUrl 은 실패를 스스로 삼킨다. 설치 시각이 주소에 실리도록 저장 뒤에 부른다.
   // 설치 순간에는 동의가 없으므로 이벤트를 보내지 않는다. Extension Installed 는 처음 동의할 때 보낸다.
   await configureUninstallUrl()
+
+  await openOnboarding()
 }
