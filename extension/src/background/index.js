@@ -42,7 +42,7 @@ chrome.sidePanel
 
 const CONSENT_SOURCES = ['onboarding', 'panel']
 
-// 확장 페이지(온보딩, 사이드 패널)에서 온 메시지만 동의를 바꿀 수 있다. 콘텐츠 스크립트의 sender.url 은 쿠팡 주소다.
+// 확장 페이지(온보딩, 사이드 패널)에서 온 메시지만 동의를 바꿀 수 있고 기기 번호를 받을 수 있다. 콘텐츠 스크립트의 sender.url 은 쿠팡 주소다.
 function isFromExtensionPage(sender) {
   return typeof sender?.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
 }
@@ -60,9 +60,11 @@ async function secondsSinceInstall(at) {
 // 페이지(패널, 온보딩)에 돌려주는 동의 상태. 익명 기기 번호는 통계 삭제 요청에 쓰도록 화면에 보여 줄 값이다.
 // 한 번이라도 동의한 적이 있을 때만 싣는다. 동의한 적이 없으면 보낸 통계가 없으므로 번호를 읽지도(없으면 새로 만들지도) 않는다.
 // 번호를 읽지 못하면 null 로 둔다. 던지지 않는다.
-async function consentForPage({ status, decidedAt, everGranted }) {
+// trusted 는 받는 쪽이 확장 페이지인지다. 저장소를 TRUSTED_CONTEXTS 로 닫아 세운 경계를 응답이 우회하지 않도록,
+// 콘텐츠 스크립트(쿠팡 페이지 안에서 도는 코드) 같은 다른 발신자에게는 상태만 주고 번호는 주지 않는다.
+async function consentForPage({ status, decidedAt, everGranted }, { trusted }) {
   let deviceId = null
-  if (everGranted === true) {
+  if (trusted === true && everGranted === true) {
     try {
       deviceId = await getDeviceId()
     } catch (error) {
@@ -172,8 +174,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === MESSAGES.GET_CONSENT) {
+    const trusted = isFromExtensionPage(sender)
     getConsent()
-      .then(consentForPage)
+      .then((consent) => consentForPage(consent, { trusted }))
       .then(
         (consent) => sendResponse({ consent }),
         (error) => {
@@ -201,7 +204,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           // 패널이나 온보딩 탭이 이미 닫혀 sendResponse 가 던져도 Extension Installed 와 제거 주소 갱신은 빠지면 안 된다.
           // 후속 처리를 먼저 시작하고 알림과 응답은 그 뒤에 보낸다. 응답 예외는 아래 catch 가 경고한다.
           const followUp = afterConsentChange(result, source)
-          const consent = await consentForPage(result)
+          // 이 응답과 알림은 위에서 발신자를 확인한 확장 페이지로만 간다.
+          const consent = await consentForPage(result, { trusted: true })
           announceConsent(consent)
           sendResponse({ consent })
           return followUp

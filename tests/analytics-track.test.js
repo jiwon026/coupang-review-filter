@@ -301,6 +301,39 @@ describe('track 의 최소 수집 두 번째 방어선', () => {
     expect(body).not.toContain('리뷰 본문')
   })
 
+  // 콘텐츠 스크립트가 이미 걸러 보내지만, 메시지는 신뢰 경계 밖에서 오므로 백그라운드가 한 번 더 본다.
+  it.each([
+    ['공백과 숫자가 섞인 문자열', '리뷰 본문 7590830589'],
+    ['41자', 'A'.repeat(41)],
+    ['빈 문자열', ''],
+    ['숫자', 7590830589],
+    ['null', null],
+    ['객체', { text: '리뷰 본문' }],
+  ])('track 에 고정된 모양이 아닌 error_name(%s)이 들어오면 Unknown 으로 바꿔 보낸다', async (_label, value) => {
+    const { track } = await loadTrack('device-abc')
+    await track('Extension Error', { error_type: 'RenderException', error_name: value })
+
+    expect(sent).toHaveLength(1)
+    const props = sent[0].events[0].event_properties
+    expect(props.error_name).toBe('Unknown')
+    expect(props.error_type).toBe('RenderException')
+    const body = JSON.stringify(sent[0])
+    expect(body).not.toContain('7590830589')
+    expect(body).not.toContain('리뷰 본문')
+  })
+
+  it('영문자만 1~40자인 error_name 은 그대로 보낸다', async () => {
+    for (const name of ['TypeError', 'A'.repeat(40)]) {
+      const props = await trackedProps('device-abc', { error_type: 'RenderException', error_name: name })
+      expect(props.error_name).toBe(name)
+    }
+  })
+
+  it('error_name 이 없는 이벤트에는 키를 만들지 않는다', async () => {
+    const props = await trackedProps('device-abc', { error_type: 'ReviewContainerNotFound' })
+    expect('error_name' in props).toBe(false)
+  })
+
   it('표에 없는 _id 접미사 키는 제거하고 키 이름만 경고한다(실패 시 닫힘)', async () => {
     const props = await trackedProps('device-abc', {
       review_sort: 'best',

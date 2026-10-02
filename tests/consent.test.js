@@ -634,6 +634,63 @@ describe('동의 응답의 기기 번호(deviceId)', () => {
     expect(dispatched.responses).toHaveLength(1)
   })
 
+  // 저장소는 TRUSTED_CONTEXTS 로 닫혀 있다. 이 응답이 그 경계를 우회해 쿠팡 페이지 안의 코드에 번호를 주면 안 된다.
+  describe('GET_CONSENT 의 발신자', () => {
+    const everGranted = (status) => ({ crf_consent: { status, decidedAt: T0, everGranted: true } })
+    const getConsentFrom = (chrome, sender) => dispatch(chrome, { type: 'crf:get-consent' }, sender)
+
+    it.each(['granted', 'denied'])('확장 페이지 발신에는 번호를 준다(%s)', async (status) => {
+      const { chrome } = await loadBackground(everGranted(status))
+      expect((await getConsentFrom(chrome, extensionSender()).response).consent).toEqual({
+        status,
+        decidedAt: T0,
+        deviceId: 'dev-1',
+      })
+    })
+
+    it('탭으로 열린 확장 페이지(온보딩) 발신에도 번호를 준다', async () => {
+      const { chrome } = await loadBackground(everGranted('granted'))
+      const response = await getConsentFrom(chrome, extensionSender({ tab: { id: 9, windowId: 1 } })).response
+      expect(response.consent.deviceId).toBe('dev-1')
+    })
+
+    it.each(['granted', 'denied'])(
+      '콘텐츠 스크립트 발신에는 deviceId 가 null 이고 status 와 decidedAt 은 그대로 준다(%s)',
+      async (status) => {
+        const { chrome } = await loadBackground(everGranted(status))
+        const dispatched = getConsentFrom(chrome, contentScriptSender())
+        const response = await dispatched.response
+        await flush()
+
+        expect(response).toEqual({ consent: { status, decidedAt: T0, deviceId: null } })
+        expect(dispatched.responses).toHaveLength(1)
+        expect(JSON.stringify(response)).not.toContain('dev-1')
+      },
+    )
+
+    it.each([
+      ['다른 확장 id 의 주소', { id: 'other-extension-id', url: 'chrome-extension://other-extension-id/src/sidepanel/index.html' }],
+      ['id 가 같은 접두사로 시작하는 다른 확장', { url: 'chrome-extension://test-extension-id-evil/src/sidepanel/index.html' }],
+      ['주소 없는 발신자', { id: 'test-extension-id' }],
+      ['발신자 없음', undefined],
+    ])('%s 에는 deviceId 가 null 이다', async (_label, sender) => {
+      const { chrome } = await loadBackground(everGranted('granted'))
+      const response = await getConsentFrom(chrome, sender).response
+      expect(response.consent).toEqual({ status: 'granted', decidedAt: T0, deviceId: null })
+    })
+
+    it('콘텐츠 스크립트 발신에는 기기 번호를 읽지도 만들지도 않는다', async () => {
+      const { chrome, store } = await loadBackground(everGranted('denied'))
+      delete store.crf_device_id
+
+      const response = await getConsentFrom(chrome, contentScriptSender()).response
+      await flush()
+
+      expect(response.consent.deviceId).toBeNull()
+      expect('crf_device_id' in store).toBe(false)
+    })
+  })
+
   it('기기 번호는 이벤트 프로퍼티에 새로 실리지 않는다', async () => {
     const { chrome } = await loadBackground()
     await setConsentReply(chrome, 'granted')

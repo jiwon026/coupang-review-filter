@@ -180,6 +180,34 @@ describe('렌더 예외 보고', () => {
     expect(events[1].properties.product_id).toBe('999')
   })
 
+  // 오류 이름도 페이지가 정할 수 있는 문자열이다. 영문자만 1~40자일 때만 그대로 보낸다.
+  it.each([
+    ['공백과 숫자가 섞인 이름', '리뷰 본문 7590830589'],
+    ['41자 이름', 'A'.repeat(41)],
+    ['빈 이름', ''],
+    ['문자열이 아닌 이름', { toString: () => 'TypeError' }],
+  ])('오류 이름이 고정된 모양이 아니면(%s) Unknown 으로 보낸다', async (_label, name) => {
+    const error = new Error('렌더가 깨졌습니다')
+    error.name = name
+    globalThis.__crfRenderError = error
+    await boot(fixture)
+
+    const events = errorEvents('RenderException')
+    expect(events).toHaveLength(1)
+    expect(events[0].properties.error_name).toBe('Unknown')
+    expect(JSON.stringify(events[0])).not.toContain('7590830589')
+    expect(JSON.stringify(events[0])).not.toContain('리뷰 본문')
+  })
+
+  it('영문자만으로 된 사용자 정의 오류 이름은 그대로 보낸다', async () => {
+    const error = new Error('렌더가 깨졌습니다')
+    error.name = 'SelectorMissingError'
+    globalThis.__crfRenderError = error
+    await boot(fixture)
+
+    expect(errorEvents('RenderException')[0].properties.error_name).toBe('SelectorMissingError')
+  })
+
   it('이름이 없는 값을 던져도 기본 이름으로 보내고 error_message 키는 없다', async () => {
     globalThis.__crfRenderError = { toString: () => 'x' }
     await boot(fixture)
