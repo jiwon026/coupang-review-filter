@@ -124,7 +124,7 @@ https://crf-review-remover.vercel.app/privacy
 
 ## 제출 뒤에 적을 것
 
-- 확장 ID:
-- 스토어 주소:
+- 확장 ID: `diefbidjmimlnigjmkdbghjdhokhhpdk`
+- 스토어 주소: https://chromewebstore.google.com/detail/diefbidjmimlnigjmkdbghjdhokhhpdk (심사 통과 뒤 열린다)
 - 제출일: 2026-10-02 (버전 1.0.0, 홈페이지 URL 은 https://crf-review-remover.vercel.app, 공식 URL 과 지원 URL 은 비움)
 - 심사 결과와 날짜:

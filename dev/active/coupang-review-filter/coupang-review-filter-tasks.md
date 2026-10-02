@@ -72,7 +72,7 @@ Last Updated: 2026-10-02 (계획 3a 코드 완료)
   - [x] landingOrigin 설정, npm run package, zip 검사
   - [x] 실브라우저 스모크 전부 통과(동의 전 0건, 발신자 검사, 화면 동기화, product_key, 철회 후 0건, 제거 시 조각 보존과 Extension Removed)
   - [x] 스크린샷 4장(1280x800), 업로드, 등록 자료 입력, 제출
-  - [ ] 확장 ID 와 스토어 주소를 docs/store/listing.md 에 기록 (사용자에게 받기)
+  - [x] 확장 ID `diefbidjmimlnigjmkdbghjdhokhhpdk` 와 스토어 주소를 docs/store/listing.md 에 기록
   - [ ] 심사 결과 확인(보통 며칠, 길면 1~2주). 반려되면 사유를 보고 대응
 
 ## 계획 3b: 랜딩 (심사 대기 중에, 시작할 때 계획 작성) ← 다음은 여기

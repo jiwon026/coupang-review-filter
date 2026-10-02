@@ -6,7 +6,7 @@ Last Updated: 2026-10-02 (웹스토어 제출 완료)
 
 **확장 1.0.0 을 2026-10-02 에 크롬 웹스토어 심사에 제출했다. 지금은 심사 대기 중이다.**
 
-1. 사용자에게 확장 ID 와 스토어 주소를 받아 `docs/store/listing.md` 에 적는다
+1. 확장 ID 는 `diefbidjmimlnigjmkdbghjdhokhhpdk`, 스토어 주소는 https://chromewebstore.google.com/detail/diefbidjmimlnigjmkdbghjdhokhhpdk (심사 통과 뒤 열린다). `docs/store/listing.md` 에 기록됨
 2. 심사를 기다리는 동안 계획 3b(본격적인 랜딩)를 시작한다. 계획 문서부터 쓴다(`docs/superpowers/plans/2026-10-02-store-submission.md` 끝의 로드맵 참고). 범위는 사용자와 먼저 합의
 3. 심사 결과가 오면: 통과면 스토어 주소를 랜딩의 설치 버튼에 넣는다. 반려면 사유를 보고 대응한다. 구매 버튼 클릭 수집의 목적을 묻는 반려가 가장 가능성 높고, 그 경우 구매 의도 이벤트를 빼고 재제출하는 길이 있다
 
