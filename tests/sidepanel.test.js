@@ -3,6 +3,10 @@ import { JSDOM } from 'jsdom'
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const SAVE_ERROR = '설정을 저장하지 못했습니다. 다시 시도해 주세요.'
+const ONBOARDING_URL = 'chrome-extension://test-extension-id/src/onboarding/index.html'
+const grantedReply = { consent: { status: 'granted', decidedAt: 1 } }
+
 const summaryFor = (total) => ({
   total,
   sponsoredCount: 3,
@@ -16,13 +20,27 @@ const summaryFor = (total) => ({
 let sent = []
 let messageListeners = []
 let activatedListeners = []
+let created = []
+let document
+
+// 가짜 타이머를 쓰는 테스트는 tick 대신 이것으로 대기열을 비운다.
+const settle = () => (vi.isFakeTimers() ? vi.advanceTimersByTimeAsync(0) : tick())
 
 // trigger: CONSUME_PANEL_TRIGGER 에 돌려줄 응답. 'lastError' 면 응답 없이 lastError 를 설정한 채 부른다.
-async function loadPanel({ trigger = { trigger: 'banner' }, summaries = { 5: summaryFor(10) }, getCurrent } = {}) {
-  const dom = new JSDOM('<body><main id="root"></main></body>')
+// consent: GET_CONSENT 응답, setConsent: SET_CONSENT 응답을 돌려주는 함수. 'none' 이면 콜백을 부르지 않는다.
+async function loadPanel({
+  trigger = { trigger: 'banner' },
+  summaries = { 5: summaryFor(10) },
+  getCurrent,
+  consent = grantedReply,
+  setConsent = (message) => ({ consent: { status: message.status, decidedAt: 2 } }),
+} = {}) {
+  const dom = new JSDOM('<body><main id="root"></main><footer id="consent"></footer></body>')
+  document = dom.window.document
   sent = []
   messageListeners = []
   activatedListeners = []
+  created = []
   const runtime = {
     lastError: undefined,
     sendMessage(message, callback) {
@@ -37,13 +55,30 @@ async function loadPanel({ trigger = { trigger: 'banner' }, summaries = { 5: sum
           callback?.(trigger)
         }
       }
+      if (message?.type === 'crf:get-consent') reply(consent, callback)
+      if (message?.type === 'crf:set-consent') reply(setConsent(message), callback)
       return undefined
     },
+    getURL: (path = '') => `chrome-extension://test-extension-id/${path}`,
     onMessage: { addListener: (fn) => messageListeners.push(fn) },
+  }
+  function reply(value, callback) {
+    if (value === 'none') return
+    if (value === 'lastError') {
+      runtime.lastError = { message: 'Receiving end does not exist.' }
+      callback?.(undefined)
+      runtime.lastError = undefined
+      return
+    }
+    callback?.(value)
   }
   globalThis.chrome = {
     runtime,
     tabs: {
+      create: (options) => {
+        created.push(options)
+        return Promise.resolve({ id: 99 })
+      },
       query: async () => [{ id: 5, windowId: 2 }],
       onActivated: { addListener: (fn) => activatedListeners.push(fn) },
     },
@@ -52,9 +87,13 @@ async function loadPanel({ trigger = { trigger: 'banner' }, summaries = { 5: sum
   globalThis.document = dom.window.document
   vi.resetModules()
   await import('../extension/src/sidepanel/index.js')
-  await tick()
+  await settle()
   return dom.window.document.getElementById('root')
 }
+
+const consentBox = () => document.getElementById('consent')
+const buttonByText = (text) => [...consentBox().querySelectorAll('button')].find((button) => button.textContent === text)
+const ofType = (type) => sent.filter((message) => message?.type === type)
 
 function panelOpened() {
   return sent.filter((message) => message?.type === 'crf:track' && message.eventType === 'Panel Opened')
@@ -125,5 +164,222 @@ describe('사이드 패널 배선', () => {
     await tick()
     expect(sent.filter((message) => message?.type === 'crf:get-summary')).toHaveLength(2)
     expect(panelOpened()).toHaveLength(1)
+  })
+})
+
+describe('사이드 패널 배선: 동의 구역', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('로드하면 GET_CONSENT 를 1건 묻고 응답 상태를 그린다', async () => {
+    await loadPanel({ consent: grantedReply })
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(buttonByText('보내지 않기')).toBeTruthy()
+  })
+
+  it('요약은 root 에, 동의 구역은 별도 컨테이너에 그린다', async () => {
+    const root = await loadPanel()
+    expect(root.textContent).toContain('체험단 제외 평점')
+    expect(root.textContent).not.toContain('익명 사용 통계')
+    expect(consentBox().textContent).not.toContain('체험단 제외 평점')
+  })
+
+  it('요약이 없는 탭에서도 동의 구역을 그린다', async () => {
+    const root = await loadPanel({ summaries: {} })
+    expect(root.textContent).toContain('리뷰 영역까지 스크롤')
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+  })
+
+  it('보내지 않기를 누르면 SET_CONSENT denied(source panel)를 보내고 응답 상태로 다시 그린다', async () => {
+    await loadPanel({ consent: grantedReply })
+    buttonByText('보내지 않기').click()
+    await settle()
+
+    expect(ofType('crf:set-consent')).toEqual([{ type: 'crf:set-consent', status: 'denied', source: 'panel' }])
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+    expect(buttonByText('보내기')).toBeTruthy()
+    expect(consentBox().textContent).not.toContain(SAVE_ERROR)
+  })
+
+  it('보내기를 누르면 SET_CONSENT granted(source panel)를 보내고 응답 상태로 다시 그린다', async () => {
+    await loadPanel({ consent: { consent: { status: 'denied', decidedAt: 1 } } })
+    buttonByText('보내기').click()
+    await settle()
+
+    expect(ofType('crf:set-consent')).toEqual([{ type: 'crf:set-consent', status: 'granted', source: 'panel' }])
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+  })
+
+  it('그리는 상태는 보낸 값이 아니라 응답의 상태다', async () => {
+    await loadPanel({
+      consent: grantedReply,
+      setConsent: () => ({ consent: { status: 'granted', decidedAt: 3 } }),
+    })
+    buttonByText('보내지 않기').click()
+    await settle()
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+  })
+
+  it('undecided 이면 자세히 보고 고르기가 온보딩 페이지를 새 탭으로 열고 SET_CONSENT 는 보내지 않는다', async () => {
+    await loadPanel({ consent: { consent: { status: 'undecided', decidedAt: null } } })
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보낼지 아직 고르지 않았습니다')
+
+    buttonByText('자세히 보고 고르기').click()
+    await settle()
+
+    expect(created).toEqual([{ url: ONBOARDING_URL }])
+    expect(ofType('crf:set-consent')).toHaveLength(0)
+  })
+
+  it('읽기 실패 표지가 붙은 응답이나 이상한 응답은 undecided 로 그린다', async () => {
+    await loadPanel({ consent: { consent: { status: 'undecided', decidedAt: null }, error: 'failed' } })
+    expect(buttonByText('자세히 보고 고르기')).toBeTruthy()
+
+    await loadPanel({ consent: {} })
+    expect(buttonByText('자세히 보고 고르기')).toBeTruthy()
+
+    await loadPanel({ consent: 'lastError' })
+    expect(buttonByText('자세히 보고 고르기')).toBeTruthy()
+  })
+
+  it('SUMMARY_UPDATED 로 요약이 갱신돼도 동의 구역은 그대로 남는다', async () => {
+    const root = await loadPanel({ summaries: { 5: summaryFor(10) } })
+    const before = consentBox().firstChild
+
+    deliver({ type: 'crf:summary-updated', summary: summaryFor(40) }, { tab: { id: 5 } })
+
+    expect(root.textContent).toContain('리뷰 40개 기준')
+    expect(consentBox().firstChild).toBe(before)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(buttonByText('보내지 않기')).toBeTruthy()
+  })
+
+  it('동의를 바꾼 뒤 요약이 갱신돼도 바뀐 상태가 유지된다', async () => {
+    const root = await loadPanel()
+    buttonByText('보내지 않기').click()
+    await settle()
+    deliver({ type: 'crf:summary-updated', summary: summaryFor(40) }, { tab: { id: 5 } })
+
+    expect(root.textContent).toContain('리뷰 40개 기준')
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+  })
+
+  it('탭을 옮겨 요약을 다시 읽어도 동의 구역은 남고 GET_CONSENT 는 다시 묻지 않는다', async () => {
+    await loadPanel()
+    for (const listener of activatedListeners) listener({ tabId: 5 })
+    await settle()
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(ofType('crf:get-consent')).toHaveLength(1)
+  })
+
+  it.each([
+    ['invalid', () => ({ error: 'invalid' })],
+    ['failed', () => ({ error: 'failed' })],
+    ['응답 없음(lastError)', () => 'lastError'],
+    ['consent 없는 응답', () => ({})],
+    ['error 와 consent 가 함께 온 응답', () => ({ error: 'failed', consent: { status: 'denied', decidedAt: 1 } })],
+  ])('SET_CONSENT 가 실패(%s)하면 오류 문구를 보이고 이전 상태를 유지한다', async (_label, setConsent) => {
+    await loadPanel({ consent: grantedReply, setConsent })
+    buttonByText('보내지 않기').click()
+    await settle()
+
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(buttonByText('보내지 않기')).toBeTruthy()
+  })
+
+  it('실패 뒤 다시 눌러 성공하면 오류 문구가 사라진다', async () => {
+    let calls = 0
+    await loadPanel({
+      consent: grantedReply,
+      setConsent: (message) =>
+        ++calls === 1 ? { error: 'failed' } : { consent: { status: message.status, decidedAt: 2 } },
+    })
+    buttonByText('보내지 않기').click()
+    await settle()
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+
+    buttonByText('보내지 않기').click()
+    await settle()
+    expect(consentBox().textContent).not.toContain(SAVE_ERROR)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+  })
+
+  it('응답을 기다리는 중에 연달아 눌러도 SET_CONSENT 는 1건이다', async () => {
+    await loadPanel({ consent: grantedReply, setConsent: () => 'none' })
+    const button = buttonByText('보내지 않기')
+    button.click()
+    button.click()
+    await settle()
+    expect(ofType('crf:set-consent')).toHaveLength(1)
+  })
+
+  it('Panel Opened 는 동의 구역을 그려도 그대로 1건 보낸다', async () => {
+    await loadPanel({ consent: { consent: { status: 'denied', decidedAt: 1 } } })
+    expect(panelOpened()).toHaveLength(1)
+    buttonByText('보내기').click()
+    await settle()
+    expect(panelOpened()).toHaveLength(1)
+  })
+
+  it('처리방침 링크는 사이트가 설정된 경우에만 보인다', async () => {
+    await loadPanel()
+    expect(consentBox().querySelector('a')).toBeNull()
+
+    vi.doMock('../extension/src/shared/site.js', () => ({ privacyUrl: () => 'https://site.test/privacy' }))
+    await loadPanel()
+    vi.doUnmock('../extension/src/shared/site.js')
+    expect(consentBox().querySelector('a[href="https://site.test/privacy"]')).toBeTruthy()
+  })
+})
+
+describe('사이드 패널 배선: 무응답', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('GET_CONSENT 응답이 2초 안에 없으면 undecided 로 그린다', async () => {
+    await loadPanel({ consent: 'none' })
+    expect(consentBox().textContent).toBe('')
+
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(consentBox().textContent).toBe('')
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보낼지 아직 고르지 않았습니다')
+    expect(buttonByText('자세히 보고 고르기')).toBeTruthy()
+  })
+
+  it('요약은 GET_CONSENT 를 기다리지 않고 바로 그린다', async () => {
+    const root = await loadPanel({ consent: 'none' })
+    expect(root.textContent).toContain('리뷰 10개 기준')
+  })
+
+  it('SET_CONSENT 응답이 5초 안에 없으면 오류 문구를 보이고 버튼을 다시 쓸 수 있다', async () => {
+    await loadPanel({ consent: grantedReply, setConsent: () => 'none' })
+    buttonByText('보내지 않기').click()
+    await vi.advanceTimersByTimeAsync(4999)
+    expect(consentBox().textContent).not.toContain(SAVE_ERROR)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+
+    buttonByText('보내지 않기').click()
+    await settle()
+    expect(ofType('crf:set-consent')).toHaveLength(2)
   })
 })
