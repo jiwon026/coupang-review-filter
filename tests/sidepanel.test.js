@@ -342,13 +342,24 @@ describe('사이드 패널 배선: 동의 구역', () => {
     expect(panelOpened()).toHaveLength(1)
   })
 
-  it('처리방침 링크는 사이트가 설정된 경우에만 보인다', async () => {
-    await loadPanel()
-    expect(consentBox().querySelector('a')).toBeNull()
+  // 실제 사이트 주소와 무관하게, 설정되지 않은 경우와 설정된 경우를 모의로 만든다.
+  it('사이트가 설정되지 않았으면 처리방침 링크가 없다', async () => {
+    vi.doMock('../extension/src/shared/site.js', () => ({ privacyUrl: () => null }))
+    try {
+      await loadPanel()
+    } finally {
+      vi.doUnmock('../extension/src/shared/site.js')
+    }
+    expect(consentBox().querySelector('a[target="_blank"]')).toBeNull()
+  })
 
+  it('사이트가 설정됐으면 처리방침 링크가 보인다', async () => {
     vi.doMock('../extension/src/shared/site.js', () => ({ privacyUrl: () => 'https://site.test/privacy' }))
-    await loadPanel()
-    vi.doUnmock('../extension/src/shared/site.js')
+    try {
+      await loadPanel()
+    } finally {
+      vi.doUnmock('../extension/src/shared/site.js')
+    }
     expect(consentBox().querySelector('a[href="https://site.test/privacy"]')).toBeTruthy()
   })
 })

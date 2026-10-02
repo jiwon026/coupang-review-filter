@@ -56,8 +56,9 @@ describe('처리방침', () => {
     expect(lists[1].querySelectorAll('li')).toHaveLength(3)
   })
 
-  it('시행일은 배포 시 기재로 둔다', () => {
-    expect(text).toContain('시행일: 배포 시 기재')
+  // 배포 때 실제 날짜로 바뀐다. 자리표시자와 날짜 형식 둘 다 받는다.
+  it('시행일은 배포 시 기재이거나 YYYY-MM-DD 형식의 날짜다', () => {
+    expect(doc.querySelector('.effective').textContent).toMatch(/^시행일: (?:배포 시 기재|\d{4}-\d{2}-\d{2})$/)
   })
 
   it('연락처 자리는 비어 있는 요소이고 contact.js 를 불러온다', () => {

@@ -8,9 +8,10 @@ describe('SITE', () => {
     expect(SITE.exampleProductUrl).toBe('https://www.coupang.com/vp/products/7590830589')
   })
 
-  it('landingOrigin 의 초기값은 미설정 자리표시자 example.com', () => {
-    expect(SITE.landingOrigin).toBe('https://example.com')
-    expect(isLandingConfigured(SITE.landingOrigin)).toBe(false)
+  // 실제 주소가 들어와도 깨지지 않게 값이 아니라 형식만 본다. 경로나 끝 슬래시가 없는 https 출처여야 한다.
+  it('landingOrigin 은 https 주소 형식이다', () => {
+    expect(SITE.landingOrigin).toMatch(/^https:\/\/[^/\s?#]+$/)
+    expect(new URL(SITE.landingOrigin).origin).toBe(SITE.landingOrigin)
   })
 })
 
@@ -46,8 +47,11 @@ describe('privacyUrl', () => {
     expect(privacyUrl('not a url')).toBeNull()
   })
 
-  it('인자가 없으면 SITE.landingOrigin 을 쓴다(초기값은 미설정이므로 null)', () => {
-    expect(privacyUrl()).toBeNull()
+  it('인자가 없으면 SITE.landingOrigin 을 쓴다', () => {
+    expect(privacyUrl()).toBe(privacyUrl(SITE.landingOrigin))
+    expect(privacyUrl()).toBe(
+      isLandingConfigured(SITE.landingOrigin) ? `${SITE.landingOrigin}/privacy` : null,
+    )
   })
 })
 

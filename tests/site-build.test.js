@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, readdirSync, statSync, rmSync, existsSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, statSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,35 +18,99 @@ function runBuild(args, env) {
   })
 }
 
+const PRIVACY = join(ROOT, 'site', 'public', 'privacy.html')
+const EFFECTIVE_PLACEHOLDER = '배포 시 기재'
+const EFFECTIVE_LINE = /시행일: [^<]*/
+const BOTH = { AMPLITUDE_API_KEY: FAKE_KEY, CONTACT_EMAIL: FAKE_CONTACT }
+
+// 실제 처리방침의 시행일 줄만 바꾼 임시 복사본. 실제 파일의 시행일이 무엇이든 테스트가 같은 결과를 낸다.
+function withPrivacyCopy(effective, run) {
+  const dir = mkdtempSync(join(tmpdir(), 'site-privacy-'))
+  const file = join(dir, 'privacy.html')
+  const source = readFileSync(PRIVACY, 'utf8')
+  expect(source).toMatch(EFFECTIVE_LINE)
+  writeFileSync(file, source.replace(EFFECTIVE_LINE, `시행일: ${effective}`))
+  try {
+    return run(`--privacy=${file}`)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+function buildInto(args, env) {
+  const outdir = mkdtempSync(join(tmpdir(), 'site-build-'))
+  const result = runBuild([...args, `--outdir=${outdir}`], env)
+  return { outdir, result }
+}
+
 describe('site/build.js --release', () => {
   it('환경 변수가 없으면 실패한다(종료 코드 1)', () => {
-    const result = runBuild(['--release'], {})
+    const result = withPrivacyCopy('2026-10-05', (privacy) => runBuild(['--release', privacy], {}))
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('AMPLITUDE_API_KEY')
     expect(result.stderr).toContain('CONTACT_EMAIL')
+    expect(result.stderr).not.toContain('시행일')
   })
 
   it('키만 있고 문의처가 없으면 실패한다', () => {
-    expect(runBuild(['--release'], { AMPLITUDE_API_KEY: FAKE_KEY }).status).toBe(1)
+    const result = withPrivacyCopy('2026-10-05', (privacy) => runBuild(['--release', privacy], { AMPLITUDE_API_KEY: FAKE_KEY }))
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('CONTACT_EMAIL')
   })
 
   it('문의처만 있고 키가 없으면 실패한다', () => {
-    expect(runBuild(['--release'], { CONTACT_EMAIL: FAKE_CONTACT }).status).toBe(1)
+    const result = withPrivacyCopy('2026-10-05', (privacy) => runBuild(['--release', privacy], { CONTACT_EMAIL: FAKE_CONTACT }))
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('AMPLITUDE_API_KEY')
+  })
+})
+
+describe('site/build.js --release 의 시행일 검사', () => {
+  it('처리방침에 배포 시 기재가 남아 있으면 실패하고(종료 코드 1) 아무것도 만들지 않는다', () => {
+    const { outdir, result } = withPrivacyCopy(EFFECTIVE_PLACEHOLDER, (privacy) => buildInto(['--release', privacy], BOTH))
+    try {
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain('처리방침의 시행일이 아직 "배포 시 기재" 입니다')
+      expect(readdirSync(outdir)).toEqual([])
+    } finally {
+      rmSync(outdir, { recursive: true, force: true })
+    }
+  })
+
+  it('개발 빌드는 시행일을 검사하지 않는다', () => {
+    const { outdir, result } = withPrivacyCopy(EFFECTIVE_PLACEHOLDER, (privacy) => buildInto([privacy], {}))
+    try {
+      expect(result.status).toBe(0)
+    } finally {
+      rmSync(outdir, { recursive: true, force: true })
+    }
+  })
+
+  it('--privacy 가 없으면 site/public/privacy.html 을 검사한다', () => {
+    const placeholderLeft = readFileSync(PRIVACY, 'utf8').includes(EFFECTIVE_PLACEHOLDER)
+    const { outdir, result } = buildInto(['--release'], BOTH)
+    try {
+      expect(result.status).toBe(placeholderLeft ? 1 : 0)
+      expect(result.stderr.includes('시행일')).toBe(placeholderLeft)
+    } finally {
+      rmSync(outdir, { recursive: true, force: true })
+    }
+  })
+
+  it('처리방침 파일을 읽을 수 없으면 실패한다', () => {
+    const { outdir, result } = buildInto(['--release', `--privacy=${join(tmpdir(), 'site-privacy-missing', 'privacy.html')}`], BOTH)
+    try {
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain('처리방침 파일을 읽을 수 없습니다')
+    } finally {
+      rmSync(outdir, { recursive: true, force: true })
+    }
   })
 })
 
 describe('site/build.js 산출물', () => {
-  function buildInto(args, env) {
-    const outdir = mkdtempSync(join(tmpdir(), 'site-build-'))
-    const result = runBuild([...args, `--outdir=${outdir}`], env)
-    return { outdir, result }
-  }
-
-  it('두 값이 모두 있으면 release 빌드가 성공하고 값을 번들에 넣는다', () => {
-    const { outdir, result } = buildInto(['--release'], {
-      AMPLITUDE_API_KEY: FAKE_KEY,
-      CONTACT_EMAIL: FAKE_CONTACT,
-    })
+  it('두 값이 모두 있고 시행일이 날짜면 release 빌드가 성공하고 값을 번들에 넣는다', () => {
+    const { outdir, result } = withPrivacyCopy('2026-10-05', (privacy) => buildInto(['--release', privacy], BOTH))
     try {
       expect(result.status).toBe(0)
       const uninstalled = readFileSync(join(outdir, 'uninstalled.js'), 'utf8')
