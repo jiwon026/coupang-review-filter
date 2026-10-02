@@ -17,7 +17,7 @@ export function renderPanel(root, summary) {
     return
   }
 
-  root.appendChild(el('h1', null, '체험단 리뷰 필터'))
+  root.appendChild(el('h1', null, '체험단 리뷰 제거기'))
 
   const rating = el('section', 'stat')
   rating.appendChild(el('p', 'stat-label', '체험단 제외 평점'))

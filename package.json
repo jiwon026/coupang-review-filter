@@ -1,11 +1,12 @@
 {
   "name": "coupang-review-filter",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node build.js",
     "build:release": "node build.js --release",
+    "build:icons": "node scripts/build-icons.js",
     "build:site": "node site/build.js",
     "watch": "node build.js --watch",
     "test": "vitest run",
@@ -14,6 +15,7 @@
   "devDependencies": {
     "esbuild": "^0.24.0",
     "jsdom": "^25.0.0",
+    "sharp": "^0.35.5",
     "vitest": "^2.1.0"
   }
 }

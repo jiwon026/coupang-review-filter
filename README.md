@@ -1,4 +1,4 @@
-# 쿠팡 체험단 리뷰 필터
+# 체험단 리뷰 제거기 for 쿠팡
 
 쿠팡 상품 페이지에서 체험단 제공 리뷰를 판별해 배지를 붙이고 숨기며, 협찬을 제외한 평점을 보여주는 크롬 확장입니다.
 
@@ -25,7 +25,14 @@ npm run build          # content.js, background.js, sidepanel.js 세 번들 생�
 npm run build:release  # 같은 세 번들, 디버그 로그 제거
 npm test               # Vitest
 npm run watch          # 변경 감지 빌드 (디버그 로그 켜짐)
+npm run build:icons    # 아이콘 PNG 네 개를 SVG 원본에서 다시 만듦
 ```
+
+## 아이콘
+
+원본은 `extension/icons/icon.svg` 하나이고, `npm run build:icons` 가 `sharp` 로 16, 32, 48, 128 크기의 PNG 를 만듭니다. PNG 는 확장 패키지에 들어가므로 커밋합니다. 16px 만 글자가 뭉개져서 글자를 뺀 `icon-16.svg` 로 만듭니다.
+
+아이콘을 다시 만들면 기기의 글꼴에 따라 글자 모양이 달라질 수 있습니다. 모양이 달라지면 바뀐 PNG 를 눈으로 확인한 뒤 커밋합니다.
 
 ## 사이트
 
@@ -65,6 +72,7 @@ node site/build.js --release
 | `extension/src/background/` | 이벤트 전송, 기기 신원, 탭별 요약 저장 |
 | `extension/src/sidepanel/` | 사이드 패널 화면 |
 | `extension/src/shared/` | 이벤트 이름, 메시지 상수, 설정 |
+| `extension/icons/`, `scripts/build-icons.js` | 아이콘 SVG 원본, PNG 생성 스크립트 |
 | `site/` | 처리방침, 제거 안내 페이지와 그 스크립트 |
 | `tests/` | Vitest, jsdom |
 

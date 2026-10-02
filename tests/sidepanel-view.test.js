@@ -21,6 +21,11 @@ describe('renderPanel', () => {
     root = dom.window.document.getElementById('root')
   })
 
+  it('제목은 화면용 이름 체험단 리뷰 제거기다', () => {
+    renderPanel(root, summary)
+    expect(root.querySelector('h1').textContent).toBe('체험단 리뷰 제거기')
+  })
+
   it('체험단 제외 평점과 리뷰 평균을 모두 보여준다', () => {
     renderPanel(root, summary)
     expect(root.textContent).toContain('4.2')

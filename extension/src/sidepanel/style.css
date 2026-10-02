@@ -1,3 +1,8 @@
+/* 아이콘 바탕색에 맞춘 강조색. 이 패널은 어두운 모드 배색이 없어서 밝은 값만 두고, 링크와 포커스 테두리에만 쓴다. */
+:root {
+  --crf-accent: #3c3489;
+}
+
 body {
   margin: 0;
   padding: 16px;
@@ -78,7 +83,7 @@ h1 {
 
 .consent-action:focus-visible,
 .consent-link:focus-visible {
-  outline: 2px solid #1a5fd0;
+  outline: 2px solid var(--crf-accent);
   outline-offset: 2px;
 }
 
@@ -91,7 +96,7 @@ h1 {
   display: inline-block;
   margin-top: 8px;
   margin-left: 12px;
-  color: #1a5fd0;
+  color: var(--crf-accent);
 }
 
 .consent-action:disabled {
