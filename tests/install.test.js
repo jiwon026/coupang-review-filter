@@ -51,6 +51,17 @@ function sendSetConsent(chrome, status, respond = () => {}) {
 
 const lastUninstallUrl = (chrome) => new URL(chrome.__calls.setUninstallURL.at(-1))
 
+// d(기기 번호)와 i(설치 시각)는 쿼리가 아니라 조각에 실린다. 조각은 서버로 전송되지 않는다. 쿼리에는 v 만 있다.
+const frag = (url) => new URLSearchParams(url.hash.slice(1))
+const queryKeys = (url) => [...url.searchParams.keys()]
+
+// 미동의 사용자의 주소: 조각이 없고 쿼리에는 v 만 있다.
+function expectNoIdentifiers(url) {
+  expect(url.href).not.toContain('#')
+  expect(url.hash).toBe('')
+  expect(queryKeys(url)).toEqual(['v'])
+}
+
 async function fireInstalled(chrome, details) {
   for (const listener of chrome.__installedListeners) listener(details)
   await flush()
@@ -106,13 +117,13 @@ describe('설치', () => {
   it('설치 직후 제거 주소를 다시 설정하고 설치 시각 i 를 싣는다', async () => {
     const { chrome, store } = await loadBackground()
     expect(chrome.__calls.setUninstallURL).toHaveLength(1)
-    expect(new URL(chrome.__calls.setUninstallURL[0]).searchParams.has('i')).toBe(false)
+    expect(frag(new URL(chrome.__calls.setUninstallURL[0])).has('i')).toBe(false)
 
     await fireInstalled(chrome, { reason: 'install' })
 
     expect(chrome.__calls.setUninstallURL).toHaveLength(2)
     const url = new URL(chrome.__calls.setUninstallURL[1])
-    expect(url.searchParams.get('i')).toBe(String(store.crf_installed_at))
+    expect(frag(url).get('i')).toBe(String(store.crf_installed_at))
   })
 
   it('시작 시 설정과 설치 시 설정이 겹쳐도 마지막 setUninstallURL 에 i 가 실린다', async () => {
@@ -137,7 +148,7 @@ describe('설치', () => {
 
     const urls = chrome.__calls.setUninstallURL
     expect(urls).toHaveLength(2)
-    expect(new URL(urls[urls.length - 1]).searchParams.get('i')).toBe(String(store.crf_installed_at))
+    expect(frag(new URL(urls[urls.length - 1])).get('i')).toBe(String(store.crf_installed_at))
   })
 
   it('설치 시각 저장이 실패해도 경고만 하고 제거 주소 설정을 이어간다', async () => {
@@ -260,15 +271,16 @@ describe('제거 주소', () => {
     const url = new URL(chrome.__calls.setUninstallURL[0])
     expect(url.origin).toBe('https://landing.test')
     expect(url.pathname).toBe('/uninstalled')
-    expect(url.searchParams.get('d')).toBe('dev-1')
+    expect(frag(url).get('d')).toBe('dev-1')
     expect(url.searchParams.get('v')).toBe('0.1.0')
-    expect(url.searchParams.has('i')).toBe(false)
+    expect(frag(url).has('i')).toBe(false)
+    expect(queryKeys(url)).toEqual(['v'])
   })
 
   it('저장된 설치 시각이 있으면 i 로 싣는다', async () => {
     const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 })
     const url = new URL(chrome.__calls.setUninstallURL[0])
-    expect(url.searchParams.get('i')).toBe('1700000000000')
+    expect(frag(url).get('i')).toBe('1700000000000')
   })
 
   it.each([
@@ -294,9 +306,26 @@ describe('제거 주소', () => {
   it('granted 이면 d, v, i 를 모두 싣는다', async () => {
     const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'granted')
     const url = lastUninstallUrl(chrome)
-    expect(url.searchParams.get('d')).toBe('dev-1')
+    expect(frag(url).get('d')).toBe('dev-1')
     expect(url.searchParams.get('v')).toBe('0.1.0')
-    expect(url.searchParams.get('i')).toBe('1700000000000')
+    expect(frag(url).get('i')).toBe('1700000000000')
+  })
+
+  it('granted 이면 주소 끝에 #d=...&i=... 가 있고 쿼리에는 v 만 있다(기기 번호와 설치 시각은 서버로 가지 않는다)', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'granted')
+    const raw = chrome.__calls.setUninstallURL.at(-1)
+    expect(raw).toBe('https://landing.test/uninstalled?v=0.1.0#d=dev-1&i=1700000000000')
+
+    const url = new URL(raw)
+    expect(queryKeys(url)).toEqual(['v'])
+    expect(url.search).not.toContain('dev-1')
+    expect(url.search).not.toContain('1700000000000')
+  })
+
+  it.each(['denied', 'undecided'])('%s 이면 주소에 # 이 없고 쿼리에는 v 만 있다', async (consent) => {
+    const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, consent)
+    expect(chrome.__calls.setUninstallURL.at(-1)).toBe('https://landing.test/uninstalled?v=0.1.0')
+    expectNoIdentifiers(lastUninstallUrl(chrome))
   })
 
   it('denied 이면 v 만 싣는다(기기 번호와 설치 시각이 저장돼 있어도)', async () => {
@@ -304,8 +333,7 @@ describe('제거 주소', () => {
     const url = lastUninstallUrl(chrome)
     expect(url.pathname).toBe('/uninstalled')
     expect(url.searchParams.get('v')).toBe('0.1.0')
-    expect(url.searchParams.has('d')).toBe(false)
-    expect(url.searchParams.has('i')).toBe(false)
+    expectNoIdentifiers(url)
   })
 
   it('undecided 이면 v 만 싣고 기기 번호를 새로 만들지도 않는다', async () => {
@@ -316,8 +344,7 @@ describe('제거 주소', () => {
 
     const url = lastUninstallUrl(chrome)
     expect(url.searchParams.get('v')).toBe('0.1.0')
-    expect(url.searchParams.has('d')).toBe(false)
-    expect(url.searchParams.has('i')).toBe(false)
+    expectNoIdentifiers(url)
     expect('crf_device_id' in store).toBe(false)
   })
 
@@ -331,31 +358,30 @@ describe('제거 주소', () => {
     await fireInstalled(chrome, { reason: 'install' })
 
     const url = lastUninstallUrl(chrome)
-    expect(url.searchParams.has('d')).toBe(false)
+    expectNoIdentifiers(url)
     expect(url.searchParams.get('v')).toBe('0.1.0')
   })
 
   it('granted 에서 denied 로 바꾸면 마지막 setUninstallURL 인자에 d 가 없다', async () => {
     const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'granted')
-    expect(lastUninstallUrl(chrome).searchParams.get('d')).toBe('dev-1')
+    expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
 
     sendSetConsent(chrome, 'denied')
     await flush()
 
     const url = lastUninstallUrl(chrome)
-    expect(url.searchParams.has('d')).toBe(false)
-    expect(url.searchParams.has('i')).toBe(false)
+    expectNoIdentifiers(url)
     expect(url.searchParams.get('v')).toBe('0.1.0')
   })
 
   it('denied 에서 granted 로 바꾸면 d 가 다시 실린다', async () => {
     const { chrome } = await loadBackground({}, 'denied')
-    expect(lastUninstallUrl(chrome).searchParams.has('d')).toBe(false)
+    expectNoIdentifiers(lastUninstallUrl(chrome))
 
     sendSetConsent(chrome, 'granted')
     await flush()
 
-    expect(lastUninstallUrl(chrome).searchParams.get('d')).toBe('dev-1')
+    expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
   })
 
   it('응답 콜백이 던져도(패널이 이미 닫힘) granted 에서 denied 로 바꾼 뒤 d 가 없다', async () => {
@@ -366,7 +392,7 @@ describe('제거 주소', () => {
     })
     await flush()
 
-    expect(lastUninstallUrl(chrome).searchParams.has('d')).toBe(false)
+    expectNoIdentifiers(lastUninstallUrl(chrome))
   })
 
   it('응답 콜백이 던져도 첫 granted 의 Extension Installed 는 1건 나간다', async () => {
@@ -378,7 +404,17 @@ describe('제거 주소', () => {
     await flush()
 
     expect(sentOfType('Extension Installed')).toHaveLength(1)
-    expect(lastUninstallUrl(chrome).searchParams.get('d')).toBe('dev-1')
+    expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
+  })
+
+  it('동의 처리(SET_CONSENT)로 다시 설정한 주소에도 쿼리에는 v 만 있다', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'undecided')
+
+    sendSetConsent(chrome, 'granted')
+    await flush()
+
+    expect(chrome.__calls.setUninstallURL.at(-1)).toBe('https://landing.test/uninstalled?v=0.1.0#d=dev-1&i=1700000000000')
+    expect(queryKeys(lastUninstallUrl(chrome))).toEqual(['v'])
   })
 
   it('setUninstallURL 이 거부돼도 경고만 한다', async () => {
@@ -387,5 +423,45 @@ describe('제거 주소', () => {
     await fireInstalled(chrome, { reason: 'install' })
     expect(console.warn).toHaveBeenCalled()
     expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+})
+
+describe('buildUninstallUrl', () => {
+  const DEVICE = '3f2c1a9e-5b7d-4c8a-9e1f-0a2b4c6d8e0f'
+
+  async function build(input) {
+    installChromeMock()
+    vi.resetModules()
+    const { buildUninstallUrl } = await import('../extension/src/background/lifecycle.js')
+    return buildUninstallUrl({ origin: 'https://landing.test', version: '1.0.0', ...input })
+  }
+
+  beforeEach(() => {
+    mockSite.landingOrigin = 'https://landing.test'
+  })
+
+  it('기기 번호와 설치 시각을 조각에 싣고 버전만 쿼리에 싣는다', async () => {
+    expect(await build({ deviceId: DEVICE, installedAt: 1700000000000 })).toBe(
+      `https://landing.test/uninstalled?v=1.0.0#d=${DEVICE}&i=1700000000000`,
+    )
+  })
+
+  it('기기 번호만 있으면 조각에 d 만 있다', async () => {
+    expect(await build({ deviceId: DEVICE })).toBe(`https://landing.test/uninstalled?v=1.0.0#d=${DEVICE}`)
+  })
+
+  it('기기 번호와 설치 시각이 없으면(미동의) 조각이 없다', async () => {
+    const url = await build({})
+    expect(url).toBe('https://landing.test/uninstalled?v=1.0.0')
+    expect(url).not.toContain('#')
+    expect(await build({ deviceId: null, installedAt: null })).toBe(url)
+  })
+
+  it('조각의 값은 URLSearchParams 로 그대로 읽힌다', async () => {
+    const url = new URL(await build({ deviceId: DEVICE, installedAt: 1700000000000 }))
+    const fragment = new URLSearchParams(url.hash.slice(1))
+    expect(fragment.get('d')).toBe(DEVICE)
+    expect(fragment.get('i')).toBe('1700000000000')
+    expect([...url.searchParams.keys()]).toEqual(['v'])
   })
 })

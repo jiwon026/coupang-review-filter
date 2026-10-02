@@ -47,42 +47,60 @@ function isFromExtensionPage(sender) {
   return typeof sender?.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
 }
 
-async function secondsSinceInstall() {
+// 설치부터 동의 저장 시각(at)까지의 초. 설치 시각을 모르면 null 이다.
+async function secondsSinceInstall(at) {
   try {
     const installedAt = await getInstalledAt()
-    return installedAt == null ? null : Math.round((Date.now() - installedAt) / 1000)
+    return installedAt == null ? null : Math.round((at - installedAt) / 1000)
   } catch {
     return null
   }
 }
 
-// 동의 저장 뒤의 부수 작업. 실패해도 던지지 않는다. 응답 성패와 무관하게 실행돼야 하므로 응답 전에 시작한다.
+// 페이지(패널, 온보딩)에 돌려주는 동의 상태. 익명 기기 번호는 통계 삭제 요청에 쓰도록 화면에 보여 줄 값이다.
+// 한 번이라도 동의한 적이 있을 때만 싣는다. 동의한 적이 없으면 보낸 통계가 없으므로 번호를 읽지도(없으면 새로 만들지도) 않는다.
+// 번호를 읽지 못하면 null 로 둔다. 던지지 않는다.
+async function consentForPage({ status, decidedAt, everGranted }) {
+  let deviceId = null
+  if (everGranted === true) {
+    try {
+      deviceId = await getDeviceId()
+    } catch (error) {
+      console.warn('[체험단 필터] 기기 번호를 읽지 못했습니다:', error?.message)
+    }
+  }
+  return { status, decidedAt, deviceId }
+}
+
 // 열려 있는 패널과 온보딩 페이지가 바뀐 상태를 따라가게 알린다. 받는 쪽이 없으면 거절되므로 삼킨다.
 // 알림 실패가 응답이나 후속 처리를 막으면 안 된다.
-function announceConsent(result) {
+function announceConsent(consent) {
   try {
-    const pending = chrome.runtime.sendMessage({
-      type: MESSAGES.CONSENT_CHANGED,
-      consent: { status: result.status, decidedAt: result.decidedAt },
-    })
+    const pending = chrome.runtime.sendMessage({ type: MESSAGES.CONSENT_CHANGED, consent })
     if (pending && typeof pending.catch === 'function') pending.catch(() => {})
   } catch {
     // 받는 쪽이 없거나 컨텍스트가 닫혔다. 정상적인 상황이다.
   }
 }
 
-async function afterConsentChange(result, source) {
-  try {
-    await configureUninstallUrl()
-    if (result.firstGrant) {
-      await track(EVENTS.EXTENSION_INSTALLED, {
-        consent_source: source,
-        seconds_since_install: await secondsSinceInstall(),
-      })
-    }
-  } catch (error) {
-    console.warn('[체험단 필터] 동의 후속 처리에 실패했습니다:', error?.message)
-  }
+// 처음 동의한 순간에 한 번 보낸다(명세 11.4). 이벤트 시각은 동의 저장 시각이다.
+// 지금 시각으로 찍으면 동의 직후 온보딩 페이지가 보내는 Onboarding Viewed 보다 늦게 찍힐 수 있다.
+async function trackInstalled(result, source) {
+  await track(
+    EVENTS.EXTENSION_INSTALLED,
+    { consent_source: source, seconds_since_install: await secondsSinceInstall(result.decidedAt) },
+    { time: result.decidedAt },
+  )
+}
+
+// 동의 저장 뒤의 부수 작업. 실패해도 던지지 않는다. 응답 성패와 무관하게 실행돼야 하므로 응답 전에 시작한다.
+// Extension Installed 를 먼저 시작하고 제거 주소 갱신을 기다리지 않는다. 둘 다 실패를 스스로 삼킨다.
+function afterConsentChange(result, source) {
+  const installed = result.firstGrant ? trackInstalled(result, source) : Promise.resolve()
+  const uninstallUrl = configureUninstallUrl()
+  return Promise.all([installed, uninstallUrl]).catch((error) =>
+    console.warn('[체험단 필터] 동의 후속 처리에 실패했습니다:', error?.message),
+  )
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -147,6 +165,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === MESSAGES.TRACK) {
+    // 이벤트 시각(options.time)은 넘기지 않는다. 페이지나 콘텐츠 스크립트가 시각을 지정할 수 없게 한다.
     track(message.eventType, message.properties)
     sendResponse({ ok: true })
     return false
@@ -154,12 +173,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === MESSAGES.GET_CONSENT) {
     getConsent()
+      .then(consentForPage)
       .then(
         (consent) => sendResponse({ consent }),
         (error) => {
           console.warn('[체험단 필터] 동의 상태를 읽지 못했습니다:', error?.message)
           // 읽기 실패는 아직 고르지 않음과 구분되도록 표지를 단다. 계약 모양(consent)은 그대로다.
-          sendResponse({ consent: { status: CONSENT.UNDECIDED, decidedAt: null }, error: 'failed' })
+          sendResponse({ consent: { status: CONSENT.UNDECIDED, decidedAt: null, deviceId: null }, error: 'failed' })
         },
       )
       .catch((error) =>
@@ -177,12 +197,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const source = CONSENT_SOURCES.includes(message.source) ? message.source : 'unknown'
     setConsent(message.status)
       .then(
-        (result) => {
-          // 패널이나 온보딩 탭이 이미 닫혀 sendResponse 가 던져도 제거 주소 갱신 등은 빠지면 안 된다.
-          // 후속 처리를 먼저 시작하고(첫 await 까지 동기 실행) 응답은 그 뒤에 보낸다. 응답 예외는 아래 catch 가 경고한다.
-          announceConsent(result)
+        async (result) => {
+          // 패널이나 온보딩 탭이 이미 닫혀 sendResponse 가 던져도 Extension Installed 와 제거 주소 갱신은 빠지면 안 된다.
+          // 후속 처리를 먼저 시작하고 알림과 응답은 그 뒤에 보낸다. 응답 예외는 아래 catch 가 경고한다.
           const followUp = afterConsentChange(result, source)
-          sendResponse({ consent: { status: result.status, decidedAt: result.decidedAt } })
+          const consent = await consentForPage(result)
+          announceConsent(consent)
+          sendResponse({ consent })
           return followUp
         },
         (error) => {

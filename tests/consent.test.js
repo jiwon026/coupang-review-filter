@@ -103,32 +103,62 @@ afterEach(() => {
 describe('getConsent', () => {
   it('저장값이 없으면 undecided 와 null 시각을 돌려준다', async () => {
     const { getConsent } = await loadConsent()
-    expect(await getConsent()).toEqual({ status: 'undecided', decidedAt: null })
+    expect(await getConsent()).toEqual({ status: 'undecided', decidedAt: null, everGranted: false })
   })
 
   it('setConsent("granted") 뒤에는 granted 와 그 시각을 돌려준다', async () => {
     const { getConsent, setConsent } = await loadConsent()
     await setConsent('granted', T0)
-    expect(await getConsent()).toEqual({ status: 'granted', decidedAt: T0 })
+    expect(await getConsent()).toEqual({ status: 'granted', decidedAt: T0, everGranted: true })
   })
 
-  it('저장값이 알 수 없는 상태면 undecided 로 본다', async () => {
+  it('저장값이 알 수 없는 상태면 undecided 로 본다(동의한 적이 있다는 기록은 그대로 읽는다)', async () => {
     const { getConsent } = await loadConsent({
       crf_consent: { status: 'maybe', decidedAt: T0, everGranted: true },
     })
-    expect(await getConsent()).toEqual({ status: 'undecided', decidedAt: null })
+    expect(await getConsent()).toEqual({ status: 'undecided', decidedAt: null, everGranted: true })
+  })
+
+  it('everGranted 는 한 번이라도 동의했는지다. 거절만 했으면 false, 동의했다가 꺼도 true', async () => {
+    const { getConsent, setConsent } = await loadConsent()
+    await setConsent('denied', T0)
+    expect((await getConsent()).everGranted).toBe(false)
+    await setConsent('granted', T0 + 1)
+    await setConsent('denied', T0 + 2)
+    expect(await getConsent()).toEqual({ status: 'denied', decidedAt: T0 + 2, everGranted: true })
+  })
+
+  it('everGranted 저장값이 true 가 아니면(없거나 다른 형) false 로 본다', async () => {
+    const { getConsent } = await loadConsent({ crf_consent: { status: 'denied', decidedAt: T0, everGranted: 'yes' } })
+    expect((await getConsent()).everGranted).toBe(false)
   })
 })
 
 describe('setConsent', () => {
   it('첫 granted 는 firstGrant true 이고 시각을 돌려준다', async () => {
     const { setConsent } = await loadConsent()
-    expect(await setConsent('granted', T0)).toEqual({ status: 'granted', decidedAt: T0, firstGrant: true })
+    expect(await setConsent('granted', T0)).toEqual({
+      status: 'granted',
+      decidedAt: T0,
+      firstGrant: true,
+      everGranted: true,
+    })
   })
 
-  it('denied 는 firstGrant false', async () => {
+  it('denied 는 firstGrant false 이고, 동의한 적이 없으면 everGranted 도 false', async () => {
     const { setConsent } = await loadConsent()
-    expect((await setConsent('denied', T0)).firstGrant).toBe(false)
+    expect(await setConsent('denied', T0)).toEqual({
+      status: 'denied',
+      decidedAt: T0,
+      firstGrant: false,
+      everGranted: false,
+    })
+  })
+
+  it('동의했다가 끄면 everGranted 는 true 로 남는다', async () => {
+    const { setConsent } = await loadConsent()
+    await setConsent('granted', T0)
+    expect((await setConsent('denied', T0 + 1)).everGranted).toBe(true)
   })
 
   it('denied 뒤에 다시 granted 해도 firstGrant 는 false', async () => {
@@ -243,7 +273,7 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     await flush()
 
     expect(dispatched.returns).toContain(true)
-    expect(response).toEqual({ consent: { status: 'granted', decidedAt: T0 } })
+    expect(response).toEqual({ consent: { status: 'granted', decidedAt: T0, deviceId: 'dev-1' } })
     expect(store.crf_consent.status).toBe('granted')
     const installed = sentOfType('Extension Installed')
     expect(installed).toHaveLength(1)
@@ -284,8 +314,12 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     const { chrome } = await loadBackground()
     const send = (status) =>
       dispatch(chrome, { type: 'crf:set-consent', status, source: 'panel' }, extensionSender()).response
+    // 첫 동의의 이벤트는 응답과 나란히 나간다. 사용자가 다시 누를 때까지의 시간만큼 기다린다.
     await send('granted')
+    await flush()
+    expect(sentOfType('Extension Installed')).toHaveLength(1)
     await send('denied')
+    await flush()
     await send('granted')
     await flush()
 
@@ -376,7 +410,7 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     await flush()
 
     expect(chrome.__calls.runtimeSent).toEqual([
-      { type: 'crf:consent-changed', consent: { status: 'granted', decidedAt: T0 } },
+      { type: 'crf:consent-changed', consent: { status: 'granted', decidedAt: T0, deviceId: 'dev-1' } },
     ])
 
     await dispatch(chrome, { type: 'crf:set-consent', status: 'denied', source: 'panel' }, extensionSender())
@@ -421,11 +455,47 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     const response = await dispatched.response
     await flush()
 
-    expect(response).toEqual({ consent: { status: 'granted', decidedAt: T0 } })
+    expect(response).toEqual({ consent: { status: 'granted', decidedAt: T0, deviceId: 'dev-1' } })
     expect(dispatched.responses).toHaveLength(1)
     expect(store.crf_consent.status).toBe('granted')
     expect(chrome.__calls.setUninstallURL.length - before).toBe(1)
     expect(sentOfType('Extension Installed')).toHaveLength(1)
+  })
+
+  it('제거 주소 설정이 끝나지 않아도 첫 동의의 Extension Installed 는 나간다(기다리지 않고 먼저 시작한다)', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: T0 - 1000 })
+    chrome.runtime.setUninstallURL = () => new Promise(() => {})
+
+    await dispatch(chrome, { type: 'crf:set-consent', status: 'granted', source: 'onboarding' }, extensionSender())
+      .response
+    await flush()
+    await flush()
+
+    expect(sentOfType('Extension Installed')).toHaveLength(1)
+  })
+
+  it('Extension Installed 의 time 과 seconds_since_install 은 동의 저장 시각(decidedAt) 기준이다', async () => {
+    const { chrome, store } = await loadBackground({ crf_installed_at: T0 - 90_400 })
+    // 부를 때마다 1초씩 가는 시계. 저장 뒤에 시각을 다시 읽으면 decidedAt 과 달라진다.
+    let clock = T0
+    vi.spyOn(Date, 'now').mockImplementation(() => (clock += 1000))
+
+    const response = await dispatch(
+      chrome,
+      { type: 'crf:set-consent', status: 'granted', source: 'onboarding' },
+      extensionSender(),
+    ).response
+    await flush()
+    await flush()
+
+    const decidedAt = store.crf_consent.decidedAt
+    expect(response.consent.decidedAt).toBe(decidedAt)
+    const installed = sentOfType('Extension Installed')
+    expect(installed).toHaveLength(1)
+    expect(installed[0].events[0].time).toBe(decidedAt)
+    expect(installed[0].events[0].event_properties.seconds_since_install).toBe(
+      Math.round((decidedAt - (T0 - 90_400)) / 1000),
+    )
   })
 
   it('백그라운드는 CONSENT_CHANGED 에 응답하지 않는다', async () => {
@@ -444,7 +514,7 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     const { chrome } = await loadBackground()
     const dispatched = dispatch(chrome, { type: 'crf:get-consent' }, extensionSender())
     expect(dispatched.returns).toContain(true)
-    expect(await dispatched.response).toEqual({ consent: { status: 'undecided', decidedAt: null } })
+    expect(await dispatched.response).toEqual({ consent: { status: 'undecided', decidedAt: null, deviceId: null } })
 
     await dispatch(chrome, { type: 'crf:set-consent', status: 'denied', source: 'panel' }, extensionSender())
       .response
@@ -458,7 +528,7 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     const dispatched = dispatch(chrome, { type: 'crf:get-consent' }, extensionSender())
     const response = await dispatched.response
     await flush()
-    expect(response).toEqual({ consent: { status: 'undecided', decidedAt: null }, error: 'failed' })
+    expect(response).toEqual({ consent: { status: 'undecided', decidedAt: null, deviceId: null }, error: 'failed' })
     expect(dispatched.responses).toHaveLength(1)
   })
 
@@ -494,6 +564,89 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
   })
 })
 
+// 삭제 요청에 쓰는 익명 기기 번호. 보낸 데이터가 있을 수 있는 사용자(한 번이라도 동의)에게만 알려 준다.
+describe('동의 응답의 기기 번호(deviceId)', () => {
+  const getConsentReply = (chrome) => dispatch(chrome, { type: 'crf:get-consent' }, extensionSender()).response
+  const setConsentReply = (chrome, status) =>
+    dispatch(chrome, { type: 'crf:set-consent', status, source: 'panel' }, extensionSender()).response
+
+  it('한 번도 동의하지 않았으면(undecided) GET_CONSENT 의 deviceId 는 null 이고 기기 번호를 만들지도 않는다', async () => {
+    const { chrome, store } = await loadBackground()
+    delete store.crf_device_id
+
+    const response = await getConsentReply(chrome)
+    await flush()
+
+    expect(response.consent.deviceId).toBeNull()
+    expect('crf_device_id' in store).toBe(false)
+  })
+
+  it('거절만 한 사용자는 저장된 기기 번호가 있어도 GET_CONSENT, SET_CONSENT 응답, CONSENT_CHANGED 모두 deviceId 가 null 이다', async () => {
+    const { chrome, store } = await loadBackground()
+    expect(store.crf_device_id).toBe('dev-1')
+
+    const saved = await setConsentReply(chrome, 'denied')
+    await flush()
+    const read = await getConsentReply(chrome)
+
+    expect(saved.consent).toEqual({ status: 'denied', decidedAt: expect.any(Number), deviceId: null })
+    expect(read.consent).toEqual({ status: 'denied', decidedAt: expect.any(Number), deviceId: null })
+    expect(chrome.__calls.runtimeSent).toHaveLength(1)
+    expect(chrome.__calls.runtimeSent[0].consent.deviceId).toBeNull()
+  })
+
+  it('동의한 상태에서는 GET_CONSENT 응답에 deviceId 가 실린다', async () => {
+    const { chrome } = await loadBackground({ crf_consent: { status: 'granted', decidedAt: T0, everGranted: true } })
+    expect((await getConsentReply(chrome)).consent).toEqual({ status: 'granted', decidedAt: T0, deviceId: 'dev-1' })
+  })
+
+  it('동의했다가 끈 상태(denied)에서도 GET_CONSENT, SET_CONSENT 응답, CONSENT_CHANGED 에 deviceId 가 실린다', async () => {
+    const { chrome } = await loadBackground({ crf_consent: { status: 'granted', decidedAt: T0, everGranted: true } })
+
+    const saved = await setConsentReply(chrome, 'denied')
+    await flush()
+    const read = await getConsentReply(chrome)
+
+    expect(saved.consent.status).toBe('denied')
+    expect(saved.consent.deviceId).toBe('dev-1')
+    expect(read.consent.status).toBe('denied')
+    expect(read.consent.deviceId).toBe('dev-1')
+    expect(chrome.__calls.runtimeSent.at(-1).consent).toEqual({
+      status: 'denied',
+      decidedAt: expect.any(Number),
+      deviceId: 'dev-1',
+    })
+  })
+
+  it('기기 번호를 읽지 못해도 정확히 한 번 응답하고 deviceId 는 null 이다', async () => {
+    const { chrome } = await loadBackground({ crf_consent: { status: 'denied', decidedAt: T0, everGranted: true } })
+    const originalGet = chrome.storage.local.get
+    chrome.storage.local.get = (keys) =>
+      (Array.isArray(keys) ? keys : [keys]).includes('crf_device_id')
+        ? Promise.reject(new Error('읽기 실패'))
+        : originalGet(keys)
+
+    const dispatched = dispatch(chrome, { type: 'crf:get-consent' }, extensionSender())
+    const response = await dispatched.response
+    await flush()
+
+    expect(response).toEqual({ consent: { status: 'denied', decidedAt: T0, deviceId: null } })
+    expect(dispatched.responses).toHaveLength(1)
+  })
+
+  it('기기 번호는 이벤트 프로퍼티에 새로 실리지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    await setConsentReply(chrome, 'granted')
+    await flush()
+    await flush()
+
+    expect(sent.length).toBeGreaterThan(0)
+    for (const body of sent) {
+      expect(JSON.stringify(body.events[0].event_properties)).not.toContain('dev-1')
+    }
+  })
+})
+
 describe('TRACK 메시지 경로의 동의 게이트', () => {
   const trackMessage = { type: 'crf:track', eventType: 'Banner Rendered', properties: { review_sort: 'BEST' } }
 
@@ -522,6 +675,38 @@ describe('TRACK 메시지 경로의 동의 게이트', () => {
     await flush()
     await flush()
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('TRACK 메시지와 이벤트 시각', () => {
+  // 시각 지정은 백그라운드 내부 호출만 쓴다. 페이지가 보낸 메시지로는 이벤트 시각을 조작할 수 없다.
+  it.each([
+    ['확장 페이지', () => extensionSender()],
+    ['콘텐츠 스크립트', () => contentScriptSender()],
+  ])('%s 가 TRACK 에 time 을 실어 보내도 무시하고 백그라운드 시계를 쓴다', async (_label, sender) => {
+    const { chrome } = await loadBackground({
+      crf_consent: { status: 'granted', decidedAt: T0, everGranted: true },
+    })
+    vi.spyOn(Date, 'now').mockReturnValue(T0 + 777)
+    const forged = 1_000_000_000_000
+    dispatch(
+      chrome,
+      {
+        type: 'crf:track',
+        eventType: 'Onboarding Viewed',
+        properties: { example_shown: true },
+        time: forged,
+        options: { time: forged },
+      },
+      sender(),
+    )
+    await flush()
+    await flush()
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0].events[0].time).toBe(T0 + 777)
+    expect(sent[0].events[0].session_id).toBe(T0 + 777)
+    expect(JSON.stringify(sent[0])).not.toContain(String(forged))
   })
 })
 

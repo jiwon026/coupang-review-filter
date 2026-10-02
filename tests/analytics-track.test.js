@@ -131,6 +131,31 @@ describe('track 의 세션', () => {
     expect(sent[1].events[0].session_id).toBe(T0 + 31 * 60 * 1000)
   })
 
+  it('options.time 이 주어지면 이벤트 time 과 세션 판정에 그 값을 쓴다', async () => {
+    const { track } = await loadTrack('device-abc')
+    vi.spyOn(Date, 'now').mockReturnValue(T0 + 5000)
+    await track('Extension Installed', { consent_source: 'onboarding' }, { time: T0 })
+
+    expect(sent[0].events[0].time).toBe(T0)
+    expect(sent[0].events[0].session_id).toBe(T0)
+    expect(sent[0].events[0].event_properties.consent_source).toBe('onboarding')
+  })
+
+  it.each([
+    ['options 없음', undefined],
+    ['빈 options', {}],
+    ['문자열', { time: '1700000000000' }],
+    ['NaN', { time: Number.NaN }],
+    ['null', { time: null }],
+  ])('options.time 이 유한한 수가 아니면(%s) Date.now() 를 쓴다', async (_label, options) => {
+    const { track } = await loadTrack('device-abc')
+    vi.spyOn(Date, 'now').mockReturnValue(T0 + 5000)
+    await track('Banner Rendered', {}, options)
+
+    expect(sent[0].events[0].time).toBe(T0 + 5000)
+    expect(sent[0].events[0].session_id).toBe(T0 + 5000)
+  })
+
   it('세션 저장소가 실패하면 경고하고 session_id -1 로 이벤트는 보낸다', async () => {
     const { track } = await loadTrack('device-abc')
     chrome.storage.session.get = () => Promise.reject(new Error('읽기 실패'))

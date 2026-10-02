@@ -93,7 +93,9 @@ async function sessionIdAt(now) {
   }
 }
 
-export async function track(eventType, properties = {}) {
+// options.time 은 이벤트 시각(ms)을 지정한다. 백그라운드 내부 호출만 쓴다(첫 동의의 Extension Installed).
+// 메시지로 들어온 이벤트는 시각을 지정할 수 없다. 없거나 유한한 수가 아니면 지금 시각을 쓴다.
+export async function track(eventType, properties = {}, options = {}) {
   try {
     if (isApiKeyMissing(CONFIG.amplitudeApiKey)) {
       console.warn('[체험단 필터] 앰플리튜드 키가 없습니다. 계측이 비활성화됩니다.')
@@ -104,7 +106,7 @@ export async function track(eventType, properties = {}) {
     if (!(await isCollectionAllowed())) return
 
     // 이벤트 시각과 세션 판정이 같은 시계를 쓰도록 한 번만 읽는다.
-    const now = Date.now()
+    const now = Number.isFinite(options?.time) ? options.time : Date.now()
     const sessionId = await sessionIdAt(now)
     const deviceId = await getDeviceId()
     const payload = buildPayload({
