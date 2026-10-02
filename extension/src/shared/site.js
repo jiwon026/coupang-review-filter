@@ -1,7 +1,7 @@
 // 공개 사이트 설정. 비밀이 아니므로 커밋한다. 키와 엔드포인트는 gitignore 된 config.local.js 에 따로 둔다.
-// landingOrigin 의 example.com 은 미설정 자리표시자다. 실제 주소가 정해지면 여기서 바꾼다.
+// 사이트 주소. 확장 패키지에 박혀 나가므로 확장이 스토어에 있는 동안 이 주소(Vercel 프로젝트와 도메인)를 유지해야 한다.
 export const SITE = {
-  landingOrigin: 'https://example.com',
+  landingOrigin: 'https://crf-review-remover.vercel.app',
   privacyPath: '/privacy',
   uninstallPath: '/uninstalled',
   exampleProductUrl: 'https://www.coupang.com/vp/products/7590830589',
