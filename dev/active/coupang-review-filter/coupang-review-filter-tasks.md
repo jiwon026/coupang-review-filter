@@ -1,6 +1,6 @@
 # 쿠팡 체험단 리뷰 필터: 태스크
 
-Last Updated: 2026-10-01 (세션 종료)
+Last Updated: 2026-10-02
 
 ## 계획 1: 확장 코어 (완료)
 
@@ -17,7 +17,7 @@ Last Updated: 2026-10-01 (세션 종료)
 - [x] 실브라우저 검증 (10→20→30→40→50건 누적 확인)
 - [x] main 머지
 
-## 계획 2: 계측 (진행 중)
+## 계획 2: 계측 (완료)
 
 - [x] Task 1: 설정과 백그라운드 뼈대
 - [x] Task 2: 신원 관리
@@ -36,9 +36,9 @@ Last Updated: 2026-10-01 (세션 종료)
 - [x] 품질 보강 패스 (12개, c5fc2a0, 241개)
 - [x] 최종 브랜치 리뷰 (opus, With fixes → fix wave 13항목 5041216, 재리뷰 통과, 301개)
 - [x] 머지 전 실브라우저 확인: 배너 문구, Panel Opened trigger(banner, toolbar), session_id, platform
-- [ ] **review_sort 의심 버그: 최신순 전환 직후 Banner Rendered 가 "best"** ← 여기서 재개 (context 파일 참조)
-- [ ] 남은 실브라우저 확인: 도움이 돼요 클릭(선택), 리뷰 0건 상품, release 빌드 스모크
-- [ ] main 머지, 푸시
+- [x] review_sort 버그: 두 정렬 버튼 모두 twc-font-bold 를 가져 항상 best 였음. 비활성 전용 twc-font-normal 기준으로 수정, 버전 0.2.0, 실브라우저 확인 (1890222, 304개)
+- [ ] 남은 실브라우저 확인(계획 3 제출 전): 도움이 돼요 클릭(선택), 리뷰 0건 상품, release 빌드 스모크
+- [x] main 머지, 푸시 (2026-10-02)
 
 ### 품질 보강 패스 항목
 

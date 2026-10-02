@@ -1,38 +1,34 @@
 # 쿠팡 체험단 리뷰 필터: 컨텍스트
 
-Last Updated: 2026-10-01 (세션 종료 시점)
+Last Updated: 2026-10-02 (계획 2 머지 시점)
 
-## 내일 가장 먼저 할 것
+## 다음에 가장 먼저 할 것
 
-**계획 2 코드는 전부 끝났고 리뷰도 통과했다. 머지를 막는 것은 실브라우저에서 발견된 의심 버그 하나다.**
+**계획 2(계측)는 끝났고 main 에 머지됐다(2026-10-02). 다음은 계획 3(랜딩과 배포)이다.**
 
-### 의심 버그: 최신순으로 바꿨는데 review_sort 가 "best"
+1. `docs/superpowers/plans/2026-09-28-landing-and-release.md` 는 계획 1 직후에 쓰여 많이 낡았다. 그대로 실행하지 않는다. 현재 코드와 아래 "계획 3 으로 넘길 것" 을 반영해 계획을 다시 쓴다(superpowers:writing-plans). 큰 작업이므로 사용자와 범위부터 합의한다
+2. 웹스토어 심사가 1~2주 걸린다. 랜딩보다 제출 준비(개인정보 처리방침, 스토어 설명, 아이콘, release 빌드 스모크)를 앞에 두는 순서를 사용자에게 제안한다
+3. 앰플리튜드 MCP 인증이 되어 있으면 대시보드 구성을 직접 볼 수 있다(사용자가 별도 터미널에서 `/mcp`)
 
-사용자가 쿠팡 리뷰를 최신순으로 바꾼 직후 들어온 `Banner Rendered` 의 `review_sort` 가 `"best"` 였다.
-최종 리뷰가 미리 경고한 위험(I6): 쿠팡이 리뷰 목록을 바꾸는 시점이 정렬 버튼의 굵은 글씨(`twc-font-bold`)가 바뀌는 시점보다 빠르면, 관측 순간에 이전 정렬을 읽는다.
-사실이면 명세 4.4절(정렬별 체험단 노출 편향, 이 포폴의 중심 분석)에 쓰는 값이 틀리게 쌓인다. 또 `sort_pages_seen` 도 정렬 변경을 못 알아채 1로 초기화되지 않는다.
+### 계획 2 마지막에 잡은 버그 (기록)
 
-**추측으로 고치지 않는다.** superpowers:systematic-debugging 으로 증거부터:
+`review_sort` 가 항상 `best` 로 기록되고 있었다. 쿠팡은 정렬 버튼 두 개 모두에 `twc-font-bold` 를 기본으로 넣고 비활성에만 `twc-font-normal` 을 붙인다. 판정을 "비활성 전용 토큰이 없는 쪽이 활성, 정확히 하나가 아니면 unknown" 으로 고쳤다.
+원인의 원인: 컨트롤러가 브리프에 실제 클래스를 줄여 적었고 테스트 픽스처도 줄인 문자열이었다. 이제 `tests/helpers/sort-buttons.js` 에 실측 원문이 있다.
+**분석 시 `app_version >= 0.2.0` 만 쓴다.** 그 이전 이벤트는 `review_sort` 가 전부 `best` 이고 세션, filter_state, 배너 문구도 다르다.
 
-1. 사용자에게 받을 것(어제 요청해 둠):
-   - 그 이벤트의 `event_properties` 를 펼친 스크린샷(`sort_pages_seen`, `page_first_review_id`, `pages_seen`)
-   - 직전 동작이 최신순 클릭 한 번이었는지, 목록이 실제로 바뀌었는지
-   - 최신순 상태에서 다음 페이지로 넘긴 뒤 `review_sort` 가 `"latest"` 인지
-2. 판별: 다음 페이지에서 `"latest"` 면 "전환 직후 한 번 늦게 읽음"(타이밍). 계속 `"best"` 면 "최신순을 아예 못 읽음"(셀렉터나 라벨).
-3. 타이밍이면 후보 수정: 정렬 버튼 클릭을 직접 감지해 정렬 상태를 갱신하거나, 정렬을 관측 시점이 아니라 버튼 클래스 변경까지 기다려 확정. 셀렉터면 `content/selectors.js` 의 `SORT_SELECTORS`, `SORT_LABELS` 를 실측으로 고침
-4. 고친 뒤 실브라우저로 다시 확인. 그다음 머지 확인을 사용자에게 받음
-
-### 그 밖에 아직 실브라우저로 안 본 것
+### 아직 실브라우저로 안 본 것
 
 - "도움이 돼요"나 "더보기"를 눌러도 `Banner Rendered` 가 새로 안 들어오는지(선택, 쿠팡 계정에 투표가 남음)
 - 리뷰 0건 상품에서 `Extension Error` 가 안 나가는지
-- release 빌드(`npm run build:release`) 스모크
+- release 빌드(`npm run build:release`) 스모크. 웹스토어 제출 전 필수
 
-### 어제(10/01) 실브라우저로 확인한 것
+### 실브라우저로 확인한 것 (10/01~10/02)
 
 - 사이드 패널: 열림, 다음 페이지에서 실시간 갱신, 1분 뒤 툴바로 열어도 숫자 유지
-- 배너 문구: ratio 변형 정상(제목 비율, 보조 줄 평점). 이 기기는 `banner_copy=ratio`, `default_filter=off`
-- 앰플리튜드 페이로드(서비스 워커 DevTools Network → httpapi → Payload): `Panel Opened` 의 `trigger` 가 배너 경로 `banner`, 툴바 경로 `toolbar`. `session_id` 실림. 최상위 `platform: "Chrome Extension"`, `app_version` 실림
+- 배너 문구: ratio 변형 정상. 이 기기는 `banner_copy=ratio`, `default_filter=off`
+- 페이로드: `Panel Opened` 의 `trigger` 가 `banner` / `toolbar` 로 구분, `session_id`, 최상위 `platform: "Chrome Extension"`, `app_version: "0.2.0"`
+- 최신순 전환 후 `Banner Rendered` 의 `review_sort: "latest"`
+- 컨트롤러 실측(내장 브라우저): 최신순 클릭 후 60ms 에 버튼 클래스, 500ms 에 목록 교체. 타이밍 문제 없음
 
 ## 전체 진행 상황
 
@@ -40,11 +36,11 @@ Last Updated: 2026-10-01 (세션 종료 시점)
 |---|---|
 | 계획 1: 확장 코어 | **완료**, main 머지 |
 | 누적 집계 (계획 외 추가) | **완료**, main 머지 |
-| 계획 2: 계측 | **코드 완료, 리뷰 통과, 머지 대기** (review_sort 의심 버그 확인 후) |
+| 계획 2: 계측 | **완료**, main 머지, 실브라우저 검증 |
 | 계획 3: 랜딩과 배포 | 대기 |
 
-브랜치: `feat/instrumentation` (HEAD `5041216` + 문서 커밋)
-테스트: 301개 통과. `config.local.js` 없이도 301개 통과(테스트가 실제 키와 네트워크에서 격리됨)
+브랜치: main (feat/instrumentation 머지됨)
+테스트: 304개 통과. config.local.js 없이도 통과(테스트가 실제 키와 네트워크에서 격리됨)
 
 ## 오늘(10/01) 한 일
 
@@ -68,7 +64,7 @@ Last Updated: 2026-10-01 (세션 종료 시점)
 | `.superpowers/sdd/2026-09-28-instrumentation/progress.md` | **작업 원장. 모든 Ruling 과 parked 항목.** gitignore 대상이라 이 기기에만 있음 |
 | `.superpowers/sdd/2026-09-28-instrumentation/final-fix-brief.md` | 최종 fix wave 결정 13항목 |
 | `extension/src/content/index.js` | 진입점. 관측 대기열, 두 키, 오류 신호 |
-| `extension/src/content/sort.js`, `selectors.js` | 정렬 감지. **내일 버그 조사 대상** |
+| `extension/src/content/sort.js`, `selectors.js` | 정렬 감지. 비활성 전용 토큰 기준 |
 | `extension/src/background/{analytics,session,identity,lifecycle,panel-trigger,summaries}.js` | 전송, 세션, 신원, 설치와 제거, 패널 경로, 요약 저장 |
 | `extension/src/shared/config.local.js` | **실제 앰플리튜드 키. gitignore. 열지도 출력하지도 커밋하지도 않는다** |
 | `vitest.config.js`, `tests/fixtures/config.fixture.js` | 테스트가 실제 키 대신 쓰는 설정, 실제 네트워크 차단 |
