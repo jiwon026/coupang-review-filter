@@ -8,11 +8,12 @@ const PRIVACY_URL = 'https://landing.test/privacy'
 
 // 제출 뒤에는 재심사 없이 고칠 수 없는 고지 문구다. 실제 전송 항목과 맞춘 전체 문자열로 고정한다.
 const SENT_ITEMS = [
-  '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자',
-  '숨기기 버튼, 패널, 장바구니와 바로구매 버튼을 눌렀는지',
+  '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자, 필터가 켜져 있었는지',
+  '숨기기 버튼, 패널, 장바구니와 바로구매 버튼, 설치 안내의 예시 링크를 눌렀는지',
   '리뷰 정렬 방식(베스트순, 최신순)',
-  '확장의 화면(설치 안내, 패널)을 열었는지와 이용한 시각',
-  '확장 버전, 화면 실험 그룹, 오류가 났는지와 종류',
+  '확장의 화면(설치 안내, 패널)을 열었는지, 이용한 시각과 머문 시간',
+  '확장 버전, 화면 실험 그룹, 통계를 켠 화면, 오류가 났는지와 종류',
+  '확장을 제거할 때 제거 사실과 사용 기간, 직접 고른 이유',
   '무작위로 만든 익명 기기 번호',
 ]
 
@@ -115,10 +116,17 @@ describe('renderOnboarding: undecided', () => {
     expect(onChoose).toHaveBeenCalledTimes(2)
   })
 
-  it('"보내는 것" 목록은 6줄이고 문자열이 같다', () => {
+  it('"보내는 것" 목록은 7줄이고 문자열이 같다', () => {
     render()
-    expect(listItems('보내는 것')).toHaveLength(6)
+    expect(listItems('보내는 것')).toHaveLength(7)
     expect(listItems('보내는 것')).toEqual(SENT_ITEMS)
+  })
+
+  it('선택 화면에는 완료 화면용 소제목(보내는 내용)과 그 구역이 없다', () => {
+    render()
+    expect([...root.querySelectorAll('h2')].map((node) => node.textContent)).not.toContain('보내는 내용')
+    expect(root.querySelector('section.details')).toBeNull()
+    expect(root.querySelectorAll('hr')).toHaveLength(1)
   })
 
   it('"보내지 않는 것" 목록은 3줄이고 문자열이 같다', () => {
@@ -226,12 +234,62 @@ describe('renderOnboarding: 완료 상태', () => {
     expect(buttons().map((button) => button.textContent)).toEqual(['설정 바꾸기'])
   })
 
-  it.each(['granted', 'denied'])('%s 면 동의 입력 화면(제목, 목록, 선택 버튼)은 없다', (status) => {
+  it.each(['granted', 'denied'])('%s 면 동의를 묻는 제목, 설명, 선택 버튼은 없다', (status) => {
     render({ status })
     expect(root.textContent).not.toContain('익명 사용 통계를 보내 주시겠어요?')
-    expect(root.textContent).not.toContain('보내는 것')
+    expect(root.textContent).not.toContain('동의하지 않아도 모든 기능을 쓸 수 있습니다.')
     expect(buttonByText('동의하고 시작')).toBeUndefined()
     expect(buttonByText('통계 없이 사용')).toBeUndefined()
+  })
+
+  // 패널의 보내는 내용 보기는 이 페이지를 연다. 이미 고른 사용자도 여기서 무엇을 보내는지 볼 수 있어야 한다.
+  it.each(['granted', 'denied'])('%s 완료 화면에도 "보내는 것" 7줄과 "보내지 않는 것" 3줄이 같은 문자열로 있다', (status) => {
+    render({ status })
+    expect(listItems('보내는 것')).toHaveLength(7)
+    expect(listItems('보내는 것')).toEqual(SENT_ITEMS)
+    expect(listItems('보내지 않는 것')).toHaveLength(3)
+    expect(listItems('보내지 않는 것')).toEqual(NOT_SENT_ITEMS)
+  })
+
+  it.each(['granted', 'denied'])('%s 완료 화면에도 보충 설명 두 줄이 전체 문자열 그대로 있다', (status) => {
+    render({ status })
+    expect([...root.querySelectorAll('p.note')].map((node) => node.textContent)).toEqual(NOTE_ITEMS)
+  })
+
+  it.each(['granted', 'denied'])('%s 완료 화면의 목록과 보충은 선택 화면과 같은 마크업이다(같은 렌더 함수)', (status) => {
+    const disclosure = () =>
+      [...root.querySelectorAll('section.box, p.note')].map((node) => node.outerHTML)
+    render({ status: 'undecided' })
+    const onChoice = disclosure()
+    render({ status })
+    expect(onChoice).toHaveLength(4)
+    expect(disclosure()).toEqual(onChoice)
+  })
+
+  it.each(['granted', 'denied'])(
+    '%s 완료 화면의 순서: 완료 문구, 예시 링크, 설정 바꾸기, 구분선, 소제목, 두 상자, 보충 둘, 처리방침',
+    (status) => {
+      render({ status, showExample: true })
+      const consent = root.querySelector('section.consent')
+      const details = root.querySelector('section.details')
+      expect([...consent.children].map((node) => node.className)).toEqual(['done', 'example', 'choice'])
+
+      const top = [...root.children]
+      const from = top.indexOf(consent)
+      expect(top.slice(from).map((node) => node.tagName)).toEqual(['SECTION', 'HR', 'SECTION', 'P'])
+      expect(top[from + 2]).toBe(details)
+      expect(top[from + 3].className).toBe('privacy')
+
+      expect(
+        [...details.children].map((node) => `${node.tagName}:${node.querySelector('h3')?.textContent ?? node.className}`),
+      ).toEqual(['H2:', 'SECTION:보내는 것', 'SECTION:보내지 않는 것', 'P:note', 'P:note'])
+      expect(details.querySelector('h2').textContent).toBe('보내는 내용')
+    },
+  )
+
+  it('완료 화면에 처리방침 주소가 없으면 보내는 내용 구역이 마지막이다', () => {
+    render({ status: 'denied', privacyUrl: null })
+    expect(root.lastElementChild).toBe(root.querySelector('section.details'))
   })
 
   it.each(['granted', 'denied'])('%s 에서도 제목, 설명, 사용 방법은 남는다', (status) => {

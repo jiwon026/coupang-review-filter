@@ -6,11 +6,12 @@ const HOW_TO = [
 
 // 동의 전에 보여 주는 고지다. 실제로 보내는 항목과 글자 그대로 맞아야 한다. 이벤트에 항목을 더하면 여기와 처리방침도 함께 고친다.
 const SENT = [
-  '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자',
-  '숨기기 버튼, 패널, 장바구니와 바로구매 버튼을 눌렀는지',
+  '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자, 필터가 켜져 있었는지',
+  '숨기기 버튼, 패널, 장바구니와 바로구매 버튼, 설치 안내의 예시 링크를 눌렀는지',
   '리뷰 정렬 방식(베스트순, 최신순)',
-  '확장의 화면(설치 안내, 패널)을 열었는지와 이용한 시각',
-  '확장 버전, 화면 실험 그룹, 오류가 났는지와 종류',
+  '확장의 화면(설치 안내, 패널)을 열었는지, 이용한 시각과 머문 시간',
+  '확장 버전, 화면 실험 그룹, 통계를 켠 화면, 오류가 났는지와 종류',
+  '확장을 제거할 때 제거 사실과 사용 기간, 직접 고른 이유',
   '무작위로 만든 익명 기기 번호',
 ]
 
@@ -91,6 +92,13 @@ function listBox(title, items) {
   return box
 }
 
+// 보내는 것, 보내지 않는 것, 보충 설명. 선택 화면과 완료 화면이 같은 내용을 보여 주도록 이 함수 하나로 그린다.
+function appendDisclosure(parent) {
+  parent.appendChild(listBox('보내는 것', SENT))
+  parent.appendChild(listBox('보내지 않는 것', NOT_SENT))
+  for (const note of NOTES) parent.appendChild(el('p', 'note', note))
+}
+
 function saveError() {
   const error = el('p', 'error', SAVE_ERROR)
   error.setAttribute('role', 'alert')
@@ -107,9 +115,7 @@ function choiceSection({ onChoose, saveFailed, saving }) {
       '이 확장이 제대로 동작하는지, 어떤 화면이 더 도움이 되는지 확인하는 데만 씁니다. 동의하지 않아도 모든 기능을 쓸 수 있습니다.',
     ),
   )
-  section.appendChild(listBox('보내는 것', SENT))
-  section.appendChild(listBox('보내지 않는 것', NOT_SENT))
-  for (const note of NOTES) section.appendChild(el('p', 'note', note))
+  appendDisclosure(section)
 
   const choices = el('div', 'choices')
   choices.appendChild(button('동의하고 시작', () => onChoose('granted'), saving))
@@ -133,6 +139,14 @@ function doneSection({ status, onChange, saving, saveFailed, showExample, exampl
   return section
 }
 
+// 완료 화면 아래쪽에 두는 보내는 내용. 패널의 보내는 내용 보기가 이 페이지를 열므로 이미 고른 사용자도 여기서 다시 볼 수 있다.
+function detailsSection() {
+  const section = el('section', 'details')
+  section.appendChild(el('h2', null, '보내는 내용'))
+  appendDisclosure(section)
+  return section
+}
+
 // status 가 granted 나 denied 면 완료 상태, 그 밖에는 선택 화면이다. showExample 은 완료 상태에서만 쓰인다.
 export function renderOnboarding(root, { status, showExample, exampleUrl, privacyUrl, onChoose, onExample, onChange, saveFailed, saving = false }) {
   root.replaceChildren()
@@ -141,11 +155,13 @@ export function renderOnboarding(root, { status, showExample, exampleUrl, privac
   root.appendChild(howTo())
   root.appendChild(el('hr'))
 
-  root.appendChild(
-    Object.hasOwn(DONE_COPY, status)
-      ? doneSection({ status, onChange, saving, saveFailed, showExample, exampleUrl, onExample })
-      : choiceSection({ onChoose, saveFailed, saving }),
-  )
+  if (Object.hasOwn(DONE_COPY, status)) {
+    root.appendChild(doneSection({ status, onChange, saving, saveFailed, showExample, exampleUrl, onExample }))
+    root.appendChild(el('hr'))
+    root.appendChild(detailsSection())
+  } else {
+    root.appendChild(choiceSection({ onChoose, saveFailed, saving }))
+  }
 
   if (privacyUrl) {
     const paragraph = el('p', 'privacy')

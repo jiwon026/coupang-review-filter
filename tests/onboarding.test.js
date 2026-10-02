@@ -203,6 +203,16 @@ describe('온보딩 배선: 로드', () => {
     expect(ofType('crf:track')).toHaveLength(0)
   })
 
+  // 패널의 보내는 내용 보기가 여는 화면이다. 이미 고른 사용자에게도 보내는 내용이 보여야 한다.
+  it.each(['granted', 'denied'])('이미 %s 로 열어도 완료 화면에 보내는 것과 보내지 않는 것 목록이 있다', async (status) => {
+    const root = await loadOnboarding({ consent: { consent: { status, decidedAt: 1 } } })
+    const headings = [...root.querySelectorAll('h2, h3')].map((node) => node.textContent)
+    expect(headings).toEqual(['사용 방법', '보내는 내용', '보내는 것', '보내지 않는 것'])
+    expect(root.querySelectorAll('section.box li')).toHaveLength(10)
+    expect(root.querySelectorAll('p.note')).toHaveLength(2)
+    expect(buttonByText(root, '설정 바꾸기')).toBeTruthy()
+  })
+
   it('이미 granted 로 열면 이 페이지 로드에서 Onboarding Viewed 를 1건 보낸다', async () => {
     await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } } })
     expect(tracked('Onboarding Viewed')).toHaveLength(1)
