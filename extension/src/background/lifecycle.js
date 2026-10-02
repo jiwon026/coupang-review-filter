@@ -1,6 +1,4 @@
 import { CONFIG } from '../shared/config.local.js'
-import { EVENTS } from '../shared/events.js'
-import { track } from './analytics.js'
 import { getDeviceId, getInstalledAt, setInstalledAt } from './identity.js'
 
 const LOG_PREFIX = '[체험단 필터]'
@@ -69,11 +67,6 @@ export async function handleInstalled(details) {
   }
 
   // configureUninstallUrl 은 실패를 스스로 삼킨다. 설치 시각이 주소에 실리도록 저장 뒤에 부른다.
+  // 설치 순간에는 동의가 없으므로 이벤트를 보내지 않는다. Extension Installed 는 처음 동의할 때 보낸다.
   await configureUninstallUrl()
-
-  try {
-    await track(EVENTS.EXTENSION_INSTALLED, {})
-  } catch (error) {
-    warn('설치 이벤트를 보내지 못했습니다:', error)
-  }
 }

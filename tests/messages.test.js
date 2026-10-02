@@ -10,6 +10,8 @@ describe('MESSAGES', () => {
       GET_SUMMARY: 'crf:get-summary',
       GET_VARIANT: 'crf:get-variant',
       CONSUME_PANEL_TRIGGER: 'crf:consume-panel-trigger',
+      GET_CONSENT: 'crf:get-consent',
+      SET_CONSENT: 'crf:set-consent',
     })
   })
 

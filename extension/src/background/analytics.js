@@ -2,6 +2,7 @@ import { CONFIG } from '../shared/config.local.js'
 import { getDeviceId, getUserId } from './identity.js'
 import { assignAll } from '../core/experiment.js'
 import { getSessionId } from './session.js'
+import { isCollectionAllowed } from './consent.js'
 
 // 앰플리튜드는 이벤트 최상위의 platform 과 app_version 을 기기 속성으로 쓴다.
 const AMPLITUDE_PLATFORM = 'Chrome Extension'
@@ -66,6 +67,9 @@ export async function track(eventType, properties = {}) {
       console.warn('[체험단 필터] 앰플리튜드 키가 없습니다. 계측이 비활성화됩니다.')
       return
     }
+
+    // 동의한 경우에만 보낸다. 미동의는 정상 상태이므로 경고하지 않고 쌓아 두지도 않는다.
+    if (!(await isCollectionAllowed())) return
 
     // 이벤트 시각과 세션 판정이 같은 시계를 쓰도록 한 번만 읽는다.
     const now = Date.now()

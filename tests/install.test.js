@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { installChromeMock } from './helpers/chrome-mock.js'
+import { installChromeMock, grantConsent } from './helpers/chrome-mock.js'
 
 const mockConfig = vi.hoisted(() => ({
   amplitudeApiKey: '0123456789abcdef0123456789abcdef',
@@ -15,7 +15,8 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 let sent = []
 
 async function loadBackground(initial = {}) {
-  const store = installChromeMock({ crf_device_id: 'dev-1', ...initial })
+  // 동의한 상태로 시작한다. 설치만으로는 동의 여부와 무관하게 아무것도 보내지 않음을 검증하기 위해서다.
+  const store = grantConsent(installChromeMock({ crf_device_id: 'dev-1', ...initial }))
   sent = []
   globalThis.fetch = vi.fn(async (_url, init) => {
     sent.push(JSON.parse(init.body))
@@ -52,12 +53,13 @@ describe('설치', () => {
     expect(chrome.__installedListeners).toHaveLength(1)
   })
 
-  it('reason 이 install 이면 Extension Installed 1건과 설치 시각을 저장한다', async () => {
+  it('reason 이 install 이면 설치 시각을 저장하고 아무것도 보내지 않는다', async () => {
     const { chrome, store } = await loadBackground()
     const before = Date.now()
     await fireInstalled(chrome, { reason: 'install' })
 
-    expect(sentOfType('Extension Installed')).toHaveLength(1)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+    expect(sentOfType('Extension Installed')).toHaveLength(0)
     expect(store.crf_installed_at).toBeGreaterThanOrEqual(before)
     expect(store.crf_installed_at).toBeLessThanOrEqual(Date.now())
   })
@@ -114,13 +116,14 @@ describe('설치', () => {
     expect(new URL(urls[urls.length - 1]).searchParams.get('i')).toBe(String(store.crf_installed_at))
   })
 
-  it('설치 시각 저장이 실패해도 경고만 하고 나머지를 이어간다', async () => {
+  it('설치 시각 저장이 실패해도 경고만 하고 제거 주소 설정을 이어간다', async () => {
     const { chrome } = await loadBackground()
     chrome.storage.local.set = () => Promise.reject(new Error('저장 실패'))
     await fireInstalled(chrome, { reason: 'install' })
 
     expect(console.warn).toHaveBeenCalled()
-    expect(sentOfType('Extension Installed')).toHaveLength(1)
+    expect(chrome.__calls.setUninstallURL).toHaveLength(2)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
   })
 
   it('details 가 없어도 던지지 않는다', async () => {
@@ -170,11 +173,12 @@ describe('제거 주소', () => {
     expect(chrome.__calls.setUninstallURL).toHaveLength(0)
   })
 
-  it('랜딩이 설정되지 않아도 설치 이벤트는 기록한다', async () => {
+  it('랜딩이 설정되지 않아도 설치 처리는 던지지 않고 설치 시각을 저장한다', async () => {
     mockConfig.landingOrigin = 'https://example.com'
-    const { chrome } = await loadBackground()
+    const { chrome, store } = await loadBackground()
     await fireInstalled(chrome, { reason: 'install' })
-    expect(sentOfType('Extension Installed')).toHaveLength(1)
+    expect(typeof store.crf_installed_at).toBe('number')
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
   })
 
   it('setUninstallURL 이 거부돼도 경고만 한다', async () => {
@@ -182,7 +186,7 @@ describe('제거 주소', () => {
     chrome.runtime.setUninstallURL = () => Promise.reject(new Error('거부'))
     await fireInstalled(chrome, { reason: 'install' })
     expect(console.warn).toHaveBeenCalled()
-    expect(sentOfType('Extension Installed')).toHaveLength(1)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
   })
 })
 

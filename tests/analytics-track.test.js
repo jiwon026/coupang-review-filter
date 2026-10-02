@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { installChromeMock } from './helpers/chrome-mock.js'
+import { installChromeMock, grantConsent } from './helpers/chrome-mock.js'
 import { assignAll, EXPERIMENTS } from '../extension/src/core/experiment.js'
 
 // 실제 키가 든 로컬 설정 파일을 읽지 않도록 설정 모듈을 통째로 대체한다.
@@ -16,7 +16,8 @@ const deviceIds = Array.from({ length: 200 }, (_, i) => `device-${i}-${(i * 7919
 let sent = []
 
 async function loadTrack(deviceId) {
-  installChromeMock({ crf_device_id: deviceId })
+  // 이 파일은 전송 내용을 검증한다. 게이트는 consent.test.js 가 검증하므로 동의한 상태로 준비한다.
+  grantConsent(installChromeMock({ crf_device_id: deviceId }))
   sent = []
   globalThis.fetch = vi.fn(async (_url, init) => {
     sent.push(JSON.parse(init.body))

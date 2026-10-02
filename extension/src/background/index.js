@@ -1,7 +1,9 @@
 import { MESSAGES } from '../shared/messages.js'
+import { EVENTS } from '../shared/events.js'
 import { debugLog } from '../shared/log.js'
 import { track } from './analytics.js'
-import { getDeviceId } from './identity.js'
+import { getDeviceId, getInstalledAt } from './identity.js'
+import { CONSENT, getConsent, setConsent } from './consent.js'
 import { saveSummary, loadSummary, removeSummary } from './summaries.js'
 import { assignAll } from '../core/experiment.js'
 import { configureUninstallUrl, handleInstalled } from './lifecycle.js'
@@ -27,6 +29,37 @@ configureUninstallUrl().catch((error) =>
 chrome.sidePanel
   .setPanelBehavior({ openPanelOnActionClick: true })
   .catch((error) => console.warn('[체험단 필터] 패널 동작을 설정하지 못했습니다:', error?.message))
+
+const CONSENT_SOURCES = ['onboarding', 'panel']
+
+// 확장 페이지(온보딩, 사이드 패널)에서 온 메시지만 동의를 바꿀 수 있다. 콘텐츠 스크립트의 sender.url 은 쿠팡 주소다.
+function isFromExtensionPage(sender) {
+  return typeof sender?.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
+}
+
+async function secondsSinceInstall() {
+  try {
+    const installedAt = await getInstalledAt()
+    return installedAt == null ? null : Math.round((Date.now() - installedAt) / 1000)
+  } catch {
+    return null
+  }
+}
+
+// 동의 저장 뒤의 부수 작업. 응답을 막지 않도록 응답 뒤에 하고, 실패해도 던지지 않는다.
+async function afterConsentChange(result, source) {
+  try {
+    await configureUninstallUrl()
+    if (result.firstGrant) {
+      await track(EVENTS.EXTENSION_INSTALLED, {
+        consent_source: source,
+        seconds_since_install: await secondsSinceInstall(),
+      })
+    }
+  } catch (error) {
+    console.warn('[체험단 필터] 동의 후속 처리에 실패했습니다:', error?.message)
+  }
+}
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === MESSAGES.SUMMARY_UPDATED) {
@@ -93,6 +126,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     track(message.eventType, message.properties)
     sendResponse({ ok: true })
     return false
+  }
+
+  if (message?.type === MESSAGES.GET_CONSENT) {
+    getConsent()
+      .then(
+        (consent) => sendResponse({ consent }),
+        (error) => {
+          console.warn('[체험단 필터] 동의 상태를 읽지 못했습니다:', error?.message)
+          sendResponse({ consent: { status: CONSENT.UNDECIDED, decidedAt: null } })
+        },
+      )
+      .catch((error) =>
+        console.warn('[체험단 필터] 동의 상태 응답을 보내지 못했습니다:', error?.message),
+      )
+    return true
+  }
+
+  if (message?.type === MESSAGES.SET_CONSENT) {
+    const valid = message.status === CONSENT.GRANTED || message.status === CONSENT.DENIED
+    if (!isFromExtensionPage(sender) || !valid) {
+      sendResponse({ error: 'invalid' })
+      return false
+    }
+    const source = CONSENT_SOURCES.includes(message.source) ? message.source : 'unknown'
+    setConsent(message.status)
+      .then(
+        (result) => {
+          sendResponse({ consent: { status: result.status, decidedAt: result.decidedAt } })
+          return afterConsentChange(result, source)
+        },
+        (error) => {
+          console.warn('[체험단 필터] 동의를 저장하지 못했습니다:', error?.message)
+          sendResponse({ error: 'failed' })
+        },
+      )
+      .catch((error) =>
+        console.warn('[체험단 필터] 동의 응답을 보내지 못했습니다:', error?.message),
+      )
+    return true
   }
 
   if (message?.type === MESSAGES.GET_VARIANT) {

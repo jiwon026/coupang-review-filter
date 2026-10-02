@@ -1,3 +1,12 @@
+const CONSENT_STORAGE_KEY = 'crf_consent'
+export const EXTENSION_ORIGIN = 'chrome-extension://test-extension-id/'
+
+// 이벤트 전송을 기대하는 테스트의 준비 단계에서 쓴다. 저장소에 동의 상태를 granted 로 미리 둔다.
+export function grantConsent(store, decidedAt = 1_700_000_000_000) {
+  store[CONSENT_STORAGE_KEY] = { status: 'granted', decidedAt, everGranted: true }
+  return store
+}
+
 export function installChromeMock(initial = {}) {
   const store = { ...initial }
   const sessionStore = {}
@@ -44,6 +53,8 @@ export function installChromeMock(initial = {}) {
         calls.setUninstallURL.push(url)
         return Promise.resolve()
       },
+      id: 'test-extension-id',
+      getURL: (path = '') => `${EXTENSION_ORIGIN}${path}`,
       getManifest: () => ({ version: '0.1.0' }),
       onMessage: { addListener: (fn) => listeners.push(fn) },
       onInstalled: { addListener: (fn) => installedListeners.push(fn) },
