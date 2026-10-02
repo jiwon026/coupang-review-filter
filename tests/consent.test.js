@@ -4,11 +4,22 @@ import { installChromeMock, grantConsent, EXTENSION_ORIGIN } from './helpers/chr
 const mockConfig = vi.hoisted(() => ({
   amplitudeApiKey: '0123456789abcdef0123456789abcdef',
   amplitudeEndpoint: 'https://amplitude.test/2/httpapi',
+}))
+
+// 사이트 주소는 커밋되는 공개 설정(site.js)에서 온다. 테스트는 그 모듈의 SITE 만 바꿔 끼운다.
+const mockSite = vi.hoisted(() => ({
   landingOrigin: 'https://landing.test',
+  privacyPath: '/privacy',
+  uninstallPath: '/uninstalled',
+  exampleProductUrl: 'https://www.coupang.com/vp/products/7590830589',
 }))
 
 // 실제 키가 든 로컬 설정 파일을 읽지 않도록 설정 모듈을 통째로 대체한다.
 vi.mock('../extension/src/shared/config.local.js', () => ({ CONFIG: mockConfig }))
+vi.mock('../extension/src/shared/site.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  SITE: mockSite,
+}))
 
 const T0 = 1_700_000_000_000
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -369,13 +380,109 @@ describe('SET_CONSENT 와 GET_CONSENT 메시지', () => {
     expect(after.consent.status).toBe('denied')
   })
 
-  it('GET_CONSENT 는 읽기가 실패해도 정확히 한 번 응답한다', async () => {
+  it('GET_CONSENT 는 읽기가 실패해도 정확히 한 번 응답하고 실패 표지를 단다', async () => {
     const { chrome } = await loadBackground()
     chrome.storage.local.get = () => Promise.reject(new Error('읽기 실패'))
     const dispatched = dispatch(chrome, { type: 'crf:get-consent' }, extensionSender())
     const response = await dispatched.response
     await flush()
-    expect(response).toEqual({ consent: { status: 'undecided', decidedAt: null } })
+    expect(response).toEqual({ consent: { status: 'undecided', decidedAt: null }, error: 'failed' })
     expect(dispatched.responses).toHaveLength(1)
+  })
+
+  it('GET_CONSENT 는 읽기에 성공하면 error 필드를 싣지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    const response = await dispatch(chrome, { type: 'crf:get-consent' }, extensionSender()).response
+    expect('error' in response).toBe(false)
+  })
+
+  it('다른 확장 id 의 페이지에서 온 SET_CONSENT 는 invalid 이고 상태를 바꾸지 않는다', async () => {
+    const { chrome, store } = await loadBackground()
+    const response = await dispatch(
+      chrome,
+      { type: 'crf:set-consent', status: 'granted', source: 'onboarding' },
+      { id: 'other-extension-id', url: 'chrome-extension://other-extension-id/src/onboarding/index.html' },
+    ).response
+    await flush()
+
+    expect(response).toEqual({ error: 'invalid' })
+    expect('crf_consent' in store).toBe(false)
+    expect(sent).toHaveLength(0)
+  })
+
+  it('id 가 같은 접두사로 시작하는 다른 확장의 주소도 invalid', async () => {
+    const { chrome, store } = await loadBackground()
+    const response = await dispatch(
+      chrome,
+      { type: 'crf:set-consent', status: 'granted', source: 'onboarding' },
+      { url: 'chrome-extension://test-extension-id-evil/src/onboarding/index.html' },
+    ).response
+    expect(response).toEqual({ error: 'invalid' })
+    expect('crf_consent' in store).toBe(false)
+  })
+})
+
+describe('TRACK 메시지 경로의 동의 게이트', () => {
+  const trackMessage = { type: 'crf:track', eventType: 'Banner Rendered', properties: { review_sort: 'BEST' } }
+
+  it('undecided 에서는 fetch 를 부르지 않는다', async () => {
+    const { chrome } = await loadBackground()
+    dispatch(chrome, trackMessage, contentScriptSender())
+    await flush()
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('denied 에서는 fetch 를 부르지 않는다', async () => {
+    const { chrome, store } = await loadBackground({
+      crf_consent: { status: 'denied', decidedAt: T0, everGranted: false },
+    })
+    expect(store.crf_consent.status).toBe('denied')
+    dispatch(chrome, trackMessage, contentScriptSender())
+    await flush()
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('granted 에서는 fetch 를 한 번 부른다', async () => {
+    const { chrome } = await loadBackground({
+      crf_consent: { status: 'granted', decidedAt: T0, everGranted: true },
+    })
+    dispatch(chrome, trackMessage, contentScriptSender())
+    await flush()
+    await flush()
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('저장소 접근 수준', () => {
+  it('백그라운드를 불러오면 storage.local.setAccessLevel 을 TRUSTED_CONTEXTS 로 1회 부른다', async () => {
+    const { chrome } = await loadBackground()
+    expect(chrome.__calls.setAccessLevel).toEqual([{ accessLevel: 'TRUSTED_CONTEXTS' }])
+  })
+
+  it('호출이 거부돼도 경고만 하고 리스너 등록까지 끝난다', async () => {
+    installChromeMock({ crf_device_id: 'dev-1' })
+    chrome.storage.local.setAccessLevel = () => Promise.reject(new Error('거부'))
+    mockFetch()
+    vi.resetModules()
+    await import('../extension/src/background/index.js')
+    await flush()
+
+    expect(chrome.__listeners).toHaveLength(1)
+    expect(chrome.__installedListeners).toHaveLength(1)
+    expect(console.warn).toHaveBeenCalled()
+  })
+
+  it('setAccessLevel 이 동기적으로 던져도(지원하지 않는 크롬) 리스너 등록까지 끝난다', async () => {
+    installChromeMock({ crf_device_id: 'dev-1' })
+    chrome.storage.local.setAccessLevel = () => {
+      throw new Error('동기 예외')
+    }
+    mockFetch()
+    vi.resetModules()
+    await import('../extension/src/background/index.js')
+    await flush()
+
+    expect(chrome.__listeners).toHaveLength(1)
+    expect(console.warn).toHaveBeenCalled()
   })
 })

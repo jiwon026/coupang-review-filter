@@ -1,22 +1,36 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { installChromeMock, grantConsent } from './helpers/chrome-mock.js'
+import { installChromeMock, grantConsent, EXTENSION_ORIGIN } from './helpers/chrome-mock.js'
 
 const mockConfig = vi.hoisted(() => ({
   amplitudeApiKey: '0123456789abcdef0123456789abcdef',
   amplitudeEndpoint: 'https://amplitude.test/2/httpapi',
+}))
+
+// 사이트 주소는 커밋되는 공개 설정(site.js)에서 온다. 테스트는 그 모듈의 SITE 만 바꿔 끼운다.
+const mockSite = vi.hoisted(() => ({
   landingOrigin: 'https://landing.test',
+  privacyPath: '/privacy',
+  uninstallPath: '/uninstalled',
+  exampleProductUrl: 'https://www.coupang.com/vp/products/7590830589',
 }))
 
 // 실제 키가 든 로컬 설정 파일을 읽지 않도록 설정 모듈을 통째로 대체한다.
 vi.mock('../extension/src/shared/config.local.js', () => ({ CONFIG: mockConfig }))
+vi.mock('../extension/src/shared/site.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  SITE: mockSite,
+}))
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 let sent = []
 
-async function loadBackground(initial = {}) {
-  // 동의한 상태로 시작한다. 설치만으로는 동의 여부와 무관하게 아무것도 보내지 않음을 검증하기 위해서다.
-  const store = grantConsent(installChromeMock({ crf_device_id: 'dev-1', ...initial }))
+// consent 는 'granted'(기본), 'denied', 'undecided' 중 하나다.
+async function loadBackground(initial = {}, consent = 'granted') {
+  // 기본은 동의한 상태로 시작한다. 설치만으로는 동의 여부와 무관하게 아무것도 보내지 않음을 검증하기 위해서다.
+  const store = installChromeMock({ crf_device_id: 'dev-1', ...initial })
+  if (consent === 'granted') grantConsent(store)
+  if (consent === 'denied') store.crf_consent = { status: 'denied', decidedAt: 1_700_000_000_000, everGranted: true }
   sent = []
   globalThis.fetch = vi.fn(async (_url, init) => {
     sent.push(JSON.parse(init.body))
@@ -27,6 +41,15 @@ async function loadBackground(initial = {}) {
   await flush()
   return { chrome: globalThis.chrome, store }
 }
+
+// SET_CONSENT 를 확장 페이지 발신으로 보낸다. respond 로 응답 콜백을 바꿔 끼울 수 있다.
+function sendSetConsent(chrome, status, respond = () => {}) {
+  const sender = { id: 'test-extension-id', url: `${EXTENSION_ORIGIN}src/onboarding/index.html` }
+  const message = { type: 'crf:set-consent', status, source: 'panel' }
+  for (const listener of chrome.__listeners) listener(message, sender, respond)
+}
+
+const lastUninstallUrl = (chrome) => new URL(chrome.__calls.setUninstallURL.at(-1))
 
 async function fireInstalled(chrome, details) {
   for (const listener of chrome.__installedListeners) listener(details)
@@ -39,7 +62,7 @@ function sentOfType(eventType) {
 
 describe('설치', () => {
   beforeEach(() => {
-    mockConfig.landingOrigin = 'https://landing.test'
+    mockSite.landingOrigin = 'https://landing.test'
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
@@ -93,7 +116,8 @@ describe('설치', () => {
   })
 
   it('시작 시 설정과 설치 시 설정이 겹쳐도 마지막 setUninstallURL 에 i 가 실린다', async () => {
-    const store = installChromeMock({ crf_device_id: 'dev-1' })
+    // i 는 동의한 경우에만 실리므로 동의한 상태로 준비한다.
+    const store = grantConsent(installChromeMock({ crf_device_id: 'dev-1' }))
     globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200 }))
     // 워커 시작 때의 설정이 설치 시각을 비어 있는 상태로 읽은 뒤 늦게 끝나는 상황을 만든다.
     const originalGet = chrome.storage.local.get
@@ -135,7 +159,7 @@ describe('설치', () => {
 
 describe('제거 주소', () => {
   beforeEach(() => {
-    mockConfig.landingOrigin = 'https://landing.test'
+    mockSite.landingOrigin = 'https://landing.test'
     vi.spyOn(console, 'log').mockImplementation(() => {})
     vi.spyOn(console, 'warn').mockImplementation(() => {})
   })
@@ -167,18 +191,108 @@ describe('제거 주소', () => {
     ['빈 문자열', ''],
     ['파싱할 수 없는 값', 'not a url'],
   ])('랜딩이 설정되지 않았으면(%s) 제거 주소를 설정하지 않는다', async (_label, origin) => {
-    mockConfig.landingOrigin = origin
+    mockSite.landingOrigin = origin
     const { chrome } = await loadBackground()
     await fireInstalled(chrome, { reason: 'install' })
     expect(chrome.__calls.setUninstallURL).toHaveLength(0)
   })
 
   it('랜딩이 설정되지 않아도 설치 처리는 던지지 않고 설치 시각을 저장한다', async () => {
-    mockConfig.landingOrigin = 'https://example.com'
+    mockSite.landingOrigin = 'https://example.com'
     const { chrome, store } = await loadBackground()
     await fireInstalled(chrome, { reason: 'install' })
     expect(typeof store.crf_installed_at).toBe('number')
     expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('granted 이면 d, v, i 를 모두 싣는다', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'granted')
+    const url = lastUninstallUrl(chrome)
+    expect(url.searchParams.get('d')).toBe('dev-1')
+    expect(url.searchParams.get('v')).toBe('0.1.0')
+    expect(url.searchParams.get('i')).toBe('1700000000000')
+  })
+
+  it('denied 이면 v 만 싣는다(기기 번호와 설치 시각이 저장돼 있어도)', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'denied')
+    const url = lastUninstallUrl(chrome)
+    expect(url.pathname).toBe('/uninstalled')
+    expect(url.searchParams.get('v')).toBe('0.1.0')
+    expect(url.searchParams.has('d')).toBe(false)
+    expect(url.searchParams.has('i')).toBe(false)
+  })
+
+  it('undecided 이면 v 만 싣고 기기 번호를 새로 만들지도 않는다', async () => {
+    const { chrome, store } = await loadBackground({}, 'undecided')
+    delete store.crf_device_id
+    chrome.__calls.setUninstallURL.length = 0
+    await fireInstalled(chrome, { reason: 'install' })
+
+    const url = lastUninstallUrl(chrome)
+    expect(url.searchParams.get('v')).toBe('0.1.0')
+    expect(url.searchParams.has('d')).toBe(false)
+    expect(url.searchParams.has('i')).toBe(false)
+    expect('crf_device_id' in store).toBe(false)
+  })
+
+  it('동의 저장소 읽기가 실패하면 d 를 싣지 않는다(실패 시 닫힘)', async () => {
+    const { chrome } = await loadBackground({}, 'granted')
+    const originalGet = chrome.storage.local.get
+    chrome.storage.local.get = (keys) =>
+      (Array.isArray(keys) ? keys : [keys]).includes('crf_consent')
+        ? Promise.reject(new Error('읽기 실패'))
+        : originalGet(keys)
+    await fireInstalled(chrome, { reason: 'install' })
+
+    const url = lastUninstallUrl(chrome)
+    expect(url.searchParams.has('d')).toBe(false)
+    expect(url.searchParams.get('v')).toBe('0.1.0')
+  })
+
+  it('granted 에서 denied 로 바꾸면 마지막 setUninstallURL 인자에 d 가 없다', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, 'granted')
+    expect(lastUninstallUrl(chrome).searchParams.get('d')).toBe('dev-1')
+
+    sendSetConsent(chrome, 'denied')
+    await flush()
+
+    const url = lastUninstallUrl(chrome)
+    expect(url.searchParams.has('d')).toBe(false)
+    expect(url.searchParams.has('i')).toBe(false)
+    expect(url.searchParams.get('v')).toBe('0.1.0')
+  })
+
+  it('denied 에서 granted 로 바꾸면 d 가 다시 실린다', async () => {
+    const { chrome } = await loadBackground({}, 'denied')
+    expect(lastUninstallUrl(chrome).searchParams.has('d')).toBe(false)
+
+    sendSetConsent(chrome, 'granted')
+    await flush()
+
+    expect(lastUninstallUrl(chrome).searchParams.get('d')).toBe('dev-1')
+  })
+
+  it('응답 콜백이 던져도(패널이 이미 닫힘) granted 에서 denied 로 바꾼 뒤 d 가 없다', async () => {
+    const { chrome } = await loadBackground({}, 'granted')
+
+    sendSetConsent(chrome, 'denied', () => {
+      throw new Error('Attempting to use a disconnected port object')
+    })
+    await flush()
+
+    expect(lastUninstallUrl(chrome).searchParams.has('d')).toBe(false)
+  })
+
+  it('응답 콜백이 던져도 첫 granted 의 Extension Installed 는 1건 나간다', async () => {
+    const { chrome } = await loadBackground({}, 'undecided')
+
+    sendSetConsent(chrome, 'granted', () => {
+      throw new Error('Attempting to use a disconnected port object')
+    })
+    await flush()
+
+    expect(sentOfType('Extension Installed')).toHaveLength(1)
+    expect(lastUninstallUrl(chrome).searchParams.get('d')).toBe('dev-1')
   })
 
   it('setUninstallURL 이 거부돼도 경고만 한다', async () => {
@@ -187,29 +301,5 @@ describe('제거 주소', () => {
     await fireInstalled(chrome, { reason: 'install' })
     expect(console.warn).toHaveBeenCalled()
     expect(globalThis.fetch).toHaveBeenCalledTimes(0)
-  })
-})
-
-describe('isLandingConfigured', () => {
-  it('실제 랜딩 주소는 true', async () => {
-    const { isLandingConfigured } = await import('../extension/src/background/lifecycle.js')
-    expect(isLandingConfigured('https://landing.test')).toBe(true)
-    expect(isLandingConfigured('https://coupang-filter.vercel.app')).toBe(true)
-  })
-
-  it('비었거나 파싱 불가이거나 example.com 이면 false', async () => {
-    const { isLandingConfigured } = await import('../extension/src/background/lifecycle.js')
-    expect(isLandingConfigured('')).toBe(false)
-    expect(isLandingConfigured(undefined)).toBe(false)
-    expect(isLandingConfigured(null)).toBe(false)
-    expect(isLandingConfigured('nope')).toBe(false)
-    expect(isLandingConfigured('https://example.com')).toBe(false)
-    expect(isLandingConfigured('https://example.com/path')).toBe(false)
-    expect(isLandingConfigured('https://www.example.com')).toBe(false)
-  })
-
-  it('example.com 을 접미사로 가진 다른 도메인은 true', async () => {
-    const { isLandingConfigured } = await import('../extension/src/background/lifecycle.js')
-    expect(isLandingConfigured('https://notexample.com')).toBe(true)
   })
 })

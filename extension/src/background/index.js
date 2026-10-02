@@ -9,6 +9,16 @@ import { assignAll } from '../core/experiment.js'
 import { configureUninstallUrl, handleInstalled } from './lifecycle.js'
 import { markPanelTrigger, consumePanelTrigger } from './panel-trigger.js'
 
+// chrome.storage.local 은 기본으로 콘텐츠 스크립트 문맥에도 열려 있다. 그러면 쿠팡 페이지 안의 코드가 동의 값을 직접 바꿀 수 있다.
+// 확장 페이지와 워커에서만 읽고 쓰도록 닫는다. 실패해도 확장 동작은 막지 않는다.
+try {
+  chrome.storage.local
+    .setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
+    .catch((error) => console.warn('[체험단 필터] 저장소 접근 수준을 낮추지 못했습니다:', error?.message))
+} catch (error) {
+  console.warn('[체험단 필터] 저장소 접근 수준을 낮추지 못했습니다:', error?.message)
+}
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   removeSummary(tabId).catch((error) =>
     console.warn('[체험단 필터] 요약을 지우지 못했습니다:', error?.message),
@@ -46,7 +56,7 @@ async function secondsSinceInstall() {
   }
 }
 
-// 동의 저장 뒤의 부수 작업. 응답을 막지 않도록 응답 뒤에 하고, 실패해도 던지지 않는다.
+// 동의 저장 뒤의 부수 작업. 실패해도 던지지 않는다. 응답 성패와 무관하게 실행돼야 하므로 응답 전에 시작한다.
 async function afterConsentChange(result, source) {
   try {
     await configureUninstallUrl()
@@ -134,7 +144,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (consent) => sendResponse({ consent }),
         (error) => {
           console.warn('[체험단 필터] 동의 상태를 읽지 못했습니다:', error?.message)
-          sendResponse({ consent: { status: CONSENT.UNDECIDED, decidedAt: null } })
+          // 읽기 실패는 아직 고르지 않음과 구분되도록 표지를 단다. 계약 모양(consent)은 그대로다.
+          sendResponse({ consent: { status: CONSENT.UNDECIDED, decidedAt: null }, error: 'failed' })
         },
       )
       .catch((error) =>
@@ -153,8 +164,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     setConsent(message.status)
       .then(
         (result) => {
+          // 패널이나 온보딩 탭이 이미 닫혀 sendResponse 가 던져도 제거 주소 갱신 등은 빠지면 안 된다.
+          // 후속 처리를 먼저 시작하고(첫 await 까지 동기 실행) 응답은 그 뒤에 보낸다. 응답 예외는 아래 catch 가 경고한다.
+          const followUp = afterConsentChange(result, source)
           sendResponse({ consent: { status: result.status, decidedAt: result.decidedAt } })
-          return afterConsentChange(result, source)
+          return followUp
         },
         (error) => {
           console.warn('[체험단 필터] 동의를 저장하지 못했습니다:', error?.message)

@@ -13,7 +13,7 @@ export function installChromeMock(initial = {}) {
   const listeners = []
   const removedListeners = []
   const installedListeners = []
-  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [] }
+  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [] }
 
   const chrome = {
     storage: {
@@ -28,6 +28,10 @@ export function installChromeMock(initial = {}) {
         },
         async set(items) {
           Object.assign(store, items)
+        },
+        setAccessLevel(options) {
+          calls.setAccessLevel.push(options)
+          return Promise.resolve()
         },
       },
       session: {

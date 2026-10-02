@@ -15,6 +15,8 @@ Copy-Item extension/src/shared/config.example.js extension/src/shared/config.loc
 
 `config.local.js` 는 git에 올라가지 않습니다. 키를 넣지 않아도 확장은 동작하고, 계측만 꺼집니다.
 
+사이트 주소(`landingOrigin`)는 비밀이 아니라서 `config.local.js` 가 아니라 커밋되는 `extension/src/shared/site.js` 의 `SITE` 에 있습니다. 초기값 `https://example.com` 은 미설정 자리표시자이고, 이 상태에서는 제거 주소를 설정하지 않습니다. 예전에 만든 `config.local.js` 에 `landingOrigin` 이 남아 있어도 쓰이지 않으니 지워도 됩니다.
+
 ## 개발
 
 ```bash

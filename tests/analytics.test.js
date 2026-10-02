@@ -118,8 +118,4 @@ describe('config.example.js', () => {
     expect(isApiKeyMissing(EXAMPLE_CONFIG.amplitudeApiKey)).toBe(true)
     expect(EXAMPLE_CONFIG.amplitudeApiKey).toBe('PASTE_YOUR_AMPLITUDE_API_KEY_HERE')
   })
-
-  it('landingOrigin 은 example.com 그대로다', () => {
-    expect(EXAMPLE_CONFIG.landingOrigin).toBe('https://example.com')
-  })
 })
