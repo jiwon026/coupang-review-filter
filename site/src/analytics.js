@@ -2,6 +2,8 @@
 // 패키지 경계를 지키려고 확장 코드를 가져오지 않는다.
 const PLATFORM = 'Web'
 const SURFACE = 'site'
+// 앰플리튜드에서 세션 밖 이벤트를 뜻하는 값. 제거 페이지 방문 한 건이 세션 하나로 세어지지 않게 한다.
+const NO_SESSION_ID = -1
 
 export const DEFAULT_ENDPOINT = 'https://api2.amplitude.com/2/httpapi'
 
@@ -13,8 +15,7 @@ export function buildSiteEvent({ apiKey, deviceId, eventType, properties, appVer
     // surface 는 이벤트 프로퍼티가 덮어쓰지 못한다.
     event_properties: { ...properties, surface: SURFACE },
     time: now,
-    // 세션은 페이지 로드 시각이다. 제거 페이지는 한 번 열리고 끝난다.
-    session_id: now,
+    session_id: NO_SESSION_ID,
     insert_id: insertId,
   }
 

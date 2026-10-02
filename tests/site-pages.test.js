@@ -11,9 +11,37 @@ function load(name) {
   return new JSDOM(readFileSync(new URL(name, PUBLIC_DIR), 'utf8')).window.document
 }
 
+// 처리방침의 약속은 코드와 글자 그대로 맞아야 한다. 바뀐 문장과 목록은 전체 문자열로 고정한다.
+const PRIVACY_SENT = [
+  '배너가 표시된 횟수, 체험단 리뷰의 개수와 비중, 평점 같은 숫자',
+  '숨기기 버튼, 패널, 장바구니와 바로구매 버튼을 눌렀는지',
+  '리뷰 정렬 방식(베스트순, 최신순)',
+  '확장의 화면(설치 안내, 패널)을 열었는지와 이용한 시각',
+  '무작위로 만든 익명 기기 번호, 확장 버전',
+  '화면 문구와 기본 설정의 실험 그룹',
+  '확장에서 오류가 났는지와 오류의 종류',
+]
+
+const PRIVACY_NOT_SENT = [
+  '리뷰 내용, 상품 이름, 상품 주소',
+  '쿠팡 계정, 이름, 이메일, 주소, 결제 정보',
+  '쿠팡 상품 페이지가 아닌 다른 사이트에서 무엇을 보거나 했는지',
+]
+
 describe('처리방침', () => {
   const doc = load('privacy.html')
   const text = doc.body.textContent.replace(/\s+/g, ' ')
+
+  // n 번째 절(h2)과 다음 절 사이에 있는 문단들의 글.
+  function sectionParagraphs(number) {
+    const heading = [...doc.querySelectorAll('h2')].find((h) => h.textContent.startsWith(`${number}. `))
+    const paragraphs = []
+    for (let node = heading.nextElementSibling; node && node.tagName !== 'H2'; node = node.nextElementSibling) {
+      if (node.tagName === 'P') paragraphs.push(node.textContent.replace(/\s+/g, ' ').trim())
+    }
+    return paragraphs
+  }
+  const listItems = (index) => [...doc.querySelectorAll('ul')[index].querySelectorAll('li')].map((li) => li.textContent)
 
   it('이름과 제목을 쓴다', () => {
     expect(doc.querySelector('h1').textContent).toBe('개인정보 처리방침')
@@ -43,17 +71,54 @@ describe('처리방침', () => {
       '광고에 쓰지 않고, 판매하거나 다른 곳에 넘기지 않습니다.',
       '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다.',
       '확장 아이콘을 눌러 패널을 열면 맨 아래에서 언제든 켜고 끌 수 있습니다.',
-      '동의하지 않은 경우에는 제거 안내 페이지가 열릴 뿐 아무것도 기록되지 않습니다.',
       '이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.',
     ]) {
       expect(text).toContain(sentence)
     }
   })
 
-  it('보내는 정보와 보내지 않는 정보 목록이 각각 6개와 3개다', () => {
-    const lists = doc.querySelectorAll('ul')
-    expect(lists[0].querySelectorAll('li')).toHaveLength(6)
-    expect(lists[1].querySelectorAll('li')).toHaveLength(3)
+  it('2절: 켜는 곳(설치 직후 화면이나 확장 패널)을 사실대로 적는다', () => {
+    expect(sectionParagraphs(2)).toEqual([
+      '설치 직후 화면이나 확장 패널에서 통계 전송을 켠 경우에만 아래 정보를 보냅니다. 동의하지 않으면 아무것도 보내지 않으며, 모든 기능은 그대로 쓸 수 있습니다.',
+    ])
+  })
+
+  it('2절: 보내는 정보 목록은 7줄이고 문자열이 같다', () => {
+    expect(listItems(0)).toHaveLength(7)
+    expect(listItems(0)).toEqual(PRIVACY_SENT)
+  })
+
+  it('3절: 보내지 않는 정보 목록은 3줄이고 문자열이 같다', () => {
+    expect(listItems(1)).toHaveLength(3)
+    expect(listItems(1)).toEqual(PRIVACY_NOT_SENT)
+  })
+
+  it('3절: 지킬 수 없는 절대 표현(어떤 ... 도)을 쓰지 않는다', () => {
+    for (const item of listItems(1)) expect(item).not.toMatch(/어떤 .*도$/)
+  })
+
+  it('5절: 통계 보관 위치와 사이트 호스팅 사업자의 접속 기록을 알린다', () => {
+    expect(sectionParagraphs(5)).toEqual([
+      '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다.',
+      '처리방침과 제거 안내 페이지는 Vercel(Vercel Inc., 미국)에서 호스팅하며, 페이지에 접속할 때 IP 주소 같은 접속 기록이 호스팅 사업자에게 남을 수 있습니다. 익명 기기 번호는 이 접속 기록에 포함되지 않습니다.',
+    ])
+  })
+
+  it('7절: 제거할 때 기록되는 것(제거 사실, 사용 기간, 고른 이유)을 모두 적는다', () => {
+    expect(sectionParagraphs(7)).toEqual([
+      '동의한 경우에 한해 제거 사실, 사용 기간(일 수), 제거 안내 페이지에서 고른 이유가 익명 기기 번호와 함께 기록됩니다. 동의하지 않은 경우에는 제거 안내 페이지가 열릴 뿐 통계가 기록되지 않습니다.',
+    ])
+  })
+
+  it('8절: 삭제 요청에 필요한 익명 기기 번호를 어디서 보는지 알린다', () => {
+    expect(sectionParagraphs(8)).toEqual([
+      '이미 보낸 통계의 삭제를 원하면 확장 패널 맨 아래에 표시되는 익명 기기 번호를 아래 주소로 알려 주세요. 궁금한 점도 같은 주소로 보내 주시면 됩니다.',
+      '',
+    ])
+  })
+
+  it('제거 안내 페이지에서 아무것도 기록되지 않는다는 절대 표현을 쓰지 않는다', () => {
+    expect(text).not.toContain('아무것도 기록되지 않습니다')
   })
 
   // 배포 때 실제 날짜로 바뀐다. 자리표시자와 날짜 형식 둘 다 받는다.
@@ -79,6 +144,15 @@ describe('fillContact', () => {
     const doc = load('privacy.html')
     fillContact(doc, '')
     expect(doc.getElementById('contact').textContent).toBe('준비 중')
+  })
+})
+
+describe('제거 안내 페이지 문구', () => {
+  it('미동의 사용자에게는 통계가 기록되지 않는다고 적는다(접속 기록은 호스팅 사업자에게 남을 수 있다)', () => {
+    const doc = load('uninstalled.html')
+    const leads = [...doc.querySelectorAll('p.lead')].map((p) => p.textContent)
+    expect(leads).toContain('통계 전송에 동의하지 않으셨다면 이 페이지에서도 통계가 기록되지 않습니다.')
+    expect(doc.body.textContent).not.toContain('아무것도 기록되지 않습니다')
   })
 })
 

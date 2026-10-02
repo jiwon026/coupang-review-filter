@@ -16,15 +16,28 @@ function parseInstalledAt(value, now) {
   return Number.isSafeInteger(installedAt) && installedAt < now ? installedAt : null
 }
 
-// 제거 주소의 쿼리는 신뢰 경계 밖의 입력이다. 형식이 틀린 값은 null 로 본다.
-export function parseUninstallParams(search, now = Date.now()) {
-  const params = new URLSearchParams(search)
-  const deviceId = params.get('d')
-  const version = params.get('v')
+// 제거 주소는 신뢰 경계 밖의 입력이다. 형식이 틀린 값은 null 로 본다.
+// d(기기 번호)와 i(설치 시각)는 조각(#)에서만 읽는다. 조각은 서버로 전송되지 않아 호스팅 서버의 접속 기록에 남지 않는다.
+// 쿼리의 d 와 i 는 읽지 않는다. v(버전)는 식별자가 아니므로 쿼리에서 읽는다.
+export function parseUninstallParams({ search = '', hash = '' } = {}, now = Date.now()) {
+  const query = new URLSearchParams(search)
+  const fragment = new URLSearchParams(hash.replace(/^#/, ''))
+  const deviceId = fragment.get('d')
+  const version = query.get('v')
   return {
     deviceId: deviceId !== null && UUID.test(deviceId) ? deviceId : null,
     version: version !== null && VERSION.test(version) ? version : null,
-    installedAt: parseInstalledAt(params.get('i'), now),
+    installedAt: parseInstalledAt(fragment.get('i'), now),
+  }
+}
+
+// 읽은 조각을 주소창과 방문 기록에서 지운다. 새 항목을 쌓지 않으려고 replaceState 를 쓴다. 실패해도 페이지는 그대로 동작한다.
+function clearFragment(location, history) {
+  if (!location.hash) return
+  try {
+    history.replaceState(null, '', `${location.pathname}${location.search}`)
+  } catch {
+    // 지우지 못해도 조각은 서버로 가지 않는다.
   }
 }
 
@@ -41,9 +54,10 @@ function showThanks(document) {
   reasons.hidden = true
 }
 
-// 동의했던 사용자(d 가 있는 경우)에게서만 기록한다. d 가 없으면 화면은 같고 아무것도 보내지 않는다.
-export function initUninstalledPage({ document, search, config, now = Date.now() }) {
-  const { deviceId, version, installedAt } = parseUninstallParams(search, now)
+// 동의했던 사용자(조각에 d 가 있는 경우)에게서만 기록한다. d 가 없으면 화면은 같고 통계를 보내지 않는다.
+export function initUninstalledPage({ document, location, history, config, now = Date.now() }) {
+  const { deviceId, version, installedAt } = parseUninstallParams(location, now)
+  clearFragment(location, history)
   const endpoint = config.endpoint || DEFAULT_ENDPOINT
   // 키가 없으면(개발 빌드) 계측이 꺼진다.
   const canSend = Boolean(config.apiKey) && deviceId !== null

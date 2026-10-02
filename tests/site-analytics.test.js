@@ -30,7 +30,8 @@ describe('buildSiteEvent', () => {
     expect(event.event_type).toBe('Extension Removed')
     expect(event.platform).toBe('Web')
     expect(event.app_version).toBe('0.2.0')
-    expect(event.session_id).toBe(NOW)
+    // 세션 밖(-1). 제거 한 건이 세션 하나로 세어지지 않는다.
+    expect(event.session_id).toBe(-1)
     expect(event.time).toBe(NOW)
     expect(event.insert_id).toBe('insert-1')
   })
