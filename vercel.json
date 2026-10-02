@@ -1,0 +1,5 @@
+{
+  "cleanUrls": true,
+  "buildCommand": "node site/build.js --release",
+  "outputDirectory": "site/public"
+}

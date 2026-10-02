@@ -27,6 +27,22 @@ npm test               # Vitest
 npm run watch          # 변경 감지 빌드 (디버그 로그 켜짐)
 ```
 
+## 사이트
+
+`site/` 는 처리방침(`/privacy`), 제거 안내(`/uninstalled`), 임시 첫 화면(`/`)을 담은 정적 사이트입니다. 스크립트는 `site/build.js` 가 `site/public/assets/` 에 묶고, 이 폴더는 git에 올라가지 않습니다. Vercel 설정은 저장소 최상위 `vercel.json` 에 있습니다.
+
+키와 문의처 이메일은 커밋하지 않고 환경 변수로 넣습니다. PowerShell에서는 한 줄씩 실행합니다.
+
+```powershell
+$env:AMPLITUDE_API_KEY = "앰플리튜드 키"
+$env:CONTACT_EMAIL = "문의 받을 이메일"
+node site/build.js --release
+```
+
+- `node site/build.js` (또는 `npm run build:site`): 개발 빌드. 환경 변수가 없으면 빈 값으로 빌드되고 계측은 꺼지며, 처리방침의 문의처는 `준비 중` 으로 보입니다.
+- `node site/build.js --release`: 운영 빌드. 두 환경 변수 중 하나라도 없으면 실패합니다. Vercel에는 같은 두 변수를 프로젝트 환경 변수로 등록합니다.
+- 동의한 사용자의 제거 주소(`d`, `v`, `i`)로만 `Extension Removed` 를 보냅니다. `d` 가 없으면 아무것도 보내지 않습니다.
+
 ## 크롬에 로드하기
 
 `extension/dist/` 는 git에 포함되지 않습니다. **먼저 `npm run build` 를 실행해야 합니다.**
@@ -49,6 +65,7 @@ npm run watch          # 변경 감지 빌드 (디버그 로그 켜짐)
 | `extension/src/background/` | 이벤트 전송, 기기 신원, 탭별 요약 저장 |
 | `extension/src/sidepanel/` | 사이드 패널 화면 |
 | `extension/src/shared/` | 이벤트 이름, 메시지 상수, 설정 |
+| `site/` | 처리방침, 제거 안내 페이지와 그 스크립트 |
 | `tests/` | Vitest, jsdom |
 
 쿠팡이 마크업을 바꾸면 `selectors.js` 만 고치면 됩니다.

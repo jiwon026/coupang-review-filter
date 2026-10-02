@@ -26,3 +26,6 @@ Thumbs.db
 # 로그
 *.log
 npm-debug.log*
+
+# 사이트 빌드 산출물
+site/public/assets/
