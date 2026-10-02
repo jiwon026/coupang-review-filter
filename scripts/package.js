@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { dirname, join, posix } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 import { zipSync } from 'fflate'
 // background/analytics.js 는 키 파일(config.local.js)을 끌어오므로 import 하지 않는다. site.js 는 import 가 없는 순수 모듈이다.
 import { SITE, isLandingConfigured } from '../extension/src/shared/site.js'
@@ -25,6 +25,11 @@ export const PACKAGE_FILES = [
 ]
 
 export const PLACEHOLDER_API_KEY = 'PASTE_YOUR_AMPLITUDE_API_KEY_HERE'
+// 앰플리튜드 키의 모양(32자리 hex). 배경 번들에 하나도 없으면 키가 비어 계측이 통째로 꺼진 패키지다.
+const API_KEY_SHAPE = /(?<![0-9a-fA-F])[0-9a-fA-F]{32}(?![0-9a-fA-F])/
+// npm run package 는 extension/dist 를 운영 빌드로 덮어쓴다. 끝날 때 마지막 줄로 알린다.
+export const DIST_NOTICE =
+  'extension/dist 는 운영 빌드 상태로 남아 있습니다. 개발을 계속하려면 npm run build 를 다시 실행하세요.'
 const AMPLITUDE_HOST = 'api2.amplitude.com'
 const DEBUG_LOG_CALL = 'console.log('
 const BUNDLE_NAMES = ['background', 'content', 'sidepanel', 'onboarding']
@@ -121,6 +126,9 @@ export function checkReleaseReadiness({ landingOrigin, bundles }) {
 
   if (bundles.background?.includes(PLACEHOLDER_API_KEY)) {
     problems.push('dist/background.js 에 자리표시자 키가 들어 있습니다. config.local.js 에 실제 키를 넣고 다시 빌드하세요.')
+  } else if (typeof bundles.background === 'string' && !API_KEY_SHAPE.test(bundles.background)) {
+    // 파일이 아예 없는 경우는 checkPackageFiles 가 알린다.
+    problems.push('dist/background.js 에 앰플리튜드 키가 없습니다. 이대로 제출하면 계측이 통째로 꺼집니다. config.local.js 에 실제 키를 넣고 다시 빌드하세요.')
   }
 
   for (const name of BUNDLE_NAMES) {
@@ -164,31 +172,58 @@ function runReleaseBuild() {
   return result.status === 0
 }
 
-function main() {
-  if (!runReleaseBuild()) {
-    console.error('운영 빌드가 실패했습니다. 패키지를 만들지 않습니다.')
+// 운영 빌드, 제출 전 점검, zip 생성을 차례로 하고 종료 코드를 돌려준다. 인자는 테스트가 바꿔 끼운다.
+// 운영 빌드가 돌았다면 성공이든 점검에서 막혔든 마지막 줄에 dist 의 상태를 알린다.
+export function runPackage({
+  runBuild = runReleaseBuild,
+  extensionDir = EXTENSION_DIR,
+  releaseDir = RELEASE_DIR,
+  landingOrigin = SITE.landingOrigin,
+  log = console.log,
+  error = console.error,
+} = {}) {
+  if (!runBuild()) {
+    error('운영 빌드가 실패했습니다. 패키지를 만들지 않습니다.')
     return 1
   }
 
   const problems = [
-    ...checkReleaseReadiness({ landingOrigin: SITE.landingOrigin, bundles: readBundles(EXTENSION_DIR) }),
-    ...checkPackageFiles(EXTENSION_DIR),
+    ...checkReleaseReadiness({ landingOrigin, bundles: readBundles(extensionDir) }),
+    ...checkPackageFiles(extensionDir),
   ]
   if (problems.length > 0) {
-    console.error('제출 전 점검에서 막혔습니다. 패키지를 만들지 않습니다.')
-    for (const problem of problems) console.error(`- ${problem}`)
+    error('제출 전 점검에서 막혔습니다. 패키지를 만들지 않습니다.')
+    for (const problem of problems) error(`- ${problem}`)
+    log(DIST_NOTICE)
     return 1
   }
 
-  const { version } = JSON.parse(readFileSync(join(EXTENSION_DIR, 'manifest.json'), 'utf8'))
-  const target = join(RELEASE_DIR, `review-remover-${version}.zip`)
+  const { version } = JSON.parse(readFileSync(join(extensionDir, 'manifest.json'), 'utf8'))
+  const target = join(releaseDir, `review-remover-${version}.zip`)
   mkdirSync(dirname(target), { recursive: true })
-  writeFileSync(target, createPackageZip(EXTENSION_DIR))
-  console.log(`패키지를 만들었습니다: ${target}`)
+  writeFileSync(target, createPackageZip(extensionDir))
+  log(`패키지를 만들었습니다: ${target}`)
+  log(DIST_NOTICE)
   return 0
 }
 
-// 테스트에서 import 할 때는 실행하지 않는다.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = main()
+function realPathOrNull(path) {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return null
+  }
+}
+
+// 이 파일이 node 의 진입점으로 실행됐는지. 테스트에서 import 할 때는 false 다.
+// node 는 진입 모듈의 심볼릭 링크를 풀어 import.meta.url 에 실제 경로를 넣지만 process.argv[1] 에는 링크 경로가 남는다.
+// 주소 문자열로 비교하면 어긋나서 아무것도 하지 않고 종료 코드 0 으로 끝나므로 실제 경로끼리 비교한다.
+export function isDirectRun(moduleUrl, entryPath) {
+  if (!entryPath) return false
+  const modulePath = realPathOrNull(fileURLToPath(moduleUrl))
+  return modulePath !== null && modulePath === realPathOrNull(entryPath)
+}
+
+if (isDirectRun(import.meta.url, process.argv[1])) {
+  process.exitCode = runPackage()
 }
