@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 *.zip
+release/
 
 # 환경 변수와 키
 .env

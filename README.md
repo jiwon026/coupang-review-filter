@@ -21,12 +21,29 @@ Copy-Item extension/src/shared/config.example.js extension/src/shared/config.loc
 
 ```bash
 npm install
-npm run build          # content.js, background.js, sidepanel.js 세 번들 생성 (디버그 로그 켜짐)
-npm run build:release  # 같은 세 번들, 디버그 로그 제거
+npm run build          # content, background, sidepanel, onboarding 네 번들 생성 (디버그 로그 켜짐)
+npm run build:release  # 같은 네 번들, 디버그 로그 제거
 npm test               # Vitest
 npm run watch          # 변경 감지 빌드 (디버그 로그 켜짐)
 npm run build:icons    # 아이콘 PNG 네 개를 SVG 원본에서 다시 만듦
+npm run package        # 스토어 제출용 zip 생성 (아래 제출 패키지 참고)
 ```
+
+## 제출 패키지
+
+```powershell
+npm run package
+```
+
+운영 빌드, 제출 전 점검, zip 생성을 이 순서로 합니다. 결과는 `release/review-remover-<버전>.zip` 이고, `release/` 는 git에 올라가지 않습니다. zip 에는 허용 목록(`scripts/package.js` 의 `PACKAGE_FILES`)의 파일만 들어가며 `manifest.json` 이 최상위에 옵니다. 소스, `config.local.js`, `site/` 는 들어가지 않습니다.
+
+점검에서 하나라도 걸리면 zip 을 만들지 않고 이유를 출력한 뒤 종료 코드 1 로 끝납니다. 걸리는 경우는 다음과 같습니다.
+
+- 사이트 주소(`SITE.landingOrigin`)가 아직 자리표시자 `https://example.com` 입니다. `extension/src/shared/site.js` 에 실제 주소를 넣습니다.
+- 번들에 자리표시자 키가 들어 있습니다. `config.local.js` 에 실제 앰플리튜드 키를 넣고 다시 실행합니다.
+- 번들에 디버그 로그가 남았거나, 콘텐츠 스크립트 쪽 번들에 앰플리튜드 주소가 있습니다.
+
+그 밖에 허용 목록의 파일이 없거나, 매니페스트와 두 HTML 이 가리키는 파일이 허용 목록에 없을 때도 막힙니다.
 
 ## 아이콘
 
@@ -73,6 +90,7 @@ node site/build.js --release
 | `extension/src/sidepanel/` | 사이드 패널 화면 |
 | `extension/src/shared/` | 이벤트 이름, 메시지 상수, 설정 |
 | `extension/icons/`, `scripts/build-icons.js` | 아이콘 SVG 원본, PNG 생성 스크립트 |
+| `scripts/package.js` | 제출용 zip 생성과 제출 전 점검 |
 | `site/` | 처리방침, 제거 안내 페이지와 그 스크립트 |
 | `tests/` | Vitest, jsdom |
 
