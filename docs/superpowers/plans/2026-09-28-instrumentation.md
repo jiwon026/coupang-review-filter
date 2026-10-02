@@ -883,6 +883,8 @@ git commit -m "feat: 배너와 필터 이벤트 계측"
 
 정렬 버튼 두 개가 `#sdpReview` 안에 있고, **활성 버튼만 클래스에 `twc-font-bold` 를 갖는다.** 비활성은 `twc-font-normal` 이다. 컨트롤러가 실제 페이지에서 확인했다.
 
+**정정 (2026-10-02):** 위 문단은 틀렸다. 실제 페이지에서는 두 버튼 모두 `twc-font-bold` 를 가지며(비활성 버튼에도 뒤쪽에 붙는다), 비활성 버튼에만 `twc-font-normal` 이 추가로 붙는다. 그래서 `twc-font-bold` 로 활성을 판정하면 두 버튼이 모두 활성이 되어 `review_sort` 가 항상 `best` 로 기록됐다. 수정 후 판정은 `twc-font-normal` 토큰이 없는 버튼을 활성으로 보고, 활성이 정확히 하나일 때만 키를 반환하며 아니면 `unknown` 이다. 아래 Step 1 의 `activeClass: 'twc-font-bold'` 도 같은 이유로 `inactiveClass: 'twc-font-normal'` 로 바뀌었다.
+
 - [ ] **Step 1: `selectors.js` 에 정렬 상수 추가**
 
 ```js

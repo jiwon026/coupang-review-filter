@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "쿠팡 체험단 리뷰 필터",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "쿠팡 리뷰에서 체험단 제공 리뷰를 걸러내고 협찬을 제외한 평점을 보여줍니다.",
   "permissions": ["storage", "sidePanel"],
   "background": {
