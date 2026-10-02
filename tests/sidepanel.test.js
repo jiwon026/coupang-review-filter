@@ -532,7 +532,7 @@ describe('사이드 패널 배선: 늦게 온 응답과 저장 뒤 재확인', (
     expect(consentBox().textContent).toContain('익명 사용 통계를 보낼지 아직 고르지 않았습니다')
   })
 
-  it('SET_CONSENT 가 시간 초과로 실패한 뒤 GET_CONSENT 를 다시 묻고 그 상태로 그리되 오류 문구는 남긴다', async () => {
+  it('저장 실패 뒤 다시 읽은 상태가 요청한 상태와 같으면 오류 문구를 지운다', async () => {
     let current = grantedReply
     await loadPanel({ consent: () => current, setConsent: () => 'none' })
     expect(ofType('crf:get-consent')).toHaveLength(1)
@@ -543,8 +543,32 @@ describe('사이드 패널 배선: 늦게 온 응답과 저장 뒤 재확인', (
     await vi.advanceTimersByTimeAsync(5000)
 
     expect(ofType('crf:get-consent')).toHaveLength(2)
-    expect(consentBox().textContent).toContain(SAVE_ERROR)
     expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+    expect(consentBox().textContent).not.toContain(SAVE_ERROR)
+  })
+
+  it('저장 실패 뒤 다시 읽은 상태가 요청한 상태와 다르면 오류 문구를 남긴다', async () => {
+    await loadPanel({ consent: grantedReply, setConsent: () => 'none' })
+
+    // 저장되지 않았다. 다시 읽어도 granted 그대로다.
+    buttonByText('보내지 않기').click()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(ofType('crf:get-consent')).toHaveLength(2)
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내고 있습니다')
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+  })
+
+  it('저장 실패 뒤 다시 읽기도 실패하면 오류 문구를 남긴다', async () => {
+    let current = grantedReply
+    await loadPanel({ consent: () => current, setConsent: () => 'none' })
+
+    current = 'none'
+    buttonByText('보내지 않기').click()
+    await vi.advanceTimersByTimeAsync(5000)
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
   })
 
   it('SET_CONSENT 진행 중에는 버튼이 disabled 이고 끝나면 풀린다', async () => {

@@ -105,8 +105,8 @@ async function choose(status) {
   if (!saved) {
     setState({ saving: false, saveFailed: true })
     draw()
-    // 시간이 지나 실패로 다뤘어도 저장은 됐을 수 있다. 실제 상태를 다시 읽는다(오류 문구는 남긴다).
-    refreshStatus({ keepError: true })
+    // 시간이 지나 실패로 다뤘어도 저장은 됐을 수 있다. 실제 상태를 다시 읽고, 요청한 상태와 같으면 오류 문구를 지운다.
+    refreshStatus({ requested: status })
     return
   }
 
@@ -115,12 +115,16 @@ async function choose(status) {
 }
 
 // 다시 보일 때와 저장 실패 뒤에 실제 상태를 다시 읽는다. 읽지 못하면 화면을 그대로 둔다.
-async function refreshStatus({ keepError = false } = {}) {
+// requested 는 저장에 실패한 요청의 상태다. 다시 읽은 상태가 같으면 저장된 것이므로 선택 화면을 나오고 오류 문구를 지운다.
+async function refreshStatus({ requested = null } = {}) {
   const startedAt = state.revision
   try {
     const response = await request({ type: MESSAGES.GET_CONSENT }, { timeoutMs: GET_CONSENT_TIMEOUT_MS })
     const status = consentStatusFrom(response)
-    if (status !== null && state.revision === startedAt) adoptStatus(status, { keepError })
+    if (status === null || state.revision !== startedAt) return
+    const confirmed = requested !== null && status === requested
+    if (confirmed) setState({ choosing: false })
+    adoptStatus(status, { keepError: requested !== null && !confirmed })
   } catch (error) {
     warn('동의 상태를 다시 읽지 못했습니다:', error)
   }

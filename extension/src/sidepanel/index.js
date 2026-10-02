@@ -91,8 +91,8 @@ async function changeConsent(status) {
 
   consent = { ...consent, saving: false, saveFailed: true }
   drawConsent()
-  // 시간이 지나 실패로 다뤘어도 저장은 됐을 수 있다. 실제 상태를 다시 읽는다(오류 문구는 남긴다).
-  refreshConsent({ keepError: true })
+  // 시간이 지나 실패로 다뤘어도 저장은 됐을 수 있다. 실제 상태를 다시 읽고, 요청한 상태와 같으면 오류 문구를 지운다.
+  refreshConsent({ requested: status })
 }
 
 // 초기 읽기. 응답이 없어도 구역은 그려야 하므로 먼저 undecided 로 그린다.
@@ -120,12 +120,15 @@ async function loadConsent() {
 }
 
 // 다시 보일 때와 저장 실패 뒤에 실제 상태를 다시 읽는다. 읽지 못하면 화면을 그대로 둔다.
-async function refreshConsent({ keepError = false } = {}) {
+// requested 는 저장에 실패한 요청의 상태다. 다시 읽은 상태가 이와 다를 때만 오류 문구를 남긴다.
+async function refreshConsent({ requested = null } = {}) {
   const startedAt = consent.revision
   try {
     const response = await request({ type: MESSAGES.GET_CONSENT }, { timeoutMs: GET_CONSENT_TIMEOUT_MS })
     const status = consentStatusFrom(response)
-    if (status !== null && consent.revision === startedAt) adoptConsent(status, { keepError })
+    if (status !== null && consent.revision === startedAt) {
+      adoptConsent(status, { keepError: requested !== null && status !== requested })
+    }
   } catch (error) {
     console.warn(`${LOG_PREFIX} 동의 상태를 다시 읽지 못했습니다:`, error?.message)
   }

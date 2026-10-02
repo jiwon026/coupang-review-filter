@@ -710,7 +710,7 @@ describe('온보딩 배선: 늦게 온 응답과 저장 뒤 재확인', () => {
     expect(exampleLink(root)).toBeNull()
   })
 
-  it('SET_CONSENT 가 시간 초과로 실패한 뒤 GET_CONSENT 를 다시 묻고 그 상태로 그리되 오류 문구는 남긴다', async () => {
+  it('저장 실패 뒤 다시 읽은 상태가 요청한 상태와 같으면 오류 문구를 지운다', async () => {
     let current = { consent: { status: 'undecided', decidedAt: null } }
     const root = await loadOnboarding({ consent: () => current, setConsent: () => 'none' })
     expect(ofType('crf:get-consent')).toHaveLength(1)
@@ -722,7 +722,32 @@ describe('온보딩 배선: 늦게 온 응답과 저장 뒤 재확인', () => {
 
     expect(ofType('crf:get-consent')).toHaveLength(2)
     expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
+    expect(root.textContent).not.toContain(SAVE_ERROR)
+  })
+
+  it('저장 실패 뒤 다시 읽은 상태가 요청한 상태와 다르면 오류 문구를 남긴다', async () => {
+    const root = await loadOnboarding({ setConsent: () => 'none' })
+
+    // 저장되지 않았다. 다시 읽어도 undecided 그대로다.
+    buttonByText(root, '통계 없이 사용').click()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(ofType('crf:get-consent')).toHaveLength(2)
+    expect(buttonByText(root, '동의하고 시작')).toBeDefined()
     expect(root.textContent).toContain(SAVE_ERROR)
+  })
+
+  it('설정 바꾸기 중 같은 선택이 늦게 저장된 것으로 확인되면 선택 화면에서 나와 오류 문구를 지운다', async () => {
+    const root = await loadOnboarding({
+      consent: { consent: { status: 'granted', decidedAt: 1 } },
+      setConsent: () => 'none',
+    })
+    buttonByText(root, '설정 바꾸기').click()
+    buttonByText(root, '동의하고 시작').click()
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(root.textContent).not.toContain(SAVE_ERROR)
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
   })
 
   it('SET_CONSENT 진행 중에는 선택 버튼이 disabled 이고 끝나면 풀린다', async () => {
