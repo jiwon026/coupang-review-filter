@@ -1,6 +1,6 @@
 # 쿠팡 체험단 리뷰 필터: 태스크
 
-Last Updated: 2026-10-02
+Last Updated: 2026-10-02 (계획 3a 코드 완료)
 
 ## 계획 1: 확장 코어 (완료)
 
@@ -51,21 +51,29 @@ Last Updated: 2026-10-02
 - [x] `buildPayload` 가 최상위 `platform` 필드 채우기
 - [x] 콘솔 로그 `CONFIG.debug` 게이팅 검토 (사용자 규칙 "No console.log in production" 과 충돌 중)
 
-## 계획 3a: 웹스토어 제출 준비 (계획 작성 완료, 실행 대기)
+## 계획 3a: 웹스토어 제출 준비 (코드 완료, Task 10 진행 중)
 
-계획: `docs/superpowers/plans/2026-10-02-store-submission.md`. 근거: 명세 11절(동의와 최소 수집).
+계획: `docs/superpowers/plans/2026-10-02-store-submission.md`. 근거: 명세 11절. 브랜치 `feat/store-submission`. 테스트 843개.
 
-- [x] 사용자 확인: 확장 이름 `체험단 리뷰 제거기 for 쿠팡` 확정 (2026-10-02)
-- [ ] Task 1: 동의 상태와 전송 게이트
-- [ ] Task 2: 식별자 최소화 (product_key, page_key)
-- [ ] Task 3: 공개 설정 분리와 제거 주소의 동의 연동
-- [ ] Task 4: 온보딩 페이지 (시안 2개를 사용자에게 먼저 보여 줌)
-- [ ] Task 5: 사이드 패널의 동의 토글
-- [ ] Task 6: 최소 사이트 (처리방침, 제거 페이지)
-- [ ] Task 7: 이름, 아이콘, 매니페스트 (아이콘 시안 3개를 사용자에게 먼저 보여 줌)
-- [ ] Task 8: 패키징
-- [ ] Task 9: 스토어 등록 자료
-- [ ] Task 10: 배포, release 스모크, 개발자 등록(사용자, 5달러), 제출
+- [x] Task 1: 동의 상태와 전송 게이트
+- [x] Task 2: 식별자 최소화 (product_key, page_key)
+- [x] Task 3: 공개 설정 분리, 제거 주소의 동의 연동, 저장소 접근 수준
+- [x] Task 4: 온보딩 페이지 (시안 A)
+- [x] Task 5: 사이드 패널의 동의 토글 (fix round 1: 다른 곳의 동의 변경 반영)
+- [x] Task 6: 최소 사이트 (처리방침, 제거 페이지)
+- [x] Task 7: 이름 `체험단 리뷰 제거기 for 쿠팡`, 아이콘(AD 말풍선에 사선), 매니페스트 1.0.0
+- [x] Task 8: 패키징 (허용 목록, 제출 전 검사)
+- [x] Task 9: 스토어 등록 자료 (`docs/store/listing.md`)
+- [x] 최종 브랜치 리뷰(opus) → fix wave 11항목 → 재리뷰 → 잔여 4항목 → 재리뷰 통과
+- [ ] **Task 10: 배포와 제출 ← 여기서 재개**
+  - [x] 개발자 등록(결제), 비판매자, 게시자 이름, 연락처 이메일 인증 (사용자 완료)
+  - [ ] 처리방침 시행일 채우기, main 머지와 푸시(사용자 확인 필요)
+  - [ ] Vercel 프로젝트 만들기(이름은 계속 유지할 것으로), 환경 변수 AMPLITUDE_API_KEY 와 CONTACT_EMAIL 을 Production 과 Preview 에. Web Analytics, Speed Insights 는 켜지 않는다
+  - [ ] `extension/src/shared/site.js` 의 landingOrigin 을 배포 주소로
+  - [ ] `npm run package` → zip 을 풀어 크롬에 로드 → 실브라우저 체크리스트 13항목(원장의 최종 리뷰 절)
+  - [ ] 특히: 제거 시 주소의 조각(#d=...)이 보존되는지, sender.url 검사 통과, 패널과 온보딩의 동의 동기화, 앰플리튜드에 IP와 지역이 비어 있는지
+  - [ ] 스크린샷 4장(1280x800), 업로드, 등록 자료 입력, 제출
+  - [ ] 확장 ID 와 스토어 주소를 listing.md 에 기록
 
 ## 계획 3b: 랜딩 (심사 대기 중에, 시작할 때 계획 작성)
 
