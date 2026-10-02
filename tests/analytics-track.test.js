@@ -14,10 +14,11 @@ vi.mock('../extension/src/shared/config.local.js', () => ({
 const deviceIds = Array.from({ length: 200 }, (_, i) => `device-${i}-${(i * 7919) % 100003}`)
 
 let sent = []
+let currentStore = {}
 
 async function loadTrack(deviceId) {
   // 이 파일은 전송 내용을 검증한다. 게이트는 consent.test.js 가 검증하므로 동의한 상태로 준비한다.
-  grantConsent(installChromeMock({ crf_device_id: deviceId }))
+  currentStore = grantConsent(installChromeMock({ crf_device_id: deviceId }))
   sent = []
   globalThis.fetch = vi.fn(async (_url, init) => {
     sent.push(JSON.parse(init.body))
@@ -154,5 +155,125 @@ describe('track 의 최상위 기기 속성', () => {
     expect(event.platform).toBe('Chrome Extension')
     expect(event.event_properties.platform).toBe('desktop')
     expect(event.event_properties.app_version).toBe('0.1.0')
+  })
+})
+
+const RAW_PRODUCT_ID = '7590830589'
+const RAW_REVIEW_ID = '1020990898'
+
+// 솔트 저장소 읽기에만 끼어든다. 동의와 기기 번호 읽기는 그대로 둔다.
+function interceptSaltRead(handler) {
+  const originalGet = chrome.storage.local.get.bind(chrome.storage.local)
+  chrome.storage.local.get = async (keys) => {
+    const list = Array.isArray(keys) ? keys : [keys]
+    if (list.includes('crf_salt')) await handler()
+    return originalGet(keys)
+  }
+}
+
+describe('track 의 식별자 최소화', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('상품 번호와 리뷰 번호를 product_key 와 page_key 로 바꿔 보내고 원문은 어디에도 없다', async () => {
+    const { track } = await loadTrack('device-abc')
+    await track('Banner Rendered', {
+      product_id: RAW_PRODUCT_ID,
+      page_first_review_id: RAW_REVIEW_ID,
+      review_sort: 'best',
+    })
+
+    const props = sent[0].events[0].event_properties
+    expect(props.product_key).toMatch(/^[0-9a-f]{16}$/)
+    expect(props.page_key).toMatch(/^[0-9a-f]{16}$/)
+    expect('product_id' in props).toBe(false)
+    expect('page_first_review_id' in props).toBe(false)
+    expect(props.review_sort).toBe('best')
+
+    const body = JSON.stringify(sent[0])
+    expect(body).not.toContain(RAW_PRODUCT_ID)
+    expect(body).not.toContain(RAW_REVIEW_ID)
+  })
+
+  it('해시가 실패하면 product_key 는 null 이고 본문에 원문이 없다', async () => {
+    const { track } = await loadTrack('device-abc')
+    interceptSaltRead(async () => {
+      throw new Error('솔트 읽기 실패')
+    })
+    await track('Banner Rendered', { product_id: RAW_PRODUCT_ID, page_first_review_id: RAW_REVIEW_ID })
+
+    expect(sent).toHaveLength(1)
+    const props = sent[0].events[0].event_properties
+    expect(props.product_key).toBeNull()
+    expect(props.page_key).toBeNull()
+    expect('product_id' in props).toBe(false)
+    expect('page_first_review_id' in props).toBe(false)
+    const body = JSON.stringify(sent[0])
+    expect(body).not.toContain(RAW_PRODUCT_ID)
+    expect(body).not.toContain(RAW_REVIEW_ID)
+  })
+
+  it('product_id 가 없는 이벤트는 product_key 와 page_key 키가 생기지 않는다', async () => {
+    const props = await trackedProps('device-abc', { review_sort: 'best' })
+    expect('product_key' in props).toBe(false)
+    expect('page_key' in props).toBe(false)
+  })
+
+  it('미동의 상태(denied, undecided)에서는 보내지도 솔트를 만들지도 않는다', async () => {
+    const { track } = await loadTrack('device-abc')
+    const { setConsent } = await import('../extension/src/background/consent.js')
+
+    await setConsent('denied')
+    await track('Banner Rendered', { product_id: RAW_PRODUCT_ID })
+    expect(sent).toHaveLength(0)
+    expect(currentStore.crf_salt).toBeUndefined()
+
+    delete currentStore.crf_consent
+    await track('Banner Rendered', { product_id: RAW_PRODUCT_ID })
+    expect(sent).toHaveLength(0)
+    expect(currentStore.crf_salt).toBeUndefined()
+  })
+})
+
+describe('track 의 전송 직전 동의 재확인', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('페이로드를 준비하는 도중 동의가 철회되면 보내지 않는다', async () => {
+    const { track } = await loadTrack('device-abc')
+    const { setConsent } = await import('../extension/src/background/consent.js')
+
+    let reached
+    const reachedSalt = new Promise((resolve) => {
+      reached = resolve
+    })
+    let release
+    const gate = new Promise((resolve) => {
+      release = resolve
+    })
+    interceptSaltRead(async () => {
+      reached()
+      await gate
+    })
+
+    // 앞쪽 게이트는 통과해 솔트 조회까지 진행한 뒤, 풀리기 전에 동의를 철회한다.
+    const pending = track('Banner Rendered', { product_id: RAW_PRODUCT_ID })
+    await reachedSalt
+    await setConsent('denied')
+    release()
+    await pending
+
+    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(sent).toHaveLength(0)
   })
 })

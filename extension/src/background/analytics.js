@@ -3,6 +3,7 @@ import { getDeviceId, getUserId } from './identity.js'
 import { assignAll } from '../core/experiment.js'
 import { getSessionId } from './session.js'
 import { isCollectionAllowed } from './consent.js'
+import { pseudonymize } from './pseudonym.js'
 
 // 앰플리튜드는 이벤트 최상위의 platform 과 app_version 을 기기 속성으로 쓴다.
 const AMPLITUDE_PLATFORM = 'Chrome Extension'
@@ -28,6 +29,25 @@ export function buildPayload(input) {
     api_key: input.apiKey,
     events: [event],
   }
+}
+
+// 쿠팡의 상품 번호와 리뷰 번호 원문은 기기 밖으로 나가지 않는다(명세 11.3). 새 식별자가 생기면 한 줄 추가한다.
+const PSEUDONYMIZED = { product_id: 'product_key', page_first_review_id: 'page_key' }
+
+// 원문 키는 항상 지운다. 해시에 실패하면 원문 대신 null 을 보낸다.
+async function minimize(properties) {
+  const result = { ...properties }
+  for (const [rawKey, safeKey] of Object.entries(PSEUDONYMIZED)) {
+    if (!(rawKey in result)) continue
+    const raw = result[rawKey]
+    delete result[rawKey]
+    try {
+      result[safeKey] = await pseudonymize(raw)
+    } catch {
+      result[safeKey] = null
+    }
+  }
+  return result
 }
 
 export function isApiKeyMissing(apiKey) {
@@ -80,13 +100,16 @@ export async function track(eventType, properties = {}) {
       deviceId,
       userId: await getUserId(),
       eventType,
-      properties,
+      properties: await minimize(properties),
       appVersion: appVersion(),
       commonProperties: commonProperties(deviceId),
       time: now,
       sessionId,
       insertId: crypto.randomUUID(),
     })
+
+    // 준비하는 사이에 동의가 철회됐을 수 있다. 앞쪽 게이트는 미동의 상태에서 세션과 솔트를 만들지 않으려고 둔다.
+    if (!(await isCollectionAllowed())) return
 
     const response = await fetch(CONFIG.amplitudeEndpoint, {
       method: 'POST',

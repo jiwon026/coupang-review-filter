@@ -286,11 +286,11 @@
 | `exp_banner_copy` | variant | 실험 배정 |
 | `app_version` | 버전 문자열 | 셀렉터 깨짐 추적 |
 | `review_sort` | `best` / `latest` / `unknown` | **4.4절의 핵심 축.** 정렬별 협찬 비중 비교 |
-| `product_id` | 쿠팡 상품 번호 | 상품별 분석, 4.4절 일반화 |
+| `product_id` | 쿠팡 상품 번호(11.3절에 따라 `product_key` 로 전송) | 상품별 분석, 4.4절 일반화 |
 
 `app_version` 0.2.0 미만의 이벤트는 `review_sort` 가 항상 `best` 로 기록됐으므로(정렬 버튼 활성 판정 버그) 정렬 분석에서 제외한다.
 
-`product_id`는 확장의 콘텐츠 스크립트가 보내는 이벤트에만 붙는다. 사이드 패널 이벤트는 상품을 알지 못하므로 싣지 않는다. 상품 번호는 공개 URL의 일부라 해시하지 않는다.
+`product_id`는 확장의 콘텐츠 스크립트가 보내는 이벤트에만 붙는다. 사이드 패널 이벤트는 상품을 알지 못하므로 싣지 않는다. 11.3절에 따라 상품 번호 원문은 보내지 않고 `product_key` 로 바꿔 보낸다.
 
 `is_extension_installed`는 확장이 페이지에 마커를 심어 랜딩에서 감지한다.
 
@@ -319,7 +319,7 @@
 | `Extension Installed` | `linked_device_id` |
 | `Onboarding Viewed` | 없음 |
 | `Onboarding Example Clicked` | 없음 |
-| `Banner Rendered` | `review_count`(누적), `sponsored_count`(누적), `sponsored_ratio`, `rating_official`, `rating_filtered`, `rating_delta`, `page_sponsored_count`(이번 페이지), `pages_seen`, `filter_state`(on / off, 변형이 확정된 뒤 사용자가 실제로 보게 된 상태), `sort_pages_seen`(같은 상품에서 정렬이 바뀌면 1부터 다시 셈), `page_first_review_id`(이번 페이지 첫 리뷰의 공개 id, 폴백 id 면 null), `price_band`, `category_guess` |
+| `Banner Rendered` | `review_count`(누적), `sponsored_count`(누적), `sponsored_ratio`, `rating_official`, `rating_filtered`, `rating_delta`, `page_sponsored_count`(이번 페이지), `pages_seen`, `filter_state`(on / off, 변형이 확정된 뒤 사용자가 실제로 보게 된 상태), `sort_pages_seen`(같은 상품에서 정렬이 바뀌면 1부터 다시 셈), `page_first_review_id`(이번 페이지 첫 리뷰의 공개 id, 폴백 id 면 null, 11.3절에 따라 `page_key` 로 전송), `price_band`, `category_guess` |
 | `Panel Opened` | `trigger` (banner / toolbar, 경로를 알지 못하면 unknown). `seconds_since_render` 는 싣지 않는다(패널은 배너 렌더 시각을 모른다) |
 | `Filter Toggled` | `to_state`, `default_state`, `seconds_since_render` |
 | `Evidence Expanded` | `review_id_hash` |
