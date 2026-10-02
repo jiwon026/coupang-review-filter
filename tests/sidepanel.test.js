@@ -364,6 +364,130 @@ describe('사이드 패널 배선: 동의 구역', () => {
   })
 })
 
+describe('사이드 패널 배선: 익명 기기 번호와 보내는 내용 보기', () => {
+  const DEVICE_ID = '3f2c1a9e-5b7d-4c8a-9e1f-0a2b4c6d8e0f'
+  const deviceLine = () => consentBox().querySelector('.consent-device')
+  const reply = (status, deviceId) => ({ consent: { status, decidedAt: 1, deviceId } })
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    ['undecided', reply('undecided', null)],
+    ['거절만 한 denied', reply('denied', null)],
+    ['deviceId 필드가 없는 응답', { consent: { status: 'denied', decidedAt: 1 } }],
+  ])('한 번도 동의하지 않았으면(%s) 패널에 번호 줄이 없다', async (_label, consent) => {
+    await loadPanel({ consent })
+    expect(deviceLine()).toBeNull()
+    expect(consentBox().textContent).not.toContain('익명 기기 번호')
+    expect(consentBox().textContent).not.toContain('통계 삭제를 요청할 때')
+  })
+
+  it('동의한 상태에서는 번호와 안내가 보인다', async () => {
+    await loadPanel({ consent: reply('granted', DEVICE_ID) })
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+    expect(consentBox().textContent).toContain('통계 삭제를 요청할 때 이 번호를 알려 주세요.')
+  })
+
+  it('동의했다가 끈 상태(denied)에서도 번호가 보인다', async () => {
+    await loadPanel({ consent: reply('denied', DEVICE_ID) })
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+  })
+
+  it('패널에서 끄면 SET_CONSENT 응답의 번호로 계속 보인다', async () => {
+    await loadPanel({
+      consent: reply('granted', DEVICE_ID),
+      setConsent: (message) => reply(message.status, DEVICE_ID),
+    })
+    buttonByText('보내지 않기').click()
+    await settle()
+
+    expect(consentBox().textContent).toContain('익명 사용 통계를 보내지 않습니다')
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+  })
+
+  it('패널에서 처음 켜면 SET_CONSENT 응답의 번호가 나타난다', async () => {
+    await loadPanel({
+      consent: reply('denied', null),
+      setConsent: (message) => reply(message.status, DEVICE_ID),
+    })
+    expect(deviceLine()).toBeNull()
+
+    buttonByText('보내기').click()
+    await settle()
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+  })
+
+  it('다른 곳에서 동의하면 CONSENT_CHANGED 알림의 번호가 나타난다', async () => {
+    await loadPanel({ consent: reply('undecided', null) })
+    expect(deviceLine()).toBeNull()
+
+    deliver({ type: 'crf:consent-changed', consent: { status: 'granted', decidedAt: 2, deviceId: DEVICE_ID } }, {})
+    await settle()
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+  })
+
+  it('다시 보일 때 읽은 응답의 번호를 따른다', async () => {
+    let current = reply('denied', null)
+    await loadPanel({ consent: () => current })
+    expect(deviceLine()).toBeNull()
+
+    current = reply('granted', DEVICE_ID)
+    changeVisibility('visible')
+    await settle()
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+  })
+
+  it('저장에 실패해도 이미 보이던 번호는 남는다', async () => {
+    await loadPanel({ consent: reply('granted', DEVICE_ID), setConsent: () => ({ error: 'failed' }) })
+    buttonByText('보내지 않기').click()
+    await settle()
+
+    expect(consentBox().textContent).toContain(SAVE_ERROR)
+    expect(deviceLine().textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+  })
+
+  it('기기 번호는 화면에만 보이고 패널이 보내는 어떤 메시지에도 실리지 않는다', async () => {
+    await loadPanel({
+      consent: reply('granted', DEVICE_ID),
+      setConsent: (message) => reply(message.status, DEVICE_ID),
+    })
+    buttonByText('보내지 않기').click()
+    await settle()
+    buttonByText('보내는 내용 보기').click()
+    await settle()
+
+    expect(sent.length).toBeGreaterThan(0)
+    expect(JSON.stringify(sent)).not.toContain(DEVICE_ID)
+    expect(JSON.stringify(created)).not.toContain(DEVICE_ID)
+  })
+
+  it.each([
+    ['granted', '보내지 않기'],
+    ['denied', '보내기'],
+  ])('%s 에서 보내는 내용 보기를 누르면 온보딩 페이지를 새 탭으로 열고 동의는 바꾸지 않는다', async (status, action) => {
+    await loadPanel({ consent: reply(status, null) })
+    buttonByText('보내는 내용 보기').click()
+    await settle()
+
+    expect(created).toEqual([{ url: ONBOARDING_URL }])
+    expect(ofType('crf:set-consent')).toHaveLength(0)
+    expect(buttonByText(action)).toBeTruthy()
+  })
+
+  it('undecided 에서는 자세히 보고 고르기만 있고 보내는 내용 보기 링크는 없다', async () => {
+    await loadPanel({ consent: reply('undecided', null) })
+    expect(buttonByText('자세히 보고 고르기')).toBeTruthy()
+    expect(buttonByText('보내는 내용 보기')).toBeUndefined()
+  })
+})
+
 describe('사이드 패널 배선: 무응답', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})

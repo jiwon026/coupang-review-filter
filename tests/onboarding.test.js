@@ -143,19 +143,49 @@ describe('온보딩 배선: 로드', () => {
     expect(buttonByText(root, '통계 없이 사용')).toBeTruthy()
   })
 
-  it('variant 가 show 면 예시 링크를, hide 면 링크를 그리지 않는다', async () => {
-    const shown = await loadOnboarding({ variants: { variants: { onboarding_example: 'show' } } })
+  it('선택 전 화면(undecided)에는 variant 가 show 여도 예시 링크가 없다', async () => {
+    const root = await loadOnboarding({ variants: { variants: { onboarding_example: 'show' } } })
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(exampleLink(root)).toBeNull()
+  })
+
+  it.each(['granted', 'denied'])('%s 완료 화면에서 variant 가 show 면 예시 링크를, hide 면 링크를 그리지 않는다', async (status) => {
+    const consent = { consent: { status, decidedAt: 1 } }
+    const shown = await loadOnboarding({ consent, variants: { variants: { onboarding_example: 'show' } } })
     expect(exampleLink(shown)).not.toBeNull()
 
-    const hidden = await loadOnboarding({ variants: { variants: { onboarding_example: 'hide' } } })
+    const hidden = await loadOnboarding({ consent, variants: { variants: { onboarding_example: 'hide' } } })
     expect(exampleLink(hidden)).toBeNull()
   })
 
-  it('variants 가 null 이거나 배정이 없으면 예시 링크를 그리지 않는다(변형을 모르면 실험 노출을 만들지 않는다)', async () => {
-    const unknown = await loadOnboarding({ variants: { variants: null } })
+  it.each([
+    ['동의하고 시작', '익명 통계를 보내도록 설정했습니다.'],
+    ['통계 없이 사용', '통계를 보내지 않도록 설정했습니다.'],
+  ])('show 변형은 %s 를 고른 뒤 완료 화면에서 예시 링크가 나타난다', async (choice, doneText) => {
+    const root = await loadOnboarding({ variants: { variants: { onboarding_example: 'show' } } })
+    expect(exampleLink(root)).toBeNull()
+
+    buttonByText(root, choice).click()
+    await tick()
+
+    expect(root.textContent).toContain(doneText)
+    expect(exampleLink(root)).not.toBeNull()
+  })
+
+  it('hide 변형은 고른 뒤에도 예시 링크가 없다', async () => {
+    const root = await loadOnboarding({ variants: { variants: { onboarding_example: 'hide' } } })
+    buttonByText(root, '동의하고 시작').click()
+    await tick()
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
+    expect(exampleLink(root)).toBeNull()
+  })
+
+  it('variants 가 null 이거나 배정이 없으면 완료 화면에도 예시 링크를 그리지 않는다(변형을 모르면 실험 노출을 만들지 않는다)', async () => {
+    const consent = { consent: { status: 'granted', decidedAt: 1 } }
+    const unknown = await loadOnboarding({ consent, variants: { variants: null } })
     expect(exampleLink(unknown)).toBeNull()
 
-    const missing = await loadOnboarding({ variants: { variants: {} } })
+    const missing = await loadOnboarding({ consent, variants: { variants: {} } })
     expect(exampleLink(missing)).toBeNull()
   })
 
@@ -176,6 +206,19 @@ describe('온보딩 배선: 로드', () => {
   it('이미 granted 로 열면 이 페이지 로드에서 Onboarding Viewed 를 1건 보낸다', async () => {
     await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } } })
     expect(tracked('Onboarding Viewed')).toHaveLength(1)
+  })
+
+  // example_shown 은 이 페이지 로드에서 변형상 예시 링크를 보여 주는지다. 실험의 노출 기록이다.
+  it.each([
+    ['show', { variants: { onboarding_example: 'show' } }, true],
+    ['hide', { variants: { onboarding_example: 'hide' } }, false],
+    ['변형을 모름', { variants: null }, false],
+    ['변형 응답 실패', 'lastError', false],
+  ])('Onboarding Viewed 에 example_shown 을 싣는다(%s)', async (_label, variants, expected) => {
+    await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } }, variants })
+    const views = tracked('Onboarding Viewed')
+    expect(views).toHaveLength(1)
+    expect(views[0].properties).toEqual({ example_shown: expected })
   })
 })
 
@@ -202,12 +245,17 @@ describe('온보딩 배선: 두 응답을 따로 기다림', () => {
     expect(exampleLink(root)).toBeNull()
   })
 
-  it('GET_VARIANT 는 show 로 즉시, GET_CONSENT 는 무응답이면 타임아웃 뒤 undecided 화면과 예시 링크를 보인다', async () => {
+  it('GET_VARIANT 는 show 로 즉시, GET_CONSENT 는 무응답이면 타임아웃 뒤 undecided 화면이고, 고른 뒤 예시 링크를 보인다', async () => {
     const root = await load({ consent: 'none', variants: { variants: { onboarding_example: 'show' } } })
     await vi.advanceTimersByTimeAsync(2000)
 
     expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
     expect(buttonByText(root, '통계 없이 사용')).toBeTruthy()
+    expect(exampleLink(root)).toBeNull()
+
+    buttonByText(root, '통계 없이 사용').click()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
     expect(exampleLink(root)).not.toBeNull()
   })
 
@@ -234,7 +282,7 @@ describe('온보딩 배선: 두 응답을 따로 기다림', () => {
     const root = await load({ consent: 'hold', variants: { variants: { onboarding_example: 'show' } } })
     await vi.advanceTimersByTimeAsync(2000)
     expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
-    expect(exampleLink(root)).not.toBeNull()
+    expect(exampleLink(root)).toBeNull()
 
     held['crf:get-consent']({ consent: { status: 'granted', decidedAt: 1 } })
     await vi.advanceTimersByTimeAsync(0)
@@ -272,6 +320,7 @@ describe('온보딩 배선: 동의하고 시작', () => {
     expect(ofType('crf:set-consent')).toEqual([{ type: 'crf:set-consent', status: 'granted', source: 'onboarding' }])
     const views = tracked('Onboarding Viewed')
     expect(views).toHaveLength(1)
+    expect(views[0].properties).toEqual({ example_shown: true })
     expect(ofType('crf:track')).toHaveLength(1)
     expect(sent.indexOf(views[0])).toBeGreaterThan(sent.indexOf(ofType('crf:set-consent')[0]))
   })
@@ -498,23 +547,36 @@ describe('온보딩 배선: 예시 링크', () => {
   })
 
   it.each([
-    ['undecided', { consent: { status: 'undecided', decidedAt: null } }],
-    ['denied', { consent: { status: 'denied', decidedAt: 1 } }],
-  ])('%s 에서는 링크를 눌러도 TRACK 을 보내지 않는다', async (_label, consent) => {
-    const root = await loadOnboarding({ consent })
+    ['이미 denied 로 연 완료 화면', async () => loadOnboarding({ consent: { consent: { status: 'denied', decidedAt: 1 } } })],
+    [
+      '방금 거절한 완료 화면',
+      async () => {
+        const root = await loadOnboarding()
+        buttonByText(root, '통계 없이 사용').click()
+        await tick()
+        return root
+      },
+    ],
+  ])('%s 에서는 링크를 눌러도 TRACK 을 보내지 않는다', async (_label, open) => {
+    const root = await open()
+    expect(root.textContent).toContain('통계를 보내지 않도록 설정했습니다.')
     exampleLink(root).dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }))
     await tick()
     expect(ofType('crf:track')).toHaveLength(0)
   })
 
-  it('설정 바꾸기로 선택 화면에 돌아온 동안에는 granted 였어도 TRACK 을 보내지 않는다', async () => {
+  it('설정 바꾸기로 선택 화면에 돌아온 동안에는 예시 링크가 없고, 다시 고르면 다시 보인다', async () => {
     const root = await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } } })
-    const before = tracked('Onboarding Example Clicked').length
+    expect(exampleLink(root)).not.toBeNull()
+
     buttonByText(root, '설정 바꾸기').click()
     await tick()
-    exampleLink(root).dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }))
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(exampleLink(root)).toBeNull()
+
+    buttonByText(root, '통계 없이 사용').click()
     await tick()
-    expect(tracked('Onboarding Example Clicked')).toHaveLength(before)
+    expect(exampleLink(root)).not.toBeNull()
   })
 
   it('링크 핸들러는 이동을 막지 않는다(새 탭 이동은 브라우저에 맡긴다)', async () => {
@@ -530,7 +592,7 @@ describe('온보딩 배선: 예시 링크', () => {
   })
 
   it('예시 링크 클릭은 TRACK 외에 SET_CONSENT 를 보내지 않는다', async () => {
-    const root = await loadOnboarding()
+    const root = await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } } })
     exampleLink(root).dispatchEvent(new document.defaultView.MouseEvent('click', { bubbles: true, cancelable: true }))
     await tick()
     expect(ofType('crf:set-consent')).toHaveLength(0)
@@ -583,6 +645,7 @@ describe('온보딩 배선: 다른 곳에서 바뀐 동의', () => {
 
   it('알림은 예시 링크 표시 여부를 바꾸지 않는다', async () => {
     const shown = await loadOnboarding({ variants: { variants: { onboarding_example: 'show' } } })
+    expect(exampleLink(shown)).toBeNull()
     deliver(changed('denied'))
     expect(exampleLink(shown)).not.toBeNull()
 
@@ -703,8 +766,9 @@ describe('온보딩 배선: 늦게 온 응답과 저장 뒤 재확인', () => {
   })
 
   it('늦게 온 변형 응답은 예시 링크를 나타나게 하지 않는다', async () => {
-    const root = await loadOnboarding({ variants: 'hold' })
+    const root = await loadOnboarding({ consent: { consent: { status: 'granted', decidedAt: 1 } }, variants: 'hold' })
     await vi.advanceTimersByTimeAsync(2000)
+    expect(root.textContent).toContain('익명 통계를 보내도록 설정했습니다.')
     held['crf:get-variant']({ variants: { onboarding_example: 'show' } })
     await tick()
     expect(exampleLink(root)).toBeNull()

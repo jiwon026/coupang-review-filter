@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CONSENT, DECIDED_STATUSES, consentStatusFrom } from '../extension/src/shared/consent-status.js'
+import { CONSENT, DECIDED_STATUSES, consentStatusFrom, deviceIdFrom } from '../extension/src/shared/consent-status.js'
 import { CONSENT as BACKGROUND_CONSENT } from '../extension/src/background/consent.js'
 import { ONBOARDING_PATH } from '../extension/src/shared/pages.js'
 
@@ -31,5 +31,23 @@ describe('consentStatusFrom', () => {
     ['null', null],
   ])('%s 이면 null 이다', (_label, response) => {
     expect(consentStatusFrom(response)).toBeNull()
+  })
+})
+
+describe('deviceIdFrom', () => {
+  it('consent 의 deviceId 문자열을 돌려준다', () => {
+    expect(deviceIdFrom({ status: 'denied', decidedAt: 1, deviceId: 'abc-123' })).toBe('abc-123')
+  })
+
+  it.each([
+    ['null', { status: 'denied', deviceId: null }],
+    ['필드 없음', { status: 'denied' }],
+    ['빈 문자열', { deviceId: '' }],
+    ['숫자', { deviceId: 12345 }],
+    ['객체', { deviceId: { id: 'x' } }],
+    ['consent 없음', undefined],
+    ['consent 가 null', null],
+  ])('%s 이면 null', (_label, consent) => {
+    expect(deviceIdFrom(consent)).toBeNull()
   })
 })

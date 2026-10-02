@@ -14,3 +14,9 @@ export function consentStatusFrom(response) {
   const status = response?.consent?.status
   return Object.values(CONSENT).includes(status) ? status : null
 }
+
+// 응답이나 알림의 consent 에서 익명 기기 번호를 읽는다. 없거나 비어 있거나 문자열이 아니면 null 이다.
+export function deviceIdFrom(consent) {
+  const deviceId = consent?.deviceId
+  return typeof deviceId === 'string' && deviceId !== '' ? deviceId : null
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
 import { installChromeMock, EXTENSION_ORIGIN } from './helpers/chrome-mock.js'
+import { assignAll } from '../extension/src/core/experiment.js'
 
 // 온보딩 페이지와 백그라운드를 실제 모듈로 함께 띄워 동의 흐름을 끝에서 끝까지 본다.
 const mockConfig = vi.hoisted(() => ({
@@ -111,6 +112,19 @@ describe('온보딩에서 동의하는 통합 흐름', () => {
     expect(installed[0].session_id).toBeLessThanOrEqual(installed[0].time)
     expect(installed[0].event_properties.consent_source).toBe('onboarding')
     expect(installed[0].event_properties.seconds_since_install).toBe(Math.round((decidedAt - INSTALLED_AT) / 1000))
+  })
+
+  it('Onboarding Viewed 의 example_shown 은 그 기기의 실험 배정과 같고, 화면의 예시 링크 유무와도 같다', async () => {
+    await loadFlow()
+    buttonByText('동의하고 시작').click()
+    for (let i = 0; i < 10; i += 1) await flush()
+
+    const shown = assignAll('dev-1').onboarding_example === 'show'
+    const viewed = eventsOfType('Onboarding Viewed')
+    expect(viewed).toHaveLength(1)
+    expect(viewed[0].event_properties.example_shown).toBe(shown)
+    expect(viewed[0].event_properties.exp_onboarding_example).toBe(shown ? 'show' : 'hide')
+    expect(document.querySelector('a[href="https://www.coupang.com/vp/products/7590830589"]') !== null).toBe(shown)
   })
 
   it('통계 없이 사용을 고르면 아무것도 보내지 않는다', async () => {

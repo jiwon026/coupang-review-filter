@@ -82,7 +82,11 @@ describe('renderPanel', () => {
 })
 
 const SAVE_ERROR = '설정을 저장하지 못했습니다. 다시 시도해 주세요.'
+const DEVICE_ID = '3f2c1a9e-5b7d-4c8a-9e1f-0a2b4c6d8e0f'
+const DETAILS = '보내는 내용 보기'
 const buttonByText = (root, text) => [...root.querySelectorAll('button')].find((button) => button.textContent === text)
+// 동의를 켜고 끄는(또는 고르러 가는) 주 버튼. 보내는 내용 보기 링크와 구분한다.
+const actionButtons = (root) => [...root.querySelectorAll('button.consent-action')].map((button) => button.textContent)
 
 describe('renderConsent', () => {
   let container
@@ -107,19 +111,41 @@ describe('renderConsent', () => {
   it('granted 이면 보내는 중이라고 말하고 보내지 않기 버튼 하나를 둔다', () => {
     render({ status: 'granted' })
     expect(container.textContent).toContain('익명 사용 통계를 보내고 있습니다')
-    expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['보내지 않기'])
+    expect(actionButtons(container)).toEqual(['보내지 않기'])
   })
 
   it('denied 이면 보내지 않는다고 말하고 보내기 버튼 하나를 둔다', () => {
     render({ status: 'denied' })
     expect(container.textContent).toContain('익명 사용 통계를 보내지 않습니다')
-    expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['보내기'])
+    expect(actionButtons(container)).toEqual(['보내기'])
   })
 
   it('undecided 이면 아직 고르지 않았다고 말하고 자세히 보고 고르기 버튼 하나를 둔다', () => {
     render({ status: 'undecided' })
     expect(container.textContent).toContain('익명 사용 통계를 보낼지 아직 고르지 않았습니다')
     expect([...container.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['자세히 보고 고르기'])
+  })
+
+  // 패널의 보내기는 다시 알리지 않고 바로 켠다. 무엇을 보내는지 다시 볼 수 있는 길을 같은 구역에 둔다.
+  it.each(['granted', 'denied'])('%s 이면 보내는 내용 보기 링크를 두고, 누르면 onLearnMore 만 부른다', (status) => {
+    render({ status })
+    const details = buttonByText(container, DETAILS)
+    expect(details).toBeTruthy()
+    expect(details.getAttribute('type')).toBe('button')
+    expect(details.classList.contains('consent-action')).toBe(false)
+
+    details.click()
+    expect(calls).toEqual([['learn']])
+  })
+
+  it('undecided 에서는 자세히 보고 고르기가 같은 일을 하므로 보내는 내용 보기 링크를 따로 두지 않는다', () => {
+    render({ status: 'undecided' })
+    expect(buttonByText(container, DETAILS)).toBeUndefined()
+  })
+
+  it.each(['granted', 'denied'])('%s 에서 saving 이어도 보내는 내용 보기는 누를 수 있다', (status) => {
+    render({ status, saving: true })
+    expect(buttonByText(container, DETAILS).disabled).toBe(false)
   })
 
   it('보내지 않기를 누르면 onChange("denied") 만 부른다', () => {
@@ -171,10 +197,12 @@ describe('renderConsent', () => {
   })
 
   it('다시 그려도 이전 내용이 남지 않는다', () => {
-    render({ status: 'granted' })
+    render({ status: 'granted', deviceId: DEVICE_ID })
     render({ status: 'denied' })
-    expect(container.querySelectorAll('button')).toHaveLength(1)
+    expect(container.querySelectorAll('button.consent-action')).toHaveLength(1)
+    expect(container.querySelectorAll('section')).toHaveLength(1)
     expect(container.textContent).not.toContain('보내고 있습니다')
+    expect(container.textContent).not.toContain(DEVICE_ID)
   })
 
   it('요약 영역을 건드리지 않는다(별도 컨테이너)', () => {
@@ -186,6 +214,54 @@ describe('renderConsent', () => {
     const before = root.textContent
     renderConsent(consent, { status: 'denied', privacyUrl: null, onChange() {}, onLearnMore() {} })
     expect(root.textContent).toBe(before)
+  })
+
+  // 삭제 요청에 쓰는 익명 기기 번호. 한 번이라도 동의한 사용자에게만 백그라운드가 알려 준다.
+  describe('익명 기기 번호', () => {
+    it.each(['granted', 'denied'])('deviceId 가 있으면 %s 에서 구역 맨 아래에 번호와 안내를 보여 준다', (status) => {
+      render({ status, deviceId: DEVICE_ID, privacyUrl: 'https://site.test/privacy' })
+      const section = container.querySelector('section.consent')
+      const [device, note] = [...section.children].slice(-2)
+
+      expect(device.className).toBe('consent-device')
+      expect(device.textContent).toBe(`익명 기기 번호: ${DEVICE_ID}`)
+      expect(note.className).toBe('consent-device-note')
+      expect(note.textContent).toBe('통계 삭제를 요청할 때 이 번호를 알려 주세요.')
+    })
+
+    it('번호만 따로 선택해 복사할 수 있게 번호만 담은 요소를 둔다', () => {
+      render({ status: 'denied', deviceId: DEVICE_ID })
+      const id = container.querySelector('.consent-device-id')
+      expect(id.textContent).toBe(DEVICE_ID)
+      expect(id.children).toHaveLength(0)
+    })
+
+    it('스타일시트가 번호를 한 번에 선택되게(user-select: all) 하고 작은 글씨로 둔다', async () => {
+      const { readFileSync } = await import('node:fs')
+      const css = readFileSync(new URL('../extension/src/sidepanel/style.css', import.meta.url), 'utf8')
+      expect(css).toMatch(/\.consent-device-id\s*\{[^}]*user-select:\s*all/)
+      expect(css).toMatch(/\.consent-device,\s*\.consent-device-note\s*\{[^}]*font-size:\s*11px/)
+    })
+
+    it.each([
+      ['없음', undefined],
+      ['null', null],
+      ['빈 문자열', ''],
+      ['문자열이 아님', 12345],
+    ])('deviceId 가 %s 이면 번호 줄과 안내가 없다', (_label, deviceId) => {
+      render({ status: 'denied', deviceId })
+      expect(container.querySelector('.consent-device')).toBeNull()
+      expect(container.querySelector('.consent-device-note')).toBeNull()
+      expect(container.textContent).not.toContain('익명 기기 번호')
+      expect(container.textContent).not.toContain('통계 삭제를 요청할 때')
+    })
+
+    it('번호는 textContent 로만 넣는다(마크업으로 해석하지 않는다)', () => {
+      render({ status: 'denied', deviceId: '<b>x</b>' })
+      const id = container.querySelector('.consent-device-id')
+      expect(id.textContent).toBe('<b>x</b>')
+      expect(id.children).toHaveLength(0)
+    })
   })
 
   it('엠대시와 가운데 점을 쓰지 않는다', async () => {

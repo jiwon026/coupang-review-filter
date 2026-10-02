@@ -92,11 +92,45 @@ h1 {
   color: #b3261e;
 }
 
+/* 링크는 동의 버튼 아래 한 줄에 둔다. 좁은 패널에서는 줄을 바꾼다. */
+.consent-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 10px 0 0;
+}
+
 .consent-link {
-  display: inline-block;
-  margin-top: 8px;
-  margin-left: 12px;
   color: var(--crf-accent);
+}
+
+/* 보내는 내용 보기는 버튼이지만 링크처럼 보인다. 테두리와 바탕을 두지 않는다. */
+.consent-details {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* 통계 삭제를 요청할 때 알려 줄 익명 기기 번호. 구역 맨 아래에 작은 글씨로 둔다. */
+.consent-device,
+.consent-device-note {
+  margin: 0;
+  color: #666;
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.consent-device {
+  margin-top: 12px;
+}
+
+/* 번호를 한 번 눌러 통째로 선택해 복사할 수 있게 한다. */
+.consent-device-id {
+  user-select: all;
 }
 
 .consent-action:disabled {

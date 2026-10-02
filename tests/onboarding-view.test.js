@@ -6,17 +6,25 @@ import { renderOnboarding } from '../extension/src/onboarding/view.js'
 const EXAMPLE_URL = 'https://www.coupang.com/vp/products/7590830589'
 const PRIVACY_URL = 'https://landing.test/privacy'
 
+// 제출 뒤에는 재심사 없이 고칠 수 없는 고지 문구다. 실제 전송 항목과 맞춘 전체 문자열로 고정한다.
 const SENT_ITEMS = [
   '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자',
   '숨기기 버튼, 패널, 장바구니와 바로구매 버튼을 눌렀는지',
   '리뷰 정렬 방식(베스트순, 최신순)',
+  '확장의 화면(설치 안내, 패널)을 열었는지와 이용한 시각',
+  '확장 버전, 화면 실험 그룹, 오류가 났는지와 종류',
   '무작위로 만든 익명 기기 번호',
 ]
 
 const NOT_SENT_ITEMS = [
   '리뷰 내용, 상품 이름, 상품 주소',
   '쿠팡 계정, 이름, 이메일, 결제 정보',
-  '쿠팡 상품 페이지 밖의 어떤 정보도',
+  '쿠팡 상품 페이지가 아닌 다른 사이트에서 무엇을 보거나 했는지',
+]
+
+const NOTE_ITEMS = [
+  '어떤 상품을 봤는지는 저희도 알 수 없습니다. 상품 번호와 리뷰 번호는 이 기기 밖에서는 원래 번호로 되돌릴 수 없는 값으로 바꿔 보냅니다.',
+  '통계는 분석 도구 Amplitude(미국 서버)에 저장됩니다. 광고나 판매에 쓰지 않습니다. 개인을 알 수 없는 집계 결과는 공개할 수 있습니다.',
 ]
 
 const HOW_TO_ITEMS = [
@@ -107,24 +115,26 @@ describe('renderOnboarding: undecided', () => {
     expect(onChoose).toHaveBeenCalledTimes(2)
   })
 
-  it('"보내는 것" 목록은 4줄이고 문자열이 같다', () => {
+  it('"보내는 것" 목록은 6줄이고 문자열이 같다', () => {
     render()
+    expect(listItems('보내는 것')).toHaveLength(6)
     expect(listItems('보내는 것')).toEqual(SENT_ITEMS)
   })
 
   it('"보내지 않는 것" 목록은 3줄이고 문자열이 같다', () => {
     render()
+    expect(listItems('보내지 않는 것')).toHaveLength(3)
     expect(listItems('보내지 않는 것')).toEqual(NOT_SENT_ITEMS)
   })
 
-  it('보충 설명 두 줄을 보여 준다', () => {
+  it('"보내지 않는 것" 에 지킬 수 없는 절대 표현(어떤 ... 도)을 쓰지 않는다', () => {
     render()
-    expect(root.textContent).toContain(
-      '어떤 상품을 봤는지는 저희도 알 수 없습니다. 상품 번호는 이 기기 밖에서는 원래 번호로 되돌릴 수 없는 값으로 바꿔 보냅니다.',
-    )
-    expect(root.textContent).toContain(
-      '통계는 분석 도구 Amplitude(미국 서버)에 저장됩니다. 광고나 판매에 쓰지 않습니다. 개인을 알 수 없는 집계 결과는 공개할 수 있습니다.',
-    )
+    for (const item of listItems('보내지 않는 것')) expect(item).not.toMatch(/어떤 .*도$/)
+  })
+
+  it('보충 설명 두 줄을 전체 문자열 그대로 보여 준다', () => {
+    render()
+    expect([...root.querySelectorAll('p.note')].map((node) => node.textContent)).toEqual(NOTE_ITEMS)
   })
 
   it('설정 바꾸기 버튼과 완료 문구는 없다', () => {
@@ -145,32 +155,45 @@ describe('renderOnboarding: undecided', () => {
   })
 })
 
+// 예시 링크는 선택을 마친 완료 화면에서만 보인다. 선택 전에 보이면 눌러서 떠난 사용자가 표본에서 빠져 실험이 치우친다.
 describe('renderOnboarding: 예시 링크', () => {
-  it('showExample 이 false 면 예시 링크가 없다', () => {
-    render({ showExample: false })
+  const exampleLink = () => root.querySelector(`a[href="${EXAMPLE_URL}"]`)
+
+  it('선택 전 화면(undecided)에는 showExample 이 true 여도 예시 링크가 없다', () => {
+    render({ status: 'undecided', showExample: true })
     expect(root.textContent).not.toContain('예시 상품에서 바로 확인하기')
-    expect(root.querySelector(`a[href="${EXAMPLE_URL}"]`)).toBeNull()
+    expect(exampleLink()).toBeNull()
+    expect(root.querySelector('.example')).toBeNull()
   })
 
-  it('showExample 이 true 면 exampleUrl 로 가는 새 탭 링크를 보여 준다', () => {
-    render({ showExample: true })
-    const link = root.querySelector(`a[href="${EXAMPLE_URL}"]`)
+  it.each(['granted', 'denied'])('%s 완료 화면에서 showExample 이 true 면 exampleUrl 로 가는 새 탭 링크를 보여 준다', (status) => {
+    render({ status, showExample: true })
+    const link = exampleLink()
     expect(link.textContent).toBe('예시 상품에서 바로 확인하기')
     expect(link.getAttribute('target')).toBe('_blank')
     expect(link.getAttribute('rel')).toBe('noopener')
   })
 
-  it('링크를 누르면 onExample 이 1회 불린다', () => {
-    const { onExample } = render()
-    root.querySelector(`a[href="${EXAMPLE_URL}"]`).dispatchEvent(new root.ownerDocument.defaultView.Event('click', { cancelable: true }))
-    expect(onExample).toHaveBeenCalledTimes(1)
+  it.each(['granted', 'denied'])('%s 완료 화면에서도 showExample 이 false 면 예시 링크가 없다', (status) => {
+    render({ status, showExample: false })
+    expect(root.textContent).not.toContain('예시 상품에서 바로 확인하기')
+    expect(exampleLink()).toBeNull()
   })
 
-  it('완료 상태에서도 예시 링크는 showExample 을 따른다', () => {
-    render({ status: 'granted', showExample: true })
-    expect(root.querySelector(`a[href="${EXAMPLE_URL}"]`)).not.toBeNull()
-    render({ status: 'granted', showExample: false })
-    expect(root.querySelector(`a[href="${EXAMPLE_URL}"]`)).toBeNull()
+  it.each(['granted', 'denied'])('%s 완료 화면의 예시 링크는 완료 문구 아래, 설정 바꾸기 버튼 위에 있다', (status) => {
+    render({ status, showExample: true })
+    const section = root.querySelector('section.consent')
+    const order = [...section.children].map((node) => node.className)
+    expect(order).toEqual(['done', 'example', 'choice'])
+    expect(section.children[1].contains(exampleLink())).toBe(true)
+    expect(section.children[2].textContent).toBe('설정 바꾸기')
+    expect(root.querySelectorAll(`a[href="${EXAMPLE_URL}"]`)).toHaveLength(1)
+  })
+
+  it('링크를 누르면 onExample 이 1회 불린다', () => {
+    const { onExample } = render({ status: 'granted' })
+    exampleLink().dispatchEvent(new root.ownerDocument.defaultView.Event('click', { cancelable: true }))
+    expect(onExample).toHaveBeenCalledTimes(1)
   })
 })
 

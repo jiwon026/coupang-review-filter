@@ -4,21 +4,24 @@ const HOW_TO = [
   '버튼을 누르면 체험단 리뷰를 숨기고, 다시 누르면 다시 볼 수 있습니다',
 ]
 
+// 동의 전에 보여 주는 고지다. 실제로 보내는 항목과 글자 그대로 맞아야 한다. 이벤트에 항목을 더하면 여기와 처리방침도 함께 고친다.
 const SENT = [
   '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자',
   '숨기기 버튼, 패널, 장바구니와 바로구매 버튼을 눌렀는지',
   '리뷰 정렬 방식(베스트순, 최신순)',
+  '확장의 화면(설치 안내, 패널)을 열었는지와 이용한 시각',
+  '확장 버전, 화면 실험 그룹, 오류가 났는지와 종류',
   '무작위로 만든 익명 기기 번호',
 ]
 
 const NOT_SENT = [
   '리뷰 내용, 상품 이름, 상품 주소',
   '쿠팡 계정, 이름, 이메일, 결제 정보',
-  '쿠팡 상품 페이지 밖의 어떤 정보도',
+  '쿠팡 상품 페이지가 아닌 다른 사이트에서 무엇을 보거나 했는지',
 ]
 
 const NOTES = [
-  '어떤 상품을 봤는지는 저희도 알 수 없습니다. 상품 번호는 이 기기 밖에서는 원래 번호로 되돌릴 수 없는 값으로 바꿔 보냅니다.',
+  '어떤 상품을 봤는지는 저희도 알 수 없습니다. 상품 번호와 리뷰 번호는 이 기기 밖에서는 원래 번호로 되돌릴 수 없는 값으로 바꿔 보냅니다.',
   '통계는 분석 도구 Amplitude(미국 서버)에 저장됩니다. 광고나 판매에 쓰지 않습니다. 개인을 알 수 없는 집계 결과는 공개할 수 있습니다.',
 ]
 
@@ -117,27 +120,31 @@ function choiceSection({ onChoose, saveFailed, saving }) {
   return section
 }
 
-function doneSection({ status, onChange, saving, saveFailed }) {
+// 예시 링크는 선택을 마친 이 화면에서만 보여 준다(동의든 거절이든). 선택 전에 보여 주면 눌러서 떠난 사용자가
+// 동의하지 않은 채 표본에서 빠져 실험이 치우친다.
+function doneSection({ status, onChange, saving, saveFailed, showExample, exampleUrl, onExample }) {
   const section = el('section', 'consent')
   const message = el('p', 'done', DONE_COPY[status])
   message.setAttribute('role', 'status')
   section.appendChild(message)
+  if (showExample) section.appendChild(exampleLink({ exampleUrl, onExample }))
   section.appendChild(button('설정 바꾸기', () => onChange(), saving))
   if (saveFailed) section.appendChild(saveError())
   return section
 }
 
-// status 가 granted 나 denied 면 완료 상태, 그 밖에는 선택 화면이다.
+// status 가 granted 나 denied 면 완료 상태, 그 밖에는 선택 화면이다. showExample 은 완료 상태에서만 쓰인다.
 export function renderOnboarding(root, { status, showExample, exampleUrl, privacyUrl, onChoose, onExample, onChange, saveFailed, saving = false }) {
   root.replaceChildren()
 
   root.appendChild(intro())
   root.appendChild(howTo())
-  if (showExample) root.appendChild(exampleLink({ exampleUrl, onExample }))
   root.appendChild(el('hr'))
 
   root.appendChild(
-    Object.hasOwn(DONE_COPY, status) ? doneSection({ status, onChange, saving, saveFailed }) : choiceSection({ onChoose, saveFailed, saving }),
+    Object.hasOwn(DONE_COPY, status)
+      ? doneSection({ status, onChange, saving, saveFailed, showExample, exampleUrl, onExample })
+      : choiceSection({ onChoose, saveFailed, saving }),
   )
 
   if (privacyUrl) {

@@ -19,7 +19,7 @@ let state = {
   status: CONSENT.UNDECIDED,
   revision: 0,
   loaded: false,
-  showExample: true,
+  showExample: false,
   choosing: false,
   saving: false,
   saveFailed: false,
@@ -34,17 +34,18 @@ function warn(message, error) {
   console.warn(`${LOG_PREFIX} ${message}`, error?.message ?? error)
 }
 
-function track(eventType) {
-  request({ type: MESSAGES.TRACK, eventType, properties: {} }).catch((error) =>
+function track(eventType, properties = {}) {
+  request({ type: MESSAGES.TRACK, eventType, properties }).catch((error) =>
     warn('온보딩 이벤트를 기록하지 못했습니다:', error),
   )
 }
 
 // 동의한 뒤에만 부른다. 이 페이지 로드에서 한 번만 보낸다.
+// example_shown 은 이 페이지 로드에서 변형상 예시 링크를 보여 주는지다. 첫 화면을 그린 뒤에만 불리므로 변형은 정해져 있다.
 function trackViewedOnce() {
   if (state.viewedSent) return
   setState({ viewedSent: true })
-  track(EVENTS.ONBOARDING_VIEWED)
+  track(EVENTS.ONBOARDING_VIEWED, { example_shown: state.showExample === true })
 }
 
 function draw() {
@@ -65,7 +66,7 @@ function draw() {
 }
 
 // 화면이 granted 일 때만 보낸다. 백그라운드 게이트가 막기도 하지만 이 페이지에서도 보내지 않는다.
-// 설정 바꾸기로 선택 화면에 돌아온 동안은 화면이 undecided 이므로 보내지 않는다.
+// 예시 링크는 완료 화면에만 있다. 설정 바꾸기로 선택 화면에 돌아온 동안은 링크가 없지만 조건은 그대로 둔다.
 function onExample() {
   if (state.choosing || state.status !== 'granted') return
   track(EVENTS.ONBOARDING_EXAMPLE_CLICKED)

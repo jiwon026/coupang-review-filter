@@ -2,7 +2,7 @@ import { MESSAGES } from '../shared/messages.js'
 import { EVENTS } from '../shared/events.js'
 import { privacyUrl } from '../shared/site.js'
 import { ONBOARDING_PATH } from '../shared/pages.js'
-import { CONSENT, DECIDED_STATUSES, consentStatusFrom } from '../shared/consent-status.js'
+import { CONSENT, DECIDED_STATUSES, consentStatusFrom, deviceIdFrom } from '../shared/consent-status.js'
 import { request, GET_CONSENT_TIMEOUT_MS, SET_CONSENT_TIMEOUT_MS } from '../shared/request.js'
 import { renderPanel, renderConsent } from './view.js'
 
@@ -16,7 +16,9 @@ let activeTabId = null
 
 // revision 은 더 새로운 정보(저장 성공, 다른 곳의 변경 알림, 다시 읽은 상태)가 도착할 때마다 올린다.
 // 응답을 기다리던 쪽은 그 사이에 revision 이 바뀌었으면 자기 응답을 버린다.
-let consent = { status: CONSENT.UNDECIDED, saving: false, saveFailed: false, revision: 0 }
+// deviceId 는 삭제 요청에 쓰도록 화면에만 보여 주는 익명 기기 번호다. 백그라운드는 한 번이라도 동의한 경우에만 알려 준다.
+// 이 값은 어떤 메시지에도 다시 싣지 않는다.
+let consent = { status: CONSENT.UNDECIDED, deviceId: null, saving: false, saveFailed: false, revision: 0 }
 
 async function currentTabId() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
@@ -37,6 +39,7 @@ async function load() {
 function drawConsent() {
   renderConsent(consentRoot, {
     status: consent.status,
+    deviceId: consent.deviceId,
     privacyUrl: privacyUrl(),
     saveFailed: consent.saveFailed,
     saving: consent.saving,
@@ -57,10 +60,12 @@ function openOnboarding() {
 }
 
 // 새 정보로 동의 화면을 다시 그린다. 요약(root)은 건드리지 않는다.
-function adoptConsent(status, { keepError = false } = {}) {
+// payload 는 응답이나 알림의 consent 다. 상태와 같은 출처의 기기 번호를 함께 받아들인다.
+function adoptConsent(status, payload, { keepError = false } = {}) {
   consent = {
     ...consent,
     status,
+    deviceId: deviceIdFrom(payload),
     saveFailed: keepError ? consent.saveFailed : false,
     revision: consent.revision + 1,
   }
@@ -85,7 +90,7 @@ async function changeConsent(status) {
   const saved = !response?.error && DECIDED_STATUSES.includes(response?.consent?.status)
   if (saved) {
     consent = { ...consent, saving: false }
-    adoptConsent(response.consent.status)
+    adoptConsent(response.consent.status, response.consent)
     return
   }
 
@@ -101,21 +106,26 @@ async function loadConsent() {
   const startedAt = consent.revision
   const adoptLate = (response) => {
     const status = consentStatusFrom(response)
-    if (status !== null && consent.revision === startedAt) adoptConsent(status)
+    if (status !== null && consent.revision === startedAt) adoptConsent(status, response.consent)
   }
 
   let status = CONSENT.UNDECIDED
+  let deviceId = null
   try {
     const response = await request(
       { type: MESSAGES.GET_CONSENT },
       { timeoutMs: GET_CONSENT_TIMEOUT_MS, onLate: adoptLate },
     )
-    status = consentStatusFrom(response) ?? CONSENT.UNDECIDED
+    const read = consentStatusFrom(response)
+    if (read !== null) {
+      status = read
+      deviceId = deviceIdFrom(response.consent)
+    }
   } catch (error) {
     console.warn(`${LOG_PREFIX} 동의 상태를 읽지 못했습니다:`, error?.message)
   }
   // 읽는 동안 더 새로운 정보가 왔다면 그 상태가 이긴다. 다시 그리기만 한다.
-  if (consent.revision === startedAt) consent = { ...consent, status }
+  if (consent.revision === startedAt) consent = { ...consent, status, deviceId }
   drawConsent()
 }
 
@@ -127,7 +137,7 @@ async function refreshConsent({ requested = null } = {}) {
     const response = await request({ type: MESSAGES.GET_CONSENT }, { timeoutMs: GET_CONSENT_TIMEOUT_MS })
     const status = consentStatusFrom(response)
     if (status !== null && consent.revision === startedAt) {
-      adoptConsent(status, { keepError: requested !== null && status !== requested })
+      adoptConsent(status, response.consent, { keepError: requested !== null && status !== requested })
     }
   } catch (error) {
     console.warn(`${LOG_PREFIX} 동의 상태를 다시 읽지 못했습니다:`, error?.message)
@@ -168,7 +178,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   // 백그라운드가 보낸 동의 변경 알림. 탭에서 온 메시지는 받지 않는다.
   if (message?.type === MESSAGES.CONSENT_CHANGED) {
     const status = message.consent?.status
-    if (!sender?.tab && DECIDED_STATUSES.includes(status)) adoptConsent(status)
+    if (!sender?.tab && DECIDED_STATUSES.includes(status)) adoptConsent(status, message.consent)
     return false
   }
   if (message?.type !== MESSAGES.SUMMARY_UPDATED) return false
