@@ -11,7 +11,7 @@ export const OWN_BADGE_CLASS = 'crf-badge'
 
 export const SORT_SELECTORS = {
   sortButton: 'button',
-  activeClass: 'twc-font-bold',
+  inactiveClass: 'twc-font-normal',
 }
 
 export const SORT_LABELS = {

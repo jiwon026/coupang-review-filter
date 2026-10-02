@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, onTestFinished } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
+import { sortButtonsHtml } from './helpers/sort-buttons.js'
 
 const fixture = readFileSync(new URL('./fixtures/review-section.html', import.meta.url), 'utf8')
 
@@ -488,8 +489,7 @@ describe('content 진입점', () => {
   it('모든 이벤트에 현재 정렬을 싣는다', async () => {
     const withSort = fixture.replace(
       '<div class="sdp-review twc-pb-[24px]">',
-      `<button class="twc-font-bold">베스트순</button>
-       <button class="twc-font-normal">최신순</button>
+      `${sortButtonsHtml('best')}
        <div class="sdp-review twc-pb-[24px]">`,
     )
     const doc = await boot(withSort)

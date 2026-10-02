@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
+import { sortButtonsHtml } from './helpers/sort-buttons.js'
 
 const fixture = readFileSync(new URL('./fixtures/review-section.html', import.meta.url), 'utf8')
 
@@ -484,9 +485,7 @@ describe('셀렉터 깨짐 신호', () => {
     })
 
     it('상품 전환 때 보내는 신호는 새 페이지가 아니라 떠나는 상품의 마지막 관측 정렬을 싣는다', async () => {
-      const buttons = (active) =>
-        `<button class="${active === 'best' ? 'twc-font-bold' : ''}">베스트순</button>` +
-        `<button class="${active === 'latest' ? 'twc-font-bold' : ''}">최신순</button>`
+      const buttons = sortButtonsHtml
       const doc = await boot(`<div id="sdpReview">${buttons('latest')}<article>${star}가</article></div>`)
 
       lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
@@ -504,7 +503,7 @@ describe('셀렉터 깨짐 신호', () => {
     const doc = await boot('<div id="sdpReview"><article>가</article></div>')
     lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/999' })
     doc.querySelector('#sdpReview').innerHTML =
-      `<button class="twc-font-bold">베스트순</button><article>${star}나<div data-review-id="31">도움</div></article>`
+      `${sortButtonsHtml('best')}<article>${star}나<div data-review-id="31">도움</div></article>`
     await touchDom(doc)
 
     const [event] = errorEvents('ReviewRatingNotFound')
@@ -514,7 +513,7 @@ describe('셀렉터 깨짐 신호', () => {
 
   it('앞앞 상품의 정렬이 관측 없는 다음 상품의 신호로 새지 않는다', async () => {
     const doc = await boot(
-      `<div id="sdpReview"><button class="twc-font-bold">최신순</button>` +
+      `<div id="sdpReview">${sortButtonsHtml('latest')}` +
         `<article>${star}가<div data-review-id="11">도움</div></article></div>`,
     )
     lastDom.reconfigure({ url: 'https://www.coupang.com/vp/products/2' })

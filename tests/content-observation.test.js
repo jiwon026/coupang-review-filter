@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
+import { sortButtonsHtml } from './helpers/sort-buttons.js'
 
 const fixture = readFileSync(new URL('./fixtures/review-section.html', import.meta.url), 'utf8')
 
@@ -68,10 +69,7 @@ function review(id, text, stars = 4) {
   return `<article>${star.repeat(stars)}<div>${text}</div>${idNode}</article>`
 }
 
-function sortButtons(active) {
-  const cls = (key) => (key === active ? 'twc-font-bold' : 'twc-font-normal')
-  return `<button class="${cls('best')}">베스트순</button><button class="${cls('latest')}">최신순</button>`
-}
+const sortButtons = sortButtonsHtml
 
 function page(sort, ids) {
   return `${sortButtons(sort)}${ids.map((id) => review(id, `리뷰 ${id}`)).join('')}`
@@ -281,6 +279,15 @@ describe('정렬별 첫 페이지(F8)', () => {
     expect(events.map((event) => event.properties.review_sort)).toEqual(['best', 'best', 'latest', 'latest'])
     expect(events.map((event) => event.properties.sort_pages_seen)).toEqual([1, 2, 1, 2])
     expect(events.map((event) => event.properties.pages_seen)).toEqual([1, 2, 3, 4])
+  })
+
+  it('실제 쿠팡 클래스에서 최신순이 활성이면 첫 Banner Rendered 가 latest 와 sort_pages_seen 1 을 싣는다', async () => {
+    await boot(`<div id="sdpReview">${page('latest', ['301', '302'])}</div>`)
+
+    const events = trackedOfType('Banner Rendered')
+    expect(events).toHaveLength(1)
+    expect(events[0].properties.review_sort).toBe('latest')
+    expect(events[0].properties.sort_pages_seen).toBe(1)
   })
 
   it('page_first_review_id 는 그 페이지 첫 리뷰의 공개 id 다', async () => {
