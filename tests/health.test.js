@@ -1,28 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   CONTAINER_SCROLL_THRESHOLD,
-  ERROR_MESSAGE_MAX_LENGTH,
-  truncateMessage,
   scrollRatio,
   selectHealthSignals,
 } from '../extension/src/content/health.js'
 
-describe('truncateMessage', () => {
-  it('상한 이하면 그대로 둔다', () => {
-    expect(truncateMessage('짧은 메시지')).toBe('짧은 메시지')
-  })
-
-  it('상한을 넘으면 120자로 자른다', () => {
-    expect(ERROR_MESSAGE_MAX_LENGTH).toBe(120)
-    expect(truncateMessage('x'.repeat(500))).toHaveLength(120)
-  })
-
-  it('문자열이 아닌 값도 문자열로 바꾼다', () => {
-    expect(truncateMessage(undefined)).toBe('')
-    expect(truncateMessage(null)).toBe('')
-    expect(truncateMessage(404)).toBe('404')
-  })
-})
 
 describe('scrollRatio', () => {
   it('스크롤한 양을 스크롤 가능한 길이로 나눈다', () => {

@@ -129,8 +129,19 @@ describe('렌더 예외 보고', () => {
     const events = errorEvents('RenderException')
     expect(events).toHaveLength(1)
     expect(events[0].properties.error_name).toBe('TypeError')
-    expect(events[0].properties.error_message).toBe('렌더가 깨졌습니다')
     expect(events[0].properties.product_id).toBe('1')
+  })
+
+  it('렌더 예외 이벤트에 error_message 키가 없고 예외 메시지 원문이 어디에도 실리지 않는다', async () => {
+    globalThis.__crfRenderError = new TypeError('리뷰 본문이 섞인 메시지 7590830589')
+    await boot(fixture)
+
+    const events = errorEvents('RenderException')
+    expect(events).toHaveLength(1)
+    expect('error_message' in events[0].properties).toBe(false)
+    expect(Object.keys(events[0].properties).sort()).toEqual(['error_name', 'error_type', 'product_id', 'review_sort'])
+    expect(JSON.stringify(events[0])).not.toContain('리뷰 본문이 섞인 메시지')
+    expect(JSON.stringify(events[0])).not.toContain('7590830589')
   })
 
   it('DOM 변경으로 렌더가 다시 불려도 던지지 않는다', async () => {
@@ -169,23 +180,14 @@ describe('렌더 예외 보고', () => {
     expect(events[1].properties.product_id).toBe('999')
   })
 
-  it('error_message 는 120자를 넘지 않는다', async () => {
-    globalThis.__crfRenderError = new Error('가'.repeat(500))
-    await boot(fixture)
-
-    const events = errorEvents('RenderException')
-    expect(events).toHaveLength(1)
-    expect(events[0].properties.error_message).toHaveLength(120)
-  })
-
-  it('이름이나 메시지가 없는 값을 던져도 기본값으로 보낸다', async () => {
+  it('이름이 없는 값을 던져도 기본 이름으로 보내고 error_message 키는 없다', async () => {
     globalThis.__crfRenderError = { toString: () => 'x' }
     await boot(fixture)
 
     const events = errorEvents('RenderException')
     expect(events).toHaveLength(1)
     expect(events[0].properties.error_name).toBe('Unknown')
-    expect(events[0].properties.error_message).toBe('')
+    expect('error_message' in events[0].properties).toBe(false)
   })
 
   it('보고 경로에서 예외가 나도 밖으로 던지지 않고 한 번만 경고한다', async () => {

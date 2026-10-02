@@ -1,6 +1,6 @@
 import { parseReviews, findReviewContainer } from './parser.js'
 import { SELECTORS } from './selectors.js'
-import { truncateMessage, scrollRatio, createObservation, selectHealthSignals } from './health.js'
+import { scrollRatio, createObservation, selectHealthSignals } from './health.js'
 import { summarize } from '../core/rating.js'
 import { isSponsored } from '../core/sponsored.js'
 import { createBanner } from './banner.js'
@@ -116,11 +116,11 @@ function reportExtensionError(properties) {
   }
 }
 
+// 예외 메시지는 자유 텍스트라 싣지 않는다. 종류와 이름만 보낸다.
 function reportRenderException(error) {
   reportExtensionError({
     error_type: 'RenderException',
     error_name: error?.name ?? 'Unknown',
-    error_message: truncateMessage(error?.message),
   })
 }
 

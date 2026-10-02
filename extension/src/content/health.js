@@ -2,15 +2,8 @@
 // 판정은 렌더 순간의 DOM 이 아니라 상품 페이지 동안 누적한 관측으로 한다.
 // 지연 로딩으로 별점이나 id 노드가 늦게 붙는 정상 페이지를 오탐하지 않기 위해서다.
 
-export const ERROR_MESSAGE_MAX_LENGTH = 120
-
 // 리뷰가 페이지 하단에 있으므로 문서의 이만큼 내려갔는데도 컨테이너가 없으면 셀렉터가 깨졌을 가능성이 높다.
 export const CONTAINER_SCROLL_THRESHOLD = 0.6
-
-// 리뷰 본문이 오류 메시지에 섞여 들어갈 가능성을 길이 제한으로 줄인다.
-export function truncateMessage(message) {
-  return String(message ?? '').slice(0, ERROR_MESSAGE_MAX_LENGTH)
-}
 
 // 스크롤한 양을 스크롤 가능한 길이로 나눈 비율(0~1). 스크롤하지 않았으면 문서 길이와 무관하게 0 이다.
 export function scrollRatio({ scrollY, viewportHeight, documentHeight }) {

@@ -254,19 +254,26 @@ describe('track 의 최소 수집 두 번째 방어선', () => {
     vi.restoreAllMocks()
   })
 
-  it('error_message 의 6자리 이상 연속 숫자는 # 하나로 바뀐다', async () => {
-    const props = await trackedProps('device-abc', {
-      error_message: 'product 7590830589 review 1020990898 failed, 12345 stays, 123456 goes',
-    })
-    expect(props.error_message).toBe('product # review # failed, 12345 stays, # goes')
-    expect(JSON.stringify(props)).not.toContain('7590830589')
-    expect(JSON.stringify(props)).not.toContain('1020990898')
-  })
+  // 예외 메시지는 자유 텍스트라 리뷰 본문이나 번호가 섞일 수 있다. 콘텐츠 스크립트가 싣지 않지만 들어와도 지운다.
+  it.each([
+    ['문자열', 'product 7590830589 review 1020990898 failed 리뷰 본문'],
+    ['빈 문자열', ''],
+    ['숫자', 1234567890],
+    ['null', null],
+    ['객체', { text: '리뷰 본문' }],
+  ])('track 에 error_message(%s)가 들어와도 최종 페이로드에 키가 없다', async (_label, value) => {
+    const { track } = await loadTrack('device-abc')
+    await track('Extension Error', { error_type: 'RenderException', error_name: 'TypeError', error_message: value })
 
-  it('error_message 가 문자열이 아니면 건드리지 않는다', async () => {
-    expect((await trackedProps('device-abc', { error_message: 1234567890 })).error_message).toBe(1234567890)
-    expect((await trackedProps('device-abc', { error_message: null })).error_message).toBeNull()
-    expect('error_message' in (await trackedProps('device-abc', {}))).toBe(false)
+    expect(sent).toHaveLength(1)
+    const props = sent[0].events[0].event_properties
+    expect('error_message' in props).toBe(false)
+    expect(props.error_type).toBe('RenderException')
+    expect(props.error_name).toBe('TypeError')
+    const body = JSON.stringify(sent[0])
+    expect(body).not.toContain('error_message')
+    expect(body).not.toContain('7590830589')
+    expect(body).not.toContain('리뷰 본문')
   })
 
   it('표에 없는 _id 접미사 키는 제거하고 키 이름만 경고한다(실패 시 닫힘)', async () => {
