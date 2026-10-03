@@ -51,6 +51,7 @@ if (release) {
 
 await esbuild.build({
   entryPoints: {
+    landing: join(SITE_DIR, 'src', 'entry-landing.js'),
     uninstalled: join(SITE_DIR, 'src', 'entry-uninstalled.js'),
     contact: join(SITE_DIR, 'src', 'entry-contact.js'),
   },

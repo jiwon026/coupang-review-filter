@@ -120,6 +120,11 @@ describe('site/build.js 산출물', () => {
       expect(uninstalled).not.toContain(FAKE_CONTACT)
       expect(contact).toContain(FAKE_CONTACT)
       expect(contact).not.toContain(FAKE_KEY)
+      const landing = readFileSync(join(outdir, 'landing.js'), 'utf8')
+      expect(landing).toContain(FAKE_KEY)
+      expect(landing).toContain('https://api2.amplitude.com/2/httpapi')
+      expect(landing).not.toContain(FAKE_CONTACT)
+      expect(landing).not.toContain('console.log')
     } finally {
       rmSync(outdir, { recursive: true, force: true })
     }
@@ -129,6 +134,7 @@ describe('site/build.js 산출물', () => {
     const { outdir, result } = buildInto([], {})
     try {
       expect(result.status).toBe(0)
+      expect(existsSync(join(outdir, 'landing.js'))).toBe(true)
       expect(existsSync(join(outdir, 'uninstalled.js'))).toBe(true)
       expect(existsSync(join(outdir, 'contact.js'))).toBe(true)
     } finally {

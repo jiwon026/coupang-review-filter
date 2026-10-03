@@ -421,7 +421,19 @@ describe('세 페이지 공통', () => {
 })
 
 describe('사이트 스크립트 경계', () => {
-  const files = readdirSync(SRC_DIR).filter((name) => name.endsWith('.js'))
+  // site/src/ 의 파일과 site/src/landing/ 의 파일을 모두 읽는다.
+  const files = [
+    ...readdirSync(SRC_DIR).filter((name) => name.endsWith('.js')),
+    ...readdirSync(new URL('landing/', SRC_DIR))
+      .filter((name) => name.endsWith('.js'))
+      .map((name) => `landing/${name}`),
+  ]
+
+  it('landing 폴더의 파일도 검사 대상이다', () => {
+    expect(files).toContain('landing/landing.js')
+    expect(files).toContain('landing/tracker.js')
+    expect(files).toContain('uninstalled.js')
+  })
 
   it('innerHTML 을 쓰지 않는다', () => {
     for (const name of files) {
