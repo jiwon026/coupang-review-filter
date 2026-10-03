@@ -333,6 +333,7 @@ body.landing section h2 {
 /* 기능 설명: 글 덩어리와 사진을 한 행으로 짝짓는다. 좁은 화면에서는 글이 먼저, 사진이 아래다 */
 .rows {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 40px;
 }
 

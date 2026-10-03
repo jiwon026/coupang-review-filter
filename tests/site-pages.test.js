@@ -231,7 +231,12 @@ describe('랜딩', () => {
     expect(norm(card.querySelector('.rating-values'))).toBe('4.7 → 4.1')
     expect(norm(card.querySelector('.rating-values s'))).toBe('4.7')
     expect(norm(card.querySelector('.rating-values strong'))).toBe('4.1')
-    expect(norm(card.querySelector('.rating-caption'))).toBe('리뷰 1,204개 중 체험단 341개를 뺀 평점')
+    expect(norm(card.querySelector('.rating-caption'))).toBe('지금까지 본 리뷰 60개 중 체험단 40개를 뺀 평점')
+  })
+
+  it('예시 카드는 확장이 계산하지 않는 전체 리뷰 수(1,204, 341)를 쓰지 않는다', () => {
+    expect(bodyText).not.toContain('1,204')
+    expect(bodyText).not.toContain('341')
   })
 
   it('예시 카드의 숫자 줄은 화면 낭독에서 빠지고, 같은 뜻의 숨은 문장이 대신 읽힌다', () => {
@@ -281,7 +286,7 @@ describe('랜딩', () => {
       '패널에서 자세히 봅니다',
     ])
     expect(rows.map((row) => norm(row.querySelector('p')))).toEqual([
-      '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 체험단 리뷰가 몇 개인지도 함께 알려 줍니다.',
+      '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 숫자는 지금까지 본 리뷰를 기준으로 하고, 리뷰 다음 페이지로 넘어가면 본 만큼 더해집니다.',
       '체험단 제공 리뷰에 표시를 붙입니다. 버튼 하나로 숨기고, 다시 누르면 다시 보여 줍니다.',
       '체험단 비중을 한눈에 봅니다. 쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
     ])
@@ -543,8 +548,14 @@ describe('랜딩 스타일시트', () => {
     expect(box).toContain('border-radius: 12px')
   })
 
-  it('방문 통계 거부 안내는 숨김이 풀렸을 때 히어로와 붙지 않도록 아래 여백이 있다', () => {
-    expect(css).toMatch(/#optout-notice\s*\{[^}]*margin(-bottom)?:[^;}]*\d+px/)
+  it('방문 통계 거부 안내는 숨김이 풀렸을 때 히어로와 붙지 않도록 아래 여백 24px 만 있다', () => {
+    const rule = css.match(/#optout-notice\s*\{([^}]*)\}/)[1].replace(/\s+/g, ' ').trim()
+    expect(rule).toMatch(/^(margin: 0 0 24px|margin-bottom: 24px);?$/)
+  })
+
+  it('.rows 는 열을 minmax(0, 1fr) 한 칸으로 못 박아 자식 폭에 따라 늘어나지 않는다', () => {
+    expect(css).toMatch(/\.rows\s*\{[^}]*display:\s*grid/)
+    expect(css).toMatch(/\.rows\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/)
   })
 
   it('랜딩 마크업이 쓰는 클래스만 가리키고 옛 .demo 규칙은 남기지 않는다', () => {
