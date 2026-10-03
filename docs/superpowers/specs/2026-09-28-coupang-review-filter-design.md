@@ -553,7 +553,7 @@ Phase 2를 실행하지 않기로 결정하더라도, 그 판단 근거를 데�
 ### 12.4 모바일: 이메일 없는 넘기기
 
 - 모바일로 판정한 방문자에게는 설치 버튼 대신 `PC 크롬에서 설치할 수 있어요` 와 `링크 복사`, `공유하기` 버튼을 보여 준다. `공유하기` 는 브라우저가 공유 기능을 지원할 때만 보인다
-- 넘기는 주소: `<사이트 주소>/?utm_source=handoff&utm_medium=<copy|share>&utm_campaign=<원래 유입원>`. 원래 유입원을 실어야 넘겨받은 방문을 처음의 채널로 되돌려 셀 수 있다
+- 넘기는 주소: `<사이트 주소>/?utm_source=handoff&utm_medium=<copy|share>&utm_campaign=<원래 유입원>`. 원래 유입원을 실어야 넘겨받은 방문을 처음의 채널로 되돌려 셀 수 있다. 유입원이 도메인이면 점을 `-` 로 바꿔 싣는다(`clien.net` → `clien-net`). 받는 쪽의 UTM 검증을 통과해야 하기 때문이다. 유입원이 `internal` 이면 싣지 않는다
 - 넘겨받은 PC 방문은 `utm_source=handoff` 인 `Landing Viewed` 로 센다. 넘긴 사람과 연 사람이 같은지는 알 수 없고 수만 센다
 
 ### 12.5 랜딩 계측
@@ -563,17 +563,19 @@ Phase 2를 실행하지 않기로 결정하더라도, 그 판단 근거를 데�
 - 무작위 UUID 를 `localStorage` 의 `crf_site_device_id` 에 보관한다(지속). 동의 배너는 두지 않고 처리방침에 적는다
 - `localStorage` 를 쓸 수 없으면 그 페이지 로드에서만 쓰는 번호를 만든다. 페이지는 그대로 동작한다
 - 주소에 `#notrack` 을 붙여 한 번 열면 그 브라우저는 이후 계측에서 빠진다(`crf_site_optout`). `#track` 으로 되돌린다. 방문자가 통계에서 빠지는 방법이자 만든 사람의 방문을 빼는 방법이다
-- 자동화 브라우저(`navigator.webdriver`)와 보이지 않는 상태로 미리 그려진 페이지는 기록하지 않는다
+- 자동화 브라우저(`navigator.webdriver`), 검색 로봇류(UA 에 `bot`, `crawl`, `spider`, `headless`, `lighthouse`), 보이지 않는 상태로 미리 그려진 페이지는 기록하지 않는다. 브라우저 종류를 보내지 않으므로 나중에 걸러 낼 수 없다
+- 운영 주소(`crf-review-remover.vercel.app`)가 아닌 곳(미리보기 배포, 로컬)에서는 보내지 않는다. 계측 제외 설정은 주소마다 따로라 미리보기 주소에서는 이어지지 않는다
 
 **공통 프로퍼티**
 
 | 프로퍼티 | 값 |
 |---|---|
 | `surface` | `site` |
-| `device_class` | `desktop` / `mobile` |
-| `entry_source` | 유효한 `utm_source` 가 있으면 그 값, 없으면 유입 도메인, 그것도 없으면 `direct` |
+| `device_class` | `desktop` / `mobile`. 아이패드(맥 UA + 터치)와 안드로이드 태블릿은 `mobile`. 데스크톱 모드를 켠 태블릿은 구분할 수 없어 `desktop` 으로 남는다 |
+| `entry_source` | 유효한 `utm_source` 가 있으면 그 값, 없으면 유입 도메인(자기 사이트면 `internal`), 그것도 없으면 `direct`. 처리방침과 제거 페이지가 `no-referrer` 라 지금은 `internal` 이 나오지 않는다 |
 | `exp_install_cta` | `hero_only` / `hero_sticky` / `none`(모바일) |
 | `store_live` | boolean. 스토어 공개 전 방문을 분석에서 빼는 데 쓴다 |
+| `id_persisted` | boolean. 방문자 번호를 브라우저에 저장했는지. false 면 로드마다 새 번호라 방문자 수 계산에서 뺀다 |
 
 최상위 `platform` 은 기존 사이트 이벤트와 같이 `Web` 이다. `session_id` 는 페이지 로드 시각이다.
 
@@ -583,7 +585,7 @@ Phase 2를 실행하지 않기로 결정하더라도, 그 판단 근거를 데�
 |---|---|---|
 | `Landing Viewed` | `referrer_domain`, `utm_source`, `utm_medium`, `utm_campaign` | 페이지 로드마다 한 번 |
 | `Demo Viewed` | 없음 | 실제 화면 사진 구역의 위쪽 끝이 화면 세로 가운데까지 올라왔을 때, 페이지 로드마다 한 번. 구역의 높이와 화면 크기에 좌우되지 않게 보이는 비율로 정하지 않는다 |
-| `Install CTA Clicked` | `cta_location`(`hero` / `sticky`) | 설치 버튼을 누를 때마다 |
+| `Install CTA Clicked` | `cta_location`(`hero` / `sticky`) | 설치 버튼을 누를 때마다. 가운데 버튼 클릭도 센다. 우클릭 메뉴의 새 탭 열기는 잡을 수 없다 |
 | `Handoff Link Requested` | `channel`(`copy` / `share`) | 넘기기 버튼을 누를 때마다 |
 
 - `Store Redirected` 는 만들지 않는다. 설치 버튼이 일반 링크라 누름과 이동이 같은 사건이다
