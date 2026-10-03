@@ -7,7 +7,17 @@ const NO_SESSION_ID = -1
 
 export const DEFAULT_ENDPOINT = 'https://api2.amplitude.com/2/httpapi'
 
-export function buildSiteEvent({ apiKey, deviceId, eventType, properties, appVersion, now, insertId }) {
+// sessionId 가 없으면(제거 페이지) 세션 밖으로 보낸다. 랜딩은 페이지 로드 시각을 넘겨 한 방문을 한 세션으로 묶는다.
+export function buildSiteEvent({
+  apiKey,
+  deviceId,
+  eventType,
+  properties,
+  appVersion,
+  now,
+  insertId,
+  sessionId,
+}) {
   const event = {
     device_id: deviceId,
     event_type: eventType,
@@ -15,7 +25,7 @@ export function buildSiteEvent({ apiKey, deviceId, eventType, properties, appVer
     // surface 는 이벤트 프로퍼티가 덮어쓰지 못한다.
     event_properties: { ...properties, surface: SURFACE },
     time: now,
-    session_id: NO_SESSION_ID,
+    session_id: sessionId ?? NO_SESSION_ID,
     insert_id: insertId,
   }
 

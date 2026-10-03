@@ -41,6 +41,12 @@ describe('buildSiteEvent', () => {
     expect(event.event_properties).toEqual({ days_since_install: 3, surface: 'site' })
   })
 
+  it('sessionId 를 주면 session_id 가 그 값이고, 생략하거나 null 이면 -1 이다', () => {
+    expect(build({ sessionId: 123 }).events[0].session_id).toBe(123)
+    expect(build().events[0].session_id).toBe(-1)
+    expect(build({ sessionId: null }).events[0].session_id).toBe(-1)
+  })
+
   it('버전을 모르면 app_version 을 싣지 않는다', () => {
     const [event] = build({ appVersion: null }).events
     expect('app_version' in event).toBe(false)
