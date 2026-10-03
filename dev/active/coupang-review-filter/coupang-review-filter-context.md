@@ -4,7 +4,7 @@ Last Updated: 2026-10-03 (계획 3b 코드 완료, 배포 전)
 
 ## 계획 3b 현재 상태 (2026-10-03 저녁)
 
-- 브랜치 `feat/landing`, 코드 완료. Task 0~7 과 최종 브랜치 리뷰(opus), fix wave, 재리뷰까지 끝났다. 테스트 1079개 통과. `extension/` 의 diff 는 0줄
+- 브랜치 `feat/landing`, 코드 완료. Task 0~7 과 최종 브랜치 리뷰(opus), fix wave, 재리뷰까지 끝났다. 그 뒤 사용자가 로컬 화면을 보고 아래 구역 배치를 바꿨다(기능과 사진을 한 줄에 짝지어 좌우 번갈아, 사진 폭 400/360/260px. 누적 안내 문구 추가, 예시 숫자는 `지금까지 본 리뷰 60개 중 체험단 40개`). 테스트 1097개 통과. `extension/` 의 diff 는 0줄
 - **남은 것: main 에 합쳐 푸시(= 배포). 사용자 확인을 받고 한다.** 그 뒤 배포된 주소에서 실브라우저 확인, 앰플리튜드 도착 확인(사용자), Task 9(채널 링크와 글 초안)
 - 계획 `docs/superpowers/plans/2026-10-03-landing.md`, 근거는 명세 12절. 원장 `.superpowers/sdd/2026-10-03-landing/progress.md` 에 Ruling 15개와 보류 항목
 - 사용자 결정: 랜딩과 확장은 집계 수준으로만 잇는다. 모바일은 이메일 없는 넘기기. 방문자 번호는 localStorage 지속. 실험 2종(`hero_only`, `hero_sticky`), PC 만. 첫 화면은 B 절충형
