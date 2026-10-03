@@ -149,8 +149,10 @@ function listFiles(dir, skip) {
 }
 
 const ASSETS_DIR = join(ROOT, 'site', 'public', 'assets')
+// 사진 같은 이진 파일은 글자로 읽으면 바이트가 우연히 검사 패턴과 맞아 실패할 수 있어 건너뛴다. 글자 파일은 그대로 검사한다.
+const BINARY_EXT = /\.(png|jpe?g|webp|gif|ico)$/i
 const siteFiles = [
-  ...listFiles(join(ROOT, 'site'), (p) => p === ASSETS_DIR),
+  ...listFiles(join(ROOT, 'site'), (p) => p === ASSETS_DIR || BINARY_EXT.test(p)),
   join(ROOT, 'vercel.json'),
   join(ROOT, 'README.md'),
 ]
@@ -161,6 +163,14 @@ describe('커밋되는 사이트 파일의 위생', () => {
     expect(names).toContain('site/public/privacy.html')
     expect(names).toContain('site/public/uninstalled.html')
     expect(names).toContain('site/build.js')
+    expect(names).toContain('site/public/index.html')
+    expect(names).toContain('site/public/style.css')
+  })
+
+  it('사진 같은 이진 파일은 검사 대상에서 빠진다', () => {
+    const names = siteFiles.map((f) => relative(ROOT, f).split(sep).join('/'))
+    expect(names.filter((n) => BINARY_EXT.test(n))).toEqual([])
+    expect(existsSync(join(ROOT, 'site', 'public', 'img', 'badge.jpg'))).toBe(true)
   })
 
   it('이메일 주소 패턴이 없다', () => {

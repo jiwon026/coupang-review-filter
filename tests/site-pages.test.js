@@ -194,12 +194,25 @@ describe('랜딩', () => {
     expect(norm(card.querySelector('.rating-caption'))).toBe('리뷰 1,204개 중 체험단 341개를 뺀 평점')
   })
 
+  it('예시 카드의 숫자 줄은 화면 낭독에서 빠지고, 같은 뜻의 숨은 문장이 대신 읽힌다', () => {
+    const card = doc.querySelector('.rating-card')
+    expect(card.querySelector('.rating-values').getAttribute('aria-hidden')).toBe('true')
+    expect(norm(card.querySelector('.visually-hidden'))).toBe('쿠팡 평점 4.7, 체험단 리뷰를 빼면 4.1 (예시)')
+    expect(card.querySelector('.visually-hidden').closest('[aria-hidden]')).toBeNull()
+  })
+
   it('히어로는 문장과 예시 카드 두 칸이고, 좁은 화면에서 카드를 위로 올리는 order 규칙이 있다', () => {
     const hero = doc.querySelector('.hero')
     expect([...hero.children].map((el) => el.className)).toEqual(['hero-text', 'rating-card'])
     expect(hero.querySelector('.hero-text h1')).not.toBeNull()
     const css = readFileSync(new URL('style.css', PUBLIC_DIR), 'utf8')
     expect(css).toMatch(/\.rating-card\s*\{[^}]*order:\s*-1/)
+  })
+
+  it('720px 이상 블록이 예시 카드의 order 를 0 으로 되돌린다', () => {
+    const css = readFileSync(new URL('style.css', PUBLIC_DIR), 'utf8')
+    const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
+    expect(wide).toMatch(/\.rating-card\s*\{[^}]*order:\s*0/)
   })
 
   it('h2 넷이 순서대로 있고 문구가 같다', () => {
@@ -338,6 +351,23 @@ describe('랜딩 스타일시트', () => {
     expect(css).toContain('@media (min-width: 720px)')
     expect(css).toMatch(/grid-template-columns:\s*minmax\(0,\s*1\.1fr\)\s*minmax\(0,\s*1fr\)/)
     expect(css).toMatch(/body\.landing main\s*\{[^}]*max-width:\s*60rem/)
+  })
+
+  it('랜딩에서만 한글을 단어 단위로 줄바꿈한다(다른 페이지 규칙은 그대로)', () => {
+    expect(css).toMatch(/body\.landing\s*\{[^}]*word-break:\s*keep-all/)
+    expect(css).toMatch(/body\.landing\s*\{[^}]*overflow-wrap:\s*break-word/)
+    expect(css).toMatch(/\nbody\s*\{[^}]*overflow-wrap:\s*anywhere/)
+  })
+
+  it('.visually-hidden 은 display: none 이 아니라 clip 방식이다', () => {
+    const rule = css.match(/\.visually-hidden\s*\{([^}]*)\}/)[1]
+    expect(rule).toContain('position: absolute')
+    expect(rule).toMatch(/clip[^;]*:/)
+    expect(rule).not.toMatch(/display:\s*none/)
+  })
+
+  it('빈 상태 알림 영역을 display: none 으로 숨기지 않는다', () => {
+    expect(css).not.toMatch(/\.handoff-status:empty\s*\{[^}]*display:\s*none/)
   })
 
   it('position: fixed 는 .sticky 규칙에만 있다', () => {

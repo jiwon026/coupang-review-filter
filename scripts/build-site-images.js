@@ -19,8 +19,7 @@ const BLUR_LINES = [
   { name: '상품 이름 줄', left: 284, top: 289, width: 366, height: 28 },
 ]
 const BLUR_SIGMA = 9
-// 89 는 tests/site-build.test.js 의 위생 검사(site/ 아래 모든 파일을 글자로 읽는다)에 바이너리가 우연히 걸리지 않는 값이다.
-const JPEG_QUALITY = 89
+const JPEG_QUALITY = 90
 
 function fail(message) {
   console.error(`사진을 만들지 못했습니다: ${message}`)
