@@ -1,6 +1,6 @@
 # 쿠팡 체험단 리뷰 필터: 계획
 
-Last Updated: 2026-10-02
+Last Updated: 2026-10-03
 
 ## 목표
 
@@ -18,6 +18,7 @@ Last Updated: 2026-10-02
 | 계획 1: 확장 코어 | `docs/superpowers/plans/2026-09-28-extension-core.md` |
 | 계획 2: 계측 | `docs/superpowers/plans/2026-09-28-instrumentation.md` |
 | 계획 3a: 웹스토어 제출 준비 | `docs/superpowers/plans/2026-10-02-store-submission.md` |
+| 계획 3b: 랜딩 | `docs/superpowers/plans/2026-10-03-landing.md` (근거: 명세 12절) |
 | (대체됨) 옛 계획 3 | `docs/superpowers/plans/2026-09-28-landing-and-release.md` |
 
 ## 계획 문서를 쓸 때 주의
