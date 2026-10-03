@@ -255,14 +255,15 @@ describe('랜딩', () => {
     expect(wide).toMatch(/\.rating-card\s*\{[^}]*order:\s*0/)
   })
 
-  it('h2 넷이 순서대로 있고 문구가 같다', () => {
+  it('h2 여섯이 순서대로 있고 문구가 같다', () => {
     expect([...doc.querySelectorAll('h2')].map(norm)).toEqual([
       'PC 크롬에서 설치할 수 있어요',
-      '이렇게 보입니다',
-      '하는 일',
+      '체험단을 뺀 평점을 보여 줍니다',
+      '체험단 리뷰에 표시를 붙이고 숨깁니다',
+      '패널에서 자세히 봅니다',
       '통계는 동의한 경우에만',
+      '보내지 않는 것',
     ])
-    expect(norm(doc.querySelector('#demo h2'))).toBe('이렇게 보입니다')
   })
 
   it('PC 안내 문구와 두 버튼이 그대로다', () => {
@@ -272,33 +273,81 @@ describe('랜딩', () => {
     expect(norm(doc.getElementById('handoff-share'))).toBe('공유하기')
   })
 
-  it('하는 일 세 줄과 판정 기준 문장이 그대로다', () => {
-    const section = doc.getElementById('features')
-    expect([...section.querySelectorAll('li')].map(norm)).toEqual([
-      '체험단 제공 리뷰에 표시를 붙입니다',
-      '버튼 하나로 숨기고, 다시 누르면 다시 보여 줍니다',
-      '체험단 리뷰를 뺀 평점을 원래 평균과 나란히 보여 줍니다',
+  it('기능 세 줄이 짝짓기 행으로 있고 제목과 문단이 순서대로 글자 그대로다', () => {
+    const rows = [...doc.querySelectorAll('#demo .row')]
+    expect(rows.map((row) => norm(row.querySelector('h2')))).toEqual([
+      '체험단을 뺀 평점을 보여 줍니다',
+      '체험단 리뷰에 표시를 붙이고 숨깁니다',
+      '패널에서 자세히 봅니다',
     ])
-    expect(norm(section.querySelector('p'))).toBe(
-      '쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
-    )
+    expect(rows.map((row) => norm(row.querySelector('p')))).toEqual([
+      '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 체험단 리뷰가 몇 개인지도 함께 알려 줍니다.',
+      '체험단 제공 리뷰에 표시를 붙입니다. 버튼 하나로 숨기고, 다시 누르면 다시 보여 줍니다.',
+      '체험단 비중을 한눈에 봅니다. 쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
+    ])
+    for (const row of rows) expect(row.querySelectorAll('h2, p')).toHaveLength(2)
   })
 
-  it('통계 절의 세 문단이 그대로다', () => {
+  it('둘째 행만 사진이 왼쪽으로 뒤집히는 flip 행이다', () => {
+    const rows = [...doc.querySelectorAll('#demo .row')]
+    expect(rows).toHaveLength(3)
+    expect(rows.map((row) => row.classList.contains('flip'))).toEqual([false, true, false])
+  })
+
+  it('한 행은 글 덩어리가 먼저, 사진이 나중이다(좁은 화면의 읽는 순서)', () => {
+    for (const row of doc.querySelectorAll('#demo .row')) {
+      expect(row.children).toHaveLength(2)
+      expect(row.children[0].querySelector('h2')).not.toBeNull()
+      expect(row.children[1].querySelector('img')).not.toBeNull()
+    }
+  })
+
+  it('옛 구역 #features 와 옛 문구는 없다', () => {
+    expect(doc.getElementById('features')).toBeNull()
+    expect(bodyText).not.toContain('이렇게 보입니다')
+    expect(bodyText).not.toContain('하는 일')
+    expect(doc.querySelector('.demo-shots')).toBeNull()
+  })
+
+  it('통계 구역은 두 상자이고 제목과 문단이 그대로다', () => {
     const section = doc.getElementById('stats')
-    expect([...section.querySelectorAll('p:not([id])')].map(norm)).toEqual([
-      '설치하면 익명 사용 통계를 보낼지 먼저 묻습니다. 동의하지 않아도 모든 기능을 쓸 수 있습니다.',
-      '리뷰 내용, 상품 이름, 상품 주소는 보내지 않습니다.',
-      '이 페이지는 방문 통계를 기록합니다. 기록하는 내용과 빠지는 방법은 개인정보 처리방침에 있습니다.',
+    expect(section.tagName).toBe('SECTION')
+    expect(section.classList.contains('stats-grid')).toBe(true)
+    const boxes = [...section.children]
+    expect(boxes).toHaveLength(2)
+    expect(boxes.map((box) => norm(box.querySelector('h2')))).toEqual(['통계는 동의한 경우에만', '보내지 않는 것'])
+    expect(boxes.map((box) => [...box.querySelectorAll('p')].map(norm))).toEqual([
+      ['설치하면 익명 사용 통계를 보낼지 먼저 묻습니다. 동의하지 않아도 모든 기능을 쓸 수 있습니다.'],
+      ['리뷰 내용, 상품 이름, 상품 주소는 보내지 않습니다.'],
     ])
   })
 
-  it('푸터에 쿠팡과 관계없다는 문장과 처리방침 링크가 있다', () => {
-    const footer = doc.querySelector('footer')
-    expect(norm(footer)).toContain('이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.')
-    const link = footer.querySelector('a')
-    expect(link.getAttribute('href')).toBe('/privacy')
-    expect(norm(link)).toBe('개인정보 처리방침')
+  it('방문 통계 기록 문장은 통계 상자가 아니라 푸터에 있다', () => {
+    expect(norm(doc.getElementById('stats'))).not.toContain('방문 통계를 기록합니다')
+  })
+
+  it('푸터 문단 셋이 순서대로 있고 마지막이 처리방침 링크다', () => {
+    const footer = doc.querySelector('footer.site-footer')
+    const paragraphs = [...footer.querySelectorAll('p')]
+    expect(paragraphs.map(norm)).toEqual([
+      '이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.',
+      '이 페이지는 방문 통계를 기록합니다. 기록하는 내용과 빠지는 방법은 개인정보 처리방침에 있습니다.',
+      '개인정보 처리방침',
+    ])
+    const links = [...footer.querySelectorAll('a')]
+    expect(links).toHaveLength(1)
+    expect(links[0].getAttribute('href')).toBe('/privacy')
+    expect(links[0].parentElement).toBe(paragraphs[2])
+  })
+
+  it('방문 통계 거부 안내(#optout-notice)는 main 의 첫 요소이고 처음엔 hidden 이다', () => {
+    const main = doc.querySelector('main')
+    const first = main.firstElementChild
+    expect(first.id).toBe('optout-notice')
+    expect(first.tagName).toBe('P')
+    expect(first.classList.contains('notice')).toBe(true)
+    expect(first.hasAttribute('hidden')).toBe(true)
+    expect(main.querySelector('.hero').previousElementSibling).toBe(first)
   })
 
   it('따라오는 설치 바 문구가 그대로다', () => {
@@ -331,11 +380,16 @@ describe('랜딩', () => {
   })
 
   it('스크립트가 없을 때의 기본 상태: 심사 중만 보이고 나머지는 hidden 이다', () => {
-    for (const id of ['cta-hero', 'handoff', 'handoff-share', 'sticky', 'optout-notice']) {
+    const hiddenByDefault = ['cta-hero', 'handoff', 'handoff-share', 'sticky', 'optout-notice']
+    for (const id of hiddenByDefault) {
       expect(doc.getElementById(id).hasAttribute('hidden'), id).toBe(true)
     }
-    expect(doc.getElementById('store-pending').hasAttribute('hidden')).toBe(false)
+    const visibleByDefault = ['store-pending', 'handoff-copy', 'handoff-status', 'demo', 'cta-sticky']
+    for (const id of visibleByDefault) {
+      expect(doc.getElementById(id).hasAttribute('hidden'), id).toBe(false)
+    }
     expect(doc.getElementById('store-pending').closest('[hidden]')).toBeNull()
+    expect(doc.getElementById('demo').closest('[hidden]')).toBeNull()
   })
 
   it('예시 숫자에 예시 표시가 있고, 정렬 방식과 표본 수 같은 관측값은 쓰지 않는다', () => {
@@ -351,13 +405,29 @@ describe('랜딩', () => {
     }
   })
 
-  it('사진 셋이 배너, 배지, 패널 순서로 있고 alt 가 그대로다', () => {
+  it('사진 셋이 모두 #demo 안에 배너, 배지, 패널 순서로 있고 src, alt, 크기가 그대로다', () => {
     const imgs = [...doc.querySelectorAll('#demo img')]
+    expect(doc.querySelectorAll('img')).toHaveLength(3)
     expect(imgs.map((img) => img.getAttribute('src'))).toEqual(['/img/banner.png', '/img/badge.jpg', '/img/panel.png'])
     expect(imgs.map((img) => img.getAttribute('alt'))).toEqual([
       '리뷰 평균 5, 체험단 제외 4.8 이라고 알려 주는 배너',
       '체험단 제공 리뷰에 표시가 붙은 쿠팡 리뷰 화면',
       '체험단을 뺀 평점과 체험단 비중을 보여 주는 확장 패널',
+    ])
+    expect(imgs.map((img) => [img.getAttribute('width'), img.getAttribute('height')])).toEqual([
+      ['815', '237'],
+      ['738', '591'],
+      ['466', '602'],
+    ])
+  })
+
+  it('각 사진은 자기 행의 글 옆에 있다(행 하나에 사진 하나)', () => {
+    const rows = [...doc.querySelectorAll('#demo .row')]
+    expect(rows.map((row) => row.querySelectorAll('img').length)).toEqual([1, 1, 1])
+    expect(rows.map((row) => row.querySelector('img').getAttribute('src'))).toEqual([
+      '/img/banner.png',
+      '/img/badge.jpg',
+      '/img/panel.png',
     ])
   })
 
@@ -415,10 +485,75 @@ describe('랜딩 스타일시트', () => {
     expect(selectors).toEqual(['.sticky'])
   })
 
-  it('설치 버튼은 48px 이상이고 사진은 화면보다 넓게 그리지 않는다', () => {
+  it('설치 버튼은 48px 이상이다', () => {
     expect(css).toMatch(/\.cta\s*\{[^}]*min-height:\s*48px/)
-    expect(css).toMatch(/\.demo img\s*\{[^}]*max-width:\s*100%/)
-    expect(css).toMatch(/\.demo img\s*\{[^}]*height:\s*auto/)
+  })
+
+  it('사진은 칸보다 넓게 그리지 않고(max-width: 100%) 비율을 지키며 테두리와 모서리가 있다', () => {
+    expect(css).toMatch(/\.row img\s*\{[^}]*max-width:\s*100%/)
+    expect(css).toMatch(/\.row img\s*\{[^}]*height:\s*auto/)
+    expect(css).toMatch(/\.row img\s*\{[^}]*border:\s*1px solid var\(--border\)/)
+    expect(css).toMatch(/\.row img\s*\{[^}]*border-radius:\s*8px/)
+  })
+
+  it('옛 사진 규칙(.demo-shots, .shot-banner 의 두 칸 규칙, .demo img)은 없다', () => {
+    expect(css).not.toContain('.demo-shots')
+    expect(css).not.toContain('.demo img')
+    expect(css).not.toMatch(/\.shot-banner\s*\{/)
+  })
+
+  it('행 제목은 강조색이 아니라 본문 글자색이고 1.3rem 이다', () => {
+    expect(css).toMatch(/\.row h2\s*\{[^}]*font-size:\s*1\.3rem/)
+    expect(css).toMatch(/\.row h2\s*\{[^}]*color:\s*var\(--text\)/)
+  })
+
+  it('좁은 화면에서 행은 한 칸이고 글과 사진 사이 20px, 행 사이 40px 이다', () => {
+    expect(css).toMatch(/\.rows\s*\{[^}]*gap:\s*40px/)
+    expect(css).toMatch(/\.row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/)
+    expect(css).toMatch(/\.row\s*\{[^}]*gap:\s*20px/)
+  })
+
+  it('720px 이상 블록: 행이 두 칸(글 1.1 대 사진 1, 간격 40px)이고 flip 행은 사진이 왼쪽이다', () => {
+    const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
+    expect(wide).toMatch(/\.row\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.1fr\)\s*minmax\(0,\s*1fr\)/)
+    expect(wide).toMatch(/\.row\s*\{[^}]*gap:\s*40px/)
+    expect(wide).toMatch(/\.row\.flip\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1\.1fr\)/)
+    expect(wide).toMatch(/\.row\.flip \.shot\s*\{[^}]*order:\s*-1/)
+  })
+
+  it('720px 이상 블록: 사진 폭 상한은 배너 400px, 배지 360px, 패널 260px 이다', () => {
+    const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
+    expect(wide).toMatch(/\.shot-banner img\s*\{[^}]*max-width:\s*400px/)
+    expect(wide).toMatch(/\.shot-badge img\s*\{[^}]*max-width:\s*360px/)
+    expect(wide).toMatch(/\.shot-panel img\s*\{[^}]*max-width:\s*260px/)
+  })
+
+  it('사진은 자기 칸 안에서 가운데에 놓인다', () => {
+    expect(css).toMatch(/\.shot\s*\{[^}]*display:\s*flex/)
+    expect(css).toMatch(/\.shot\s*\{[^}]*justify-content:\s*center/)
+  })
+
+  it('통계 구역: 좁은 화면 한 칸, 720px 이상 같은 폭 두 칸, 상자는 surface 바탕에 테두리와 12px 모서리다', () => {
+    expect(css).toMatch(/\.stats-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/)
+    const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
+    expect(wide).toMatch(/\.stats-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
+    const box = css.match(/\.stat-box\s*\{([^}]*)\}/)[1]
+    expect(box).toContain('background: var(--surface)')
+    expect(box).toContain('border: 1px solid var(--border)')
+    expect(box).toContain('border-radius: 12px')
+  })
+
+  it('방문 통계 거부 안내는 숨김이 풀렸을 때 히어로와 붙지 않도록 아래 여백이 있다', () => {
+    expect(css).toMatch(/#optout-notice\s*\{[^}]*margin(-bottom)?:[^;}]*\d+px/)
+  })
+
+  it('랜딩 마크업이 쓰는 클래스만 가리키고 옛 .demo 규칙은 남기지 않는다', () => {
+    const html = readFileSync(new URL('index.html', PUBLIC_DIR), 'utf8')
+    const used = new Set(html.match(/class="[^"]*"/g).flatMap((m) => m.slice(7, -1).split(/\s+/)))
+    const landingPart = css.slice(css.indexOf('/* 랜딩 화면 */'))
+    const wanted = ['.rows', '.row', '.flip', '.shot', '.shot-banner', '.shot-badge', '.shot-panel', '.stats-grid', '.stat-box']
+    for (const selector of wanted) expect(used.has(selector.slice(1)), selector).toBe(true)
+    expect(landingPart).not.toMatch(/\.demo\b/)
   })
 })
 

@@ -330,19 +330,68 @@ body.landing section h2 {
   color: var(--text-sub);
 }
 
-.demo-shots {
+/* 기능 설명: 글 덩어리와 사진을 한 행으로 짝짓는다. 좁은 화면에서는 글이 먼저, 사진이 아래다 */
+.rows {
+  display: grid;
+  gap: 40px;
+}
+
+.row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
+  gap: 20px;
+  align-items: center;
+}
+
+.row h2 {
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
+.row p {
+  margin: 0;
+  color: var(--text-sub);
+}
+
+.shot {
+  display: flex;
+  justify-content: center;
 }
 
 /* 사진은 원래 픽셀 폭(width 속성)보다 크게 그리지 않고, 좁은 화면에서는 줄어든다 */
-.demo img {
+.row img {
   display: block;
   max-width: 100%;
   height: auto;
   border: 1px solid var(--border);
   border-radius: 8px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.stat-box {
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.stat-box h2 {
+  margin: 0 0 8px;
+}
+
+.stat-box p {
+  margin: 0;
+}
+
+/* 방문 통계를 거부한 방문자에게 보이는 안내. 히어로 위에 있다가 숨김이 풀리면 히어로와 떨어져 있어야 한다 */
+#optout-notice {
+  margin: 0 0 24px;
 }
 
 .site-footer {
@@ -397,12 +446,32 @@ body.landing section h2 {
     order: 0;
   }
 
-  .demo-shots {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+  .row {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 40px;
   }
 
-  .shot-banner {
-    grid-column: 1 / -1;
+  .row.flip {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  }
+
+  .row.flip .shot {
+    order: -1;
+  }
+
+  .shot-banner img {
+    max-width: 400px;
+  }
+
+  .shot-badge img {
+    max-width: 360px;
+  }
+
+  .shot-panel img {
+    max-width: 260px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
