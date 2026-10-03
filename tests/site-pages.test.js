@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fillContact } from '../site/src/contact.js'
 import { STORE_URL } from '../site/src/landing/config.js'
+import { readCommand } from '../site/src/landing/visitor.js'
 
 const PUBLIC_DIR = new URL('../site/public/', import.meta.url)
 const SRC_DIR = new URL('../site/src/', import.meta.url)
@@ -24,6 +25,13 @@ const PRIVACY_SENT = [
   '확장을 제거할 때 제거 사실과 사용 기간, 직접 고른 이유(7절)',
 ]
 
+const PRIVACY_SITE_STATS = [
+  '무작위로 만든 방문자 번호(브라우저에 저장됩니다)',
+  '어느 사이트에서 왔는지(도메인만)와 링크에 붙은 유입 표식',
+  '화면 종류(PC, 모바일)와 설치 버튼 실험 그룹',
+  '화면 사진 구역을 봤는지, 설치 버튼과 링크 복사, 공유하기 버튼을 눌렀는지',
+]
+
 const PRIVACY_NOT_SENT = [
   '리뷰 내용, 상품 이름, 상품 주소',
   '쿠팡 계정, 이름, 이메일, 주소, 결제 정보',
@@ -34,12 +42,12 @@ describe('처리방침', () => {
   const doc = load('privacy.html')
   const text = doc.body.textContent.replace(/\s+/g, ' ')
 
-  // n 번째 절(h2)과 다음 절 사이에 있는 문단들의 글.
+  // n 번째 절(h2)과 다음 절 사이에 있는 문단들의 글. 마지막 절 뒤의 시행일 줄은 절의 문단이 아니라서 뺀다.
   function sectionParagraphs(number) {
     const heading = [...doc.querySelectorAll('h2')].find((h) => h.textContent.startsWith(`${number}. `))
     const paragraphs = []
     for (let node = heading.nextElementSibling; node && node.tagName !== 'H2'; node = node.nextElementSibling) {
-      if (node.tagName === 'P') paragraphs.push(node.textContent.replace(/\s+/g, ' ').trim())
+      if (node.tagName === 'P' && !node.classList.contains('effective')) paragraphs.push(node.textContent.replace(/\s+/g, ' ').trim())
     }
     return paragraphs
   }
@@ -50,7 +58,7 @@ describe('처리방침', () => {
     expect(text).toContain('체험단 리뷰 제거기 for 쿠팡(이하 "확장")이 어떤 정보를 다루는지 설명합니다.')
   })
 
-  it('아홉 개 절의 제목이 순서대로 있다', () => {
+  it('열 개 절의 제목이 순서대로 있다', () => {
     const headings = [...doc.querySelectorAll('h2')].map((h) => h.textContent)
     expect(headings).toEqual([
       '1. 확장이 하는 일',
@@ -62,6 +70,7 @@ describe('처리방침', () => {
       '7. 확장을 제거할 때',
       '8. 삭제 요청과 문의',
       '9. 쿠팡과의 관계',
+      '10. 이 사이트의 방문 통계',
     ])
   })
 
@@ -99,10 +108,10 @@ describe('처리방침', () => {
     for (const item of listItems(1)) expect(item).not.toMatch(/어떤 .*도$/)
   })
 
-  it('5절: 통계 보관 위치와 사이트 호스팅 사업자의 접속 기록을 알린다', () => {
+  it('5절: 통계 보관 위치와 사이트 전체의 호스팅 사업자 접속 기록을 알린다', () => {
     expect(sectionParagraphs(5)).toEqual([
       '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다.',
-      '처리방침과 제거 안내 페이지는 Vercel(Vercel Inc., 미국)에서 호스팅하며, 페이지에 접속할 때 IP 주소 같은 접속 기록이 호스팅 사업자에게 남을 수 있습니다. 익명 기기 번호는 이 접속 기록에 포함되지 않습니다.',
+      '이 사이트(소개 페이지, 처리방침, 제거 안내 페이지)는 Vercel(Vercel Inc., 미국)에서 호스팅하며, 페이지에 접속할 때 IP 주소 같은 접속 기록이 호스팅 사업자에게 남을 수 있습니다. 익명 기기 번호와 방문자 번호는 이 접속 기록에 포함되지 않습니다.',
     ])
   })
 
@@ -117,6 +126,27 @@ describe('처리방침', () => {
       '이미 보낸 통계의 삭제를 원하면 확장 패널 맨 아래에 표시되는 익명 기기 번호를 아래 주소로 알려 주세요. 궁금한 점도 같은 주소로 보내 주시면 됩니다.',
       '',
     ])
+  })
+
+  it('10절: 사이트 방문 통계의 문단 셋이 문자열까지 같다', () => {
+    expect(sectionParagraphs(10)).toEqual([
+      '확장과 별개로 이 사이트의 소개 페이지는 방문 통계를 기록합니다. 확장을 설치하지 않아도 기록되며, 확장의 통계와 사람 단위로 연결하지 않습니다.',
+      '이름, 이메일, 보던 페이지의 전체 주소는 기록하지 않습니다. 통계는 5절과 같이 Amplitude 에 저장하고 4절의 목적에만 씁니다.',
+      '통계에서 빠지려면 이 사이트 주소 끝에 #notrack 을 붙여 한 번 열어 주세요. 그 브라우저에서는 더 기록하지 않고, 화면에 방문자 번호가 표시됩니다. 이미 기록된 방문 통계의 삭제를 원하면 그 번호를 8절의 주소로 알려 주세요. 브라우저에서 이 사이트의 데이터를 지우면 방문자 번호도 지워집니다.',
+    ])
+  })
+
+  it('10절: 기록하는 정보 목록은 4줄이고 문자열이 같다(세 번째 목록)', () => {
+    expect(doc.querySelectorAll('ul')).toHaveLength(3)
+    expect(listItems(2)).toHaveLength(4)
+    expect(listItems(2)).toEqual(PRIVACY_SITE_STATS)
+  })
+
+  it('10절: 안내한 #notrack 은 코드가 알아보는 명령과 같은 문자열이다', () => {
+    const [, hash] = sectionParagraphs(10)[2].match(/(#[^\s]+) 을 붙여/)
+    expect(hash).toBe('#notrack')
+    expect(readCommand(hash)).toBe('optout')
+    expect(readCommand('#notrack')).toBe('optout')
   })
 
   it('제거 안내 페이지에서 아무것도 기록되지 않는다는 절대 표현을 쓰지 않는다', () => {
