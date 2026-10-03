@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import { readFileSync } from 'node:fs'
 import { initLanding } from '../site/src/landing/landing.js'
+import { createTracker } from '../site/src/landing/tracker.js'
 import { SITE_ORIGIN } from '../site/src/landing/config.js'
 
 const PAGE_HTML = readFileSync(new URL('../site/public/index.html', import.meta.url), 'utf8')
@@ -16,6 +17,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
 const PHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1'
 const IPAD_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15'
+const GOOGLEBOT_UA = 'Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+const HEADLESS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/126.0.0.0 Safari/537.36'
 
 const HERO_ONLY = 0.1
 const HERO_STICKY = 0.9
@@ -135,7 +138,7 @@ function load({
     window,
     document: window.document,
     navigator,
-    config: { apiKey: FAKE_KEY, endpoint: ENDPOINT, storeLive: true, ...config },
+    config: { apiKey: FAKE_KEY, endpoint: ENDPOINT, storeLive: true, siteOrigin: new URL(url).origin, ...config },
     now: NOW,
     random: () => random,
     randomUUID: nextUuid,
@@ -268,6 +271,7 @@ describe('Landing Viewed', () => {
       entry_source: 'news',
       exp_install_cta: 'hero_sticky',
       store_live: true,
+      id_persisted: true,
       referrer_domain: 'example.org',
       utm_source: 'news',
       utm_medium: 'cpc',
@@ -397,6 +401,58 @@ describe('계측을 보내지 않는 경우에도 화면은 표대로다', () =>
     const mobile = load({ config: { apiKey: '' }, userAgent: PHONE_UA })
     expect(screenOf(mobile.document)).toEqual(MOBILE_LIVE)
     expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+})
+
+describe('로봇과 운영 주소가 아닌 곳에서는 보내지 않는다(화면은 표대로다)', () => {
+  const PREVIEW_URL = 'https://crf-preview-abc123.example.test/'
+
+  it('운영 주소와 다른 호스트(미리보기 배포)는 0번이고 화면은 표대로다', () => {
+    const desktop = load({ url: PREVIEW_URL, config: { siteOrigin: PAGE_URL } })
+    click(desktop.window, 'cta-hero')
+    expect(screenOf(desktop.document)).toEqual(DESKTOP_LIVE)
+    const mobile = load({ url: PREVIEW_URL, config: { siteOrigin: PAGE_URL }, userAgent: PHONE_UA })
+    expect(screenOf(mobile.document)).toEqual(MOBILE_LIVE)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('운영 주소가 아니어도 storeLive false 면 화면은 심사 중 상태다', () => {
+    const { document } = load({ url: PREVIEW_URL, config: { siteOrigin: PAGE_URL, storeLive: false } })
+    expect(screenOf(document)).toEqual(PENDING)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('UA 에 Googlebot 이 있으면 0번이고 화면은 표대로다', () => {
+    const { window, document } = load({ userAgent: GOOGLEBOT_UA })
+    click(window, 'cta-hero')
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+    expect(screenOf(document)).toEqual(MOBILE_LIVE)
+  })
+
+  it('UA 에 HeadlessChrome 이 있으면 0번이고 화면은 표대로다', () => {
+    const { window, document } = load({ userAgent: HEADLESS_UA })
+    click(window, 'cta-hero')
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+    expect(screenOf(document)).toEqual(DESKTOP_LIVE)
+  })
+
+  it('siteOrigin 이 없거나 주소로 읽을 수 없으면 0번이고 화면은 표대로다', () => {
+    for (const siteOrigin of [undefined, '', 'not a url']) {
+      const { window, document } = load({ config: { siteOrigin } })
+      click(window, 'cta-hero')
+      expect(screenOf(document)).toEqual(DESKTOP_LIVE)
+    }
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('호스트 이름이 같으면 포트가 달라도 보낸다(호스트 이름만 비교한다)', () => {
+    load({ url: 'https://crf.test:8443/', config: { siteOrigin: 'https://crf.test' } })
+    expect(sentOf('Landing Viewed')).toHaveLength(1)
+  })
+
+  it('운영 주소와 평범한 UA 에서는 보낸다', () => {
+    load()
+    expect(sentOf('Landing Viewed')).toHaveLength(1)
   })
 })
 
@@ -626,7 +682,7 @@ describe('저장소와 계측이 실패해도 화면은 표대로다', () => {
     expect(screenOf(load({ setup, config: { storeLive: false } }).document)).toEqual(PENDING)
   })
 
-  it.each(FAILURES)('%s: Landing Viewed 는 나가고 공통 프로퍼티 넷이 모두 실제 값이다', (_name, setup) => {
+  it.each(FAILURES)('%s: Landing Viewed 는 나가고 공통 프로퍼티 다섯이 모두 실제 값이다', (_name, setup) => {
     load({ setup, random: HERO_STICKY })
     const views = sentOf('Landing Viewed')
     expect(views).toHaveLength(1)
@@ -635,10 +691,11 @@ describe('저장소와 계측이 실패해도 화면은 표대로다', () => {
     expect(props.entry_source).toBe('direct')
     expect(['hero_only', 'hero_sticky']).toContain(props.exp_install_cta)
     expect(props.store_live).toBe(true)
+    expect(props.id_persisted).toBe(false)
     expect(views[0].device_id).toMatch(UUID)
     // undefined 는 JSON 에서 사라지므로 키가 직렬화된 본문에 실제로 있는지도 본다.
     const body = globalThis.fetch.mock.calls[0][1].body
-    for (const key of ['device_class', 'entry_source', 'exp_install_cta', 'store_live']) expect(body).toContain(`"${key}":`)
+    for (const key of ['device_class', 'entry_source', 'exp_install_cta', 'store_live', 'id_persisted']) expect(body).toContain(`"${key}":`)
   })
 
   it.each(FAILURES)('%s: 저장소가 던져도 모바일의 넘기기 복사는 동작한다', async (_name, setup) => {
@@ -709,6 +766,62 @@ describe('저장소와 계측이 실패해도 화면은 표대로다', () => {
     click(window, 'cta-hero')
     await flush()
     expect(screenOf(document)).toEqual(DESKTOP_LIVE)
+  })
+})
+
+describe('id_persisted', () => {
+  it('저장소가 되면 true 이고 이벤트마다 실린다', () => {
+    const { window } = load({ userAgent: PHONE_UA, navigatorOverrides: { share: () => Promise.resolve(), clipboard: { writeText: () => Promise.resolve() } } })
+    window.document.getElementById('handoff-copy').click()
+    window.document.getElementById('handoff-share').click()
+    const events = sentEvents()
+    expect(events).toHaveLength(3)
+    for (const event of events) expect(event.event_properties.id_persisted).toBe(true)
+  })
+
+  it('setItem 이 던지면 false 다(읽기는 된다)', () => {
+    load({ setup: throwingSetItem })
+    expect(sentOf('Landing Viewed')[0].event_properties.id_persisted).toBe(false)
+  })
+
+  it('window.localStorage 게터가 던지면 false 다', () => {
+    load({ setup: throwingStorageGetter })
+    expect(sentOf('Landing Viewed')[0].event_properties.id_persisted).toBe(false)
+  })
+
+  it('같은 브라우저에서 두 번째 로드는 저장된 번호를 읽었으므로 true 다', () => {
+    const { options } = load()
+    initLanding(options)
+    const views = sentOf('Landing Viewed')
+    expect(views).toHaveLength(2)
+    expect(views[1].event_properties.id_persisted).toBe(true)
+    expect(views[1].device_id).toBe(views[0].device_id)
+  })
+
+  it('항상 진짜 boolean 이다', () => {
+    for (const setup of [undefined, throwingSetItem, throwingStorageGetter, throwingStorageMethods]) {
+      globalThis.fetch.mockClear()
+      load({ setup })
+      expect(typeof sentOf('Landing Viewed')[0].event_properties.id_persisted).toBe('boolean')
+    }
+  })
+
+  // landing 은 이벤트 프로퍼티를 임의로 받는 길이 없어, 병합 순서를 정하는 트래커에서 같은 common 으로 확인한다.
+  it('이벤트 프로퍼티가 덮어쓰지 못한다(트래커의 병합 순서)', () => {
+    const sent = []
+    const track = createTracker({
+      apiKey: FAKE_KEY,
+      deviceId: nextUuid(),
+      enabled: true,
+      common: { id_persisted: true },
+      sessionId: NOW,
+      now: () => NOW,
+      randomUUID: nextUuid,
+      send: (payload) => sent.push(payload),
+    })
+    track('Landing Viewed', { id_persisted: false })
+    expect(sent).toHaveLength(1)
+    expect(sent[0].events[0].event_properties.id_persisted).toBe(true)
   })
 })
 

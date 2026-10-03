@@ -1,4 +1,4 @@
-import { resolveVisitor, readCommand } from './visitor.js'
+import { resolveVisitor, readCommand, generateUUID } from './visitor.js'
 import { resolveSource } from './source.js'
 import { deviceClass } from './device.js'
 import { assignInstallCta } from './experiment.js'
@@ -25,24 +25,8 @@ function safely(action, onError = noop) {
   }
 }
 
-// crypto.randomUUID 는 옛 사파리와 비보안 컨텍스트에 없다. 그때도 이벤트가 사라지지 않게 로컬에서 만든 값으로 대신한다.
-function localId() {
-  const hex = (count) => Array.from({ length: count }, () => Math.floor(Math.random() * 16).toString(16)).join('')
-  const variant = (8 + Math.floor(Math.random() * 4)).toString(16)
-  return `${hex(8)}-${hex(4)}-4${hex(3)}-${variant}${hex(3)}-${hex(12)}`
-}
-
-function safeUuid(source) {
-  return () => {
-    try {
-      const id = source()
-      if (typeof id === 'string' && id !== '') return id
-    } catch {
-      // 생성기를 쓸 수 없으면 아래의 로컬 생성으로 넘어간다.
-    }
-    return localId()
-  }
-}
+// 로봇으로 보이는 UA. 실제 사용자의 방문만 세려고 거른다.
+const ROBOT_UA = /bot|crawl|spider|headless|lighthouse/i
 
 function show(element, visible) {
   if (element) element.hidden = !visible
@@ -93,12 +77,34 @@ function watchHero({ window, document }, { storeLive, device, variant }) {
   observer.observe(hero)
 }
 
-function buildTracker({ navigator, config }, visitor, common, clock, uuid) {
+// 운영 주소에서만 센다. 미리보기 배포나 로컬에서 열린 방문이 실제 방문자 통계에 섞이지 않게 한다.
+// 주소를 읽을 수 없으면(siteOrigin 이 없거나 형식이 틀림) 보내지 않는 쪽으로 닫는다. 포트는 따지지 않고 호스트 이름만 비교한다.
+function onProductionHost({ location, config }) {
+  try {
+    return location.hostname === new URL(config.siteOrigin).hostname
+  } catch {
+    return false
+  }
+}
+
+// 제외한 방문자, 자동화 도구, 로봇, 운영 주소가 아닌 곳은 보내지 않는다. 화면 상태와는 무관하다.
+function trackingEnabled(page, visitor) {
+  const { navigator } = page
+  return (
+    !visitor.optedOut &&
+    navigator.webdriver !== true &&
+    !ROBOT_UA.test(navigator.userAgent ?? '') &&
+    onProductionHost(page)
+  )
+}
+
+function buildTracker(page, visitor, common, clock, uuid) {
+  const { config } = page
   return createTracker({
     apiKey: config.apiKey,
     endpoint: config.endpoint || undefined,
     deviceId: visitor.deviceId,
-    enabled: !visitor.optedOut && navigator.webdriver !== true,
+    enabled: trackingEnabled(page, visitor),
     common,
     sessionId: clock(),
     now: clock,
@@ -206,13 +212,15 @@ export function initLanding({ window, document, navigator, config = {}, now = Da
   const { location, history } = window
   const page = { window, document, navigator, location, history, config }
   const clock = typeof now === 'function' ? now : () => now
-  const uuid = safeUuid(randomUUID ?? (() => window.crypto.randomUUID()))
+  // crypto.randomUUID 는 옛 사파리와 비보안 컨텍스트에 없다. 그때도 이벤트가 사라지지 않게 visitor.js 의 생성기가 대신한다.
+  const uuidSource = randomUUID ?? (() => window.crypto.randomUUID())
+  const uuid = () => generateUUID(uuidSource)
 
   const storage = safely(() => window.localStorage, () => null)
   // 방문자를 확인하지 못했다면 기록하지 않는 쪽으로 닫는다.
   const visitor = safely(
     () => resolveVisitor({ storage, hash: location.hash, randomUUID: uuid }),
-    () => ({ deviceId: uuid(), optedOut: true, persisted: false, command: safely(() => readCommand(location.hash), () => null) }),
+    () => ({ deviceId: uuid(), optedOut: true, persisted: false, idPersisted: false, command: safely(() => readCommand(location.hash), () => null) }),
   )
   safely(() => applyCommand(page, visitor))
 
@@ -229,7 +237,7 @@ export function initLanding({ window, document, navigator, config = {}, now = Da
   safely(() => showScreen(page, screen))
   safely(() => watchHero(page, screen))
 
-  const common = { device_class: device, entry_source: source.entry_source, exp_install_cta: variant, store_live: screen.storeLive }
+  const common = { device_class: device, entry_source: source.entry_source, exp_install_cta: variant, store_live: screen.storeLive, id_persisted: visitor.idPersisted === true }
   const track = safely(() => buildTracker(page, visitor, common, clock, uuid), () => noop)
   safely(() => sendViewOnce(page, track, source))
   safely(() => watchDemo(page, track))

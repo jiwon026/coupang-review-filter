@@ -11,6 +11,9 @@ const UA = {
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5.1 Mobile/15E148 Safari/604.1',
   androidChrome:
     'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+  // 안드로이드 태블릿의 크롬은 UA 에 Mobile 토큰이 없고 userAgentData.mobile 도 false 를 보고한다.
+  androidTabletChrome:
+    'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
 }
 
 describe('deviceClass', () => {
@@ -34,8 +37,17 @@ describe('deviceClass', () => {
     expect(deviceClass({ userAgent: UA.windowsChrome, uaDataMobile: true })).toBe('mobile')
   })
 
-  it('uaDataMobile false 가 모바일 UA 를 이긴다', () => {
-    expect(deviceClass({ userAgent: UA.iphoneSafari, uaDataMobile: false })).toBe('desktop')
+  it('uaDataMobile false 는 증거가 아니라서 모바일 UA 를 이기지 못한다', () => {
+    expect(deviceClass({ userAgent: UA.iphoneSafari, uaDataMobile: false })).toBe('mobile')
+  })
+
+  it('안드로이드 태블릿 크롬(Mobile 토큰 없음, uaDataMobile false)은 mobile 이다', () => {
+    expect(deviceClass({ userAgent: UA.androidTabletChrome, uaDataMobile: false })).toBe('mobile')
+    expect(deviceClass({ userAgent: UA.androidTabletChrome })).toBe('mobile')
+  })
+
+  it('윈도우 크롬에 uaDataMobile false 는 desktop 이다', () => {
+    expect(deviceClass({ userAgent: UA.windowsChrome, uaDataMobile: false })).toBe('desktop')
   })
 
   it('uaDataMobile 이 undefined 면 UA 로 판정한다', () => {
@@ -83,8 +95,8 @@ describe('deviceClass 아이패드 데스크톱 모드', () => {
     expect(deviceClass({ userAgent: UA.windowsChrome, maxTouchPoints: 10 })).toBe('desktop')
   })
 
-  it('uaDataMobile false 가 Macintosh UA 와 maxTouchPoints 5 를 이긴다', () => {
-    expect(deviceClass({ userAgent: IPAD_DESKTOP_MODE_UA, uaDataMobile: false, maxTouchPoints: 5 })).toBe('desktop')
+  it('uaDataMobile false 는 Macintosh UA 와 maxTouchPoints 5 를 뒤집지 못한다', () => {
+    expect(deviceClass({ userAgent: IPAD_DESKTOP_MODE_UA, uaDataMobile: false, maxTouchPoints: 5 })).toBe('mobile')
   })
 
   it('uaDataMobile true 는 maxTouchPoints 와 상관없이 mobile 이다', () => {

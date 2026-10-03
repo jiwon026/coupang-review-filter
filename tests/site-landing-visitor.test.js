@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEVICE_KEY, OPTOUT_KEY, readCommand, resolveVisitor } from '../site/src/landing/visitor.js'
+import { DEVICE_KEY, OPTOUT_KEY, readCommand, resolveVisitor, generateUUID } from '../site/src/landing/visitor.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const FIXED_ID = '123e4567-e89b-42d3-a456-426614174000'
@@ -142,6 +142,38 @@ describe('resolveVisitor 저장소 실패', () => {
   })
 })
 
+// idPersisted 는 방문자 번호만 따진다. 제외 설정을 저장했는지는 persisted 가 따로 말한다.
+describe('resolveVisitor idPersisted', () => {
+  it('번호를 새로 만들어 저장하면 true, 다음 호출에서 읽어 오면 true 다', () => {
+    const storage = fakeStorage()
+    expect(resolveVisitor({ storage, hash: '', randomUUID: sequentialUUID }).idPersisted).toBe(true)
+    expect(resolveVisitor({ storage, hash: '', randomUUID: sequentialUUID }).idPersisted).toBe(true)
+  })
+
+  it('setItem 이 던지면 false 다', () => {
+    const result = resolveVisitor({ storage: throwingStorage(['setItem']), hash: '', randomUUID: () => OTHER_ID })
+    expect(result.idPersisted).toBe(false)
+  })
+
+  it('getItem 이 던지거나 저장소가 없으면 false 다', () => {
+    for (const storage of [throwingStorage(['getItem']), undefined, null]) {
+      expect(resolveVisitor({ storage, hash: '', randomUUID: () => OTHER_ID }).idPersisted).toBe(false)
+    }
+  })
+
+  it('제외 설정만 저장하지 못해도 번호가 저장됐으면 true 이고 persisted 는 false 다', () => {
+    const result = resolveVisitor({ storage: throwingStorage(['removeItem']), hash: '#track', randomUUID: () => OTHER_ID })
+    expect(result.idPersisted).toBe(true)
+    expect(result.persisted).toBe(false)
+  })
+
+  it('항상 boolean 이다', () => {
+    for (const storage of [fakeStorage(), throwingStorage(['getItem', 'setItem']), undefined]) {
+      expect(typeof resolveVisitor({ storage, hash: '', randomUUID: () => OTHER_ID }).idPersisted).toBe('boolean')
+    }
+  })
+})
+
 describe('resolveVisitor 계측 제외', () => {
   it('처음에는 optedOut false 이고 command 는 null 이다', () => {
     const result = resolveVisitor({ storage: fakeStorage(), hash: '', randomUUID: () => OTHER_ID })
@@ -251,5 +283,27 @@ describe('resolveVisitor 번호 생성 보호', () => {
     const b = resolveVisitor({ storage: fakeStorage(), hash: '', randomUUID: boom })
     expect(a.deviceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     expect(a.deviceId).not.toBe(b.deviceId)
+  })
+})
+
+// 방문자 번호와 이벤트 insert_id 가 함께 쓰는 하나의 안전한 생성기다.
+describe('generateUUID', () => {
+  const boom = () => {
+    throw new Error('randomUUID is not a function')
+  }
+  const V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+
+  it('주입한 생성기가 UUID 를 주면 그대로 쓴다', () => {
+    expect(generateUUID(() => FIXED_ID)).toBe(FIXED_ID)
+  })
+
+  it('던지거나 UUID 가 아닌 값을 주거나 없으면 버전 4 형식으로 대체한다', () => {
+    for (const source of [boom, () => 'x', () => '', () => 123, () => undefined, undefined]) {
+      expect(generateUUID(source)).toMatch(V4)
+    }
+  })
+
+  it('인자 없이도 부르고 호출마다 다른 값을 준다', () => {
+    expect(generateUUID()).not.toBe(generateUUID())
   })
 })

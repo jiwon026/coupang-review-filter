@@ -28,8 +28,9 @@ function fallbackUUID() {
   return `${hex(8)}-${hex(4)}-4${hex(3)}-${variant}${hex(3)}-${hex(12)}`
 }
 
-// 주입한 생성기는 던지거나 엉뚱한 값을 줄 수 있다. 형식이 틀린 값은 저장해 봐야 다음 로드에서 버려져 번호가 매번 바뀐다.
-function newDeviceId(randomUUID) {
+// 방문자 번호와 이벤트 insert_id 가 함께 쓰는 생성기. 주입한 생성기는 던지거나 엉뚱한 값을 줄 수 있다.
+// 형식이 틀린 값은 저장해 봐야 다음 로드에서 버려져 번호가 매번 바뀌므로, 검증을 통과하지 못하면 대체 생성으로 넘어간다.
+export function generateUUID(randomUUID) {
   try {
     const id = randomUUID()
     if (typeof id === 'string' && UUID.test(id)) return id
@@ -45,7 +46,7 @@ function loadDeviceId(storage, randomUUID) {
   if (read.ok && typeof read.value === 'string' && UUID.test(read.value)) {
     return { deviceId: read.value, persisted: true }
   }
-  const deviceId = newDeviceId(randomUUID)
+  const deviceId = generateUUID(randomUUID)
   // 읽기가 실패한 저장소는 쓰기도 기대하지 않는다. 이 페이지 로드에서만 쓰는 번호가 된다.
   if (!read.ok) return { deviceId, persisted: false }
   return { deviceId, persisted: attempt(() => storage.setItem(DEVICE_KEY, deviceId)).ok }
@@ -64,7 +65,8 @@ function loadOptOut(storage, command) {
 }
 
 // 계측 제외여도 방문자 번호는 만든다. 제외를 알리는 화면에 번호를 보여 줘야 삭제 요청을 받을 수 있다.
-// persisted 는 번호와 제외 상태가 모두 저장소에 남았는지를 뜻한다.
+// persisted 는 번호와 제외 상태가 모두 저장소에 남았는지를 뜻한다(제외 안내 문구가 이 값에 기댄다).
+// idPersisted 는 번호만 따진다. 저장하지 못하는 브라우저는 로드마다 새 번호를 받아 방문자 수가 부풀기 때문에, 통계에서 걸러 낼 수 있게 따로 알린다.
 export function resolveVisitor({ storage, hash, randomUUID }) {
   const command = readCommand(hash)
   const device = loadDeviceId(storage, randomUUID)
@@ -73,6 +75,7 @@ export function resolveVisitor({ storage, hash, randomUUID }) {
     deviceId: device.deviceId,
     optedOut: optOut.optedOut,
     persisted: device.persisted && optOut.persisted,
+    idPersisted: device.persisted,
     command,
   }
 }

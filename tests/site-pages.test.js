@@ -108,6 +108,12 @@ describe('처리방침', () => {
     for (const item of listItems(1)) expect(item).not.toMatch(/어떤 .*도$/)
   })
 
+  it('4절: 쓰는 목적 문단이 문자열까지 같고 사이트 방문 통계의 목적(10절)을 밝힌다', () => {
+    expect(sectionParagraphs(4)).toEqual([
+      '확장이 제대로 동작하는지 확인하고, 어떤 화면이 사용자에게 더 도움이 되는지 판단하는 데만 씁니다. 광고에 쓰지 않고, 판매하거나 다른 곳에 넘기지 않습니다. 개인을 알 수 없는 집계 결과(예: 리뷰 정렬 방식에 따른 체험단 리뷰 비중)는 공개할 수 있습니다. 이 사이트의 방문 통계(10절)는 어느 경로로 방문했는지와 소개 화면의 구성이 도움이 되는지 판단하는 데 씁니다.',
+    ])
+  })
+
   it('5절: 통계 보관 위치와 사이트 전체의 호스팅 사업자 접속 기록을 알린다', () => {
     expect(sectionParagraphs(5)).toEqual([
       '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다.',
@@ -132,7 +138,7 @@ describe('처리방침', () => {
     expect(sectionParagraphs(10)).toEqual([
       '확장과 별개로 이 사이트의 소개 페이지는 방문 통계를 기록합니다. 확장을 설치하지 않아도 기록되며, 확장의 통계와 사람 단위로 연결하지 않습니다.',
       '이름, 이메일, 보던 페이지의 전체 주소는 기록하지 않습니다. 통계는 5절과 같이 Amplitude 에 저장하고 4절의 목적에만 씁니다.',
-      '통계에서 빠지려면 이 사이트 주소 끝에 #notrack 을 붙여 한 번 열어 주세요. 그 브라우저에서는 더 기록하지 않고, 화면에 방문자 번호가 표시됩니다. 브라우저가 설정을 저장하지 못하는 경우에는 그 방문만 제외되며 화면에 따로 안내됩니다. 이미 기록된 방문 통계의 삭제를 원하면 그 번호를 8절의 주소로 알려 주세요. 브라우저에서 이 사이트의 데이터를 지우면 방문자 번호도 지워집니다.',
+      '통계에서 빠지려면 이 사이트 주소 끝에 #notrack 을 붙여 한 번 열어 주세요. 그 브라우저에서는 더 기록하지 않고, 화면에 방문자 번호가 표시됩니다. 브라우저가 설정을 저장하지 못하는 경우에는 그 방문만 제외되며 화면에 따로 안내됩니다. 이미 기록된 방문 통계의 삭제를 원하면 그 번호를 8절의 주소로 알려 주세요. 방문자 번호, 실험 그룹, 제외 설정은 브라우저에 저장되며, 브라우저에서 이 사이트의 데이터를 지우면 함께 지워집니다.',
     ])
   })
 
@@ -151,6 +157,10 @@ describe('처리방침', () => {
 
   it('제거 안내 페이지에서 아무것도 기록되지 않는다는 절대 표현을 쓰지 않는다', () => {
     expect(text).not.toContain('아무것도 기록되지 않습니다')
+  })
+
+  it('시행일은 2026-10-03 이다', () => {
+    expect(doc.querySelector('.effective').textContent).toBe('시행일: 2026-10-03')
   })
 
   // 배포 때 실제 날짜로 바뀐다. 자리표시자와 날짜 형식 둘 다 받는다.
@@ -429,6 +439,13 @@ describe('세 페이지 공통', () => {
     it(`${name}: 모바일 뷰포트와 한국어 문서다`, () => {
       expect(doc.documentElement.lang).toBe('ko')
       expect(doc.querySelector('meta[name="viewport"]').content).toContain('width=device-width')
+    })
+
+    it(`${name}: 인라인 이벤트 핸들러(on 으로 시작하는 속성)가 없다`, () => {
+      for (const el of doc.querySelectorAll('*')) {
+        const handlers = [...el.attributes].map((attr) => attr.name).filter((attrName) => attrName.toLowerCase().startsWith('on'))
+        expect(handlers, el.outerHTML.slice(0, 80)).toEqual([])
+      }
     })
 
     it(`${name}: 원격 자원과 인라인 스크립트가 없다`, () => {
