@@ -119,9 +119,17 @@ describe('처리방침', () => {
 
   it('5절: 통계 보관 위치와 사이트 전체의 호스팅 사업자 접속 기록을 알린다', () => {
     expect(sectionParagraphs(5)).toEqual([
-      '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다.',
+      '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다. 통계에는 IP 주소와 위치 정보를 담지 않습니다. 다만 통계를 보내는 순간에는 접속에 쓰인 IP 주소가 Amplitude 의 서버에 전달됩니다.',
       '이 사이트(소개 페이지, 처리방침, 제거 안내 페이지)는 Vercel(Vercel Inc., 미국)에서 호스팅하며, 페이지에 접속할 때 IP 주소 같은 접속 기록이 호스팅 사업자에게 남을 수 있습니다. 익명 기기 번호와 방문자 번호는 이 접속 기록에 포함되지 않습니다.',
     ])
+  })
+
+  it('5절: IP 주소와 위치 정보를 담지 않는다는 문장은 통계 코드가 ip 필드나 $remote 를 보내지 않아야 참이다', () => {
+    for (const file of ['analytics.js', 'landing/tracker.js']) {
+      const source = readFileSync(new URL(file, SRC_DIR), 'utf8')
+      expect(source, `${file} 에 ip 필드`).not.toMatch(/ips*:/)
+      expect(source, `${file} 에 $remote`).not.toContain('$remote')
+    }
   })
 
   it('7절: 제거할 때 기록되는 것(제거 사실, 사용 기간, 고른 이유)을 모두 적는다', () => {
