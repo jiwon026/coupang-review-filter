@@ -582,7 +582,7 @@ Phase 2를 실행하지 않기로 결정하더라도, 그 판단 근거를 데�
 | 이벤트 | 프로퍼티 | 때 |
 |---|---|---|
 | `Landing Viewed` | `referrer_domain`, `utm_source`, `utm_medium`, `utm_campaign` | 페이지 로드마다 한 번 |
-| `Demo Viewed` | 없음 | 실제 화면 사진 구역이 절반 이상 보일 때, 페이지 로드마다 한 번 |
+| `Demo Viewed` | 없음 | 실제 화면 사진 구역의 위쪽 끝이 화면 세로 가운데까지 올라왔을 때, 페이지 로드마다 한 번. 구역의 높이와 화면 크기에 좌우되지 않게 보이는 비율로 정하지 않는다 |
 | `Install CTA Clicked` | `cta_location`(`hero` / `sticky`) | 설치 버튼을 누를 때마다 |
 | `Handoff Link Requested` | `channel`(`copy` / `share`) | 넘기기 버튼을 누를 때마다 |
 
