@@ -5,15 +5,72 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>체험단 리뷰 제거기 for 쿠팡</title>
-  <meta name="description" content="쿠팡 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기는 크롬 확장입니다.">
+  <meta name="description" content="쿠팡 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기고, 체험단 리뷰를 뺀 평점을 보여 주는 크롬 확장입니다.">
   <link rel="stylesheet" href="/style.css">
+  <script src="/assets/landing.js" defer></script>
 </head>
-<body>
+<body class="landing">
   <main>
-    <h1>체험단 리뷰 제거기 for 쿠팡</h1>
-    <p>쿠팡 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기고, 체험단 리뷰를 뺀 평점을 보여 줍니다.</p>
-    <p class="notice">곧 크롬 웹스토어에서 만나요</p>
-    <p class="footer-links"><a href="/privacy">개인정보 처리방침</a></p>
+    <div class="hero">
+      <div class="hero-text">
+        <h1>별점에 섞인 체험단 리뷰, 빼고 보세요</h1>
+        <p class="lead">쿠팡 상품 페이지에서 체험단 리뷰를 표시하고, 숨기고, 체험단 리뷰를 뺀 평점을 보여 줍니다.</p>
+        <a id="cta-hero" class="cta" href="https://chromewebstore.google.com/detail/diefbidjmimlnigjmkdbghjdhokhhpdk" rel="noopener" hidden>크롬에 추가</a>
+        <p id="store-pending" class="notice">크롬 웹스토어 심사 중입니다. 곧 설치할 수 있어요</p>
+        <p class="cta-note">무료입니다. 쿠팡 상품 페이지에서만 동작합니다.</p>
+        <div id="handoff" class="handoff" hidden>
+          <h2>PC 크롬에서 설치할 수 있어요</h2>
+          <p>휴대폰에서는 확장을 쓸 수 없습니다. 링크를 보내 두었다가 PC 에서 열어 주세요.</p>
+          <div class="handoff-actions">
+            <button id="handoff-copy" class="btn" type="button">링크 복사</button>
+            <button id="handoff-share" class="btn" type="button" hidden>공유하기</button>
+          </div>
+          <p id="handoff-status" class="handoff-status" role="status"></p>
+        </div>
+      </div>
+      <div class="rating-card">
+        <p class="rating-label">쿠팡 평점 <span class="rating-tag">예시</span></p>
+        <p class="rating-values"><s>4.7</s> <span class="rating-arrow">→</span> <strong>4.1</strong></p>
+        <p class="rating-caption">리뷰 1,204개 중 체험단 341개를 뺀 평점</p>
+      </div>
+    </div>
+
+    <section id="demo" class="demo">
+      <h2>이렇게 보입니다</h2>
+      <div class="demo-shots">
+        <img class="shot-banner" src="/img/banner.png" width="815" height="237" alt="리뷰 평균 5, 체험단 제외 4.8 이라고 알려 주는 배너" loading="lazy">
+        <img src="/img/badge.jpg" width="738" height="591" alt="체험단 제공 리뷰에 표시가 붙은 쿠팡 리뷰 화면" loading="lazy">
+        <img src="/img/panel.png" width="466" height="602" alt="체험단을 뺀 평점과 체험단 비중을 보여 주는 확장 패널" loading="lazy">
+      </div>
+    </section>
+
+    <section id="features">
+      <h2>하는 일</h2>
+      <ul>
+        <li>체험단 제공 리뷰에 표시를 붙입니다</li>
+        <li>버튼 하나로 숨기고, 다시 누르면 다시 보여 줍니다</li>
+        <li>체험단 리뷰를 뺀 평점을 원래 평균과 나란히 보여 줍니다</li>
+      </ul>
+      <p>쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.</p>
+    </section>
+
+    <section id="stats">
+      <h2>통계는 동의한 경우에만</h2>
+      <p>설치하면 익명 사용 통계를 보낼지 먼저 묻습니다. 동의하지 않아도 모든 기능을 쓸 수 있습니다.</p>
+      <p>리뷰 내용, 상품 이름, 상품 주소는 보내지 않습니다.</p>
+      <p>이 페이지는 방문 통계를 기록합니다. 기록하는 내용과 빠지는 방법은 개인정보 처리방침에 있습니다.</p>
+      <p id="optout-notice" class="notice" hidden></p>
+    </section>
+
+    <footer class="site-footer">
+      <p>이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.</p>
+      <p><a href="/privacy">개인정보 처리방침</a></p>
+    </footer>
   </main>
+
+  <div id="sticky" class="sticky" hidden>
+    <span class="sticky-title">체험단 리뷰 제거기 for 쿠팡</span>
+    <a id="cta-sticky" class="cta" href="https://chromewebstore.google.com/detail/diefbidjmimlnigjmkdbghjdhokhhpdk" rel="noopener">크롬에 추가</a>
+  </div>
 </body>
 </html>

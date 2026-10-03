@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { JSDOM } from 'jsdom'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fillContact } from '../site/src/contact.js'
+import { STORE_URL } from '../site/src/landing/config.js'
 
 const PUBLIC_DIR = new URL('../site/public/', import.meta.url)
 const SRC_DIR = new URL('../site/src/', import.meta.url)
@@ -157,13 +158,207 @@ describe('제거 안내 페이지 문구', () => {
   })
 })
 
-describe('임시 첫 화면', () => {
-  it('이름, 설명, 안내 문구, 처리방침 링크가 있다', () => {
-    const doc = load('index.html')
-    expect(doc.querySelector('h1').textContent).toBe('체험단 리뷰 제거기 for 쿠팡')
-    expect(doc.body.textContent).toContain('곧 크롬 웹스토어에서 만나요')
-    expect(doc.querySelector('a[href="/privacy"]')).not.toBeNull()
+describe('랜딩', () => {
+  const doc = load('index.html')
+  const norm = (el) => el.textContent.replace(/\s+/g, ' ').trim()
+  const bodyText = norm(doc.body)
+
+  it('제목과 설명(meta description)이 그대로다', () => {
+    expect(doc.title).toBe('체험단 리뷰 제거기 for 쿠팡')
+    expect(doc.querySelector('meta[name="description"]').content).toBe(
+      '쿠팡 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기고, 체험단 리뷰를 뺀 평점을 보여 주는 크롬 확장입니다.',
+    )
   })
+
+  it('body 에 landing 클래스가 있다', () => {
+    expect(doc.body.classList.contains('landing')).toBe(true)
+  })
+
+  it('첫 화면 문구가 요소별로 글자 그대로 있다', () => {
+    expect(norm(doc.querySelector('h1'))).toBe('별점에 섞인 체험단 리뷰, 빼고 보세요')
+    expect(norm(doc.querySelector('p.lead'))).toBe(
+      '쿠팡 상품 페이지에서 체험단 리뷰를 표시하고, 숨기고, 체험단 리뷰를 뺀 평점을 보여 줍니다.',
+    )
+    expect(norm(doc.getElementById('cta-hero'))).toBe('크롬에 추가')
+    expect(norm(doc.getElementById('store-pending'))).toBe('크롬 웹스토어 심사 중입니다. 곧 설치할 수 있어요')
+    expect(norm(doc.querySelector('p.cta-note'))).toBe('무료입니다. 쿠팡 상품 페이지에서만 동작합니다.')
+  })
+
+  it('예시 카드가 세 줄(라벨과 예시 표시, 숫자, 설명)을 그대로 담는다', () => {
+    const card = doc.querySelector('.rating-card')
+    expect(norm(card.querySelector('.rating-label'))).toBe('쿠팡 평점 예시')
+    expect(norm(card.querySelector('.rating-tag'))).toBe('예시')
+    expect(norm(card.querySelector('.rating-values'))).toBe('4.7 → 4.1')
+    expect(norm(card.querySelector('.rating-values s'))).toBe('4.7')
+    expect(norm(card.querySelector('.rating-values strong'))).toBe('4.1')
+    expect(norm(card.querySelector('.rating-caption'))).toBe('리뷰 1,204개 중 체험단 341개를 뺀 평점')
+  })
+
+  it('히어로는 문장과 예시 카드 두 칸이고, 좁은 화면에서 카드를 위로 올리는 order 규칙이 있다', () => {
+    const hero = doc.querySelector('.hero')
+    expect([...hero.children].map((el) => el.className)).toEqual(['hero-text', 'rating-card'])
+    expect(hero.querySelector('.hero-text h1')).not.toBeNull()
+    const css = readFileSync(new URL('style.css', PUBLIC_DIR), 'utf8')
+    expect(css).toMatch(/\.rating-card\s*\{[^}]*order:\s*-1/)
+  })
+
+  it('h2 넷이 순서대로 있고 문구가 같다', () => {
+    expect([...doc.querySelectorAll('h2')].map(norm)).toEqual([
+      'PC 크롬에서 설치할 수 있어요',
+      '이렇게 보입니다',
+      '하는 일',
+      '통계는 동의한 경우에만',
+    ])
+    expect(norm(doc.querySelector('#demo h2'))).toBe('이렇게 보입니다')
+  })
+
+  it('PC 안내 문구와 두 버튼이 그대로다', () => {
+    const handoff = doc.getElementById('handoff')
+    expect(norm(handoff.querySelector('p'))).toBe('휴대폰에서는 확장을 쓸 수 없습니다. 링크를 보내 두었다가 PC 에서 열어 주세요.')
+    expect(norm(doc.getElementById('handoff-copy'))).toBe('링크 복사')
+    expect(norm(doc.getElementById('handoff-share'))).toBe('공유하기')
+  })
+
+  it('하는 일 세 줄과 판정 기준 문장이 그대로다', () => {
+    const section = doc.getElementById('features')
+    expect([...section.querySelectorAll('li')].map(norm)).toEqual([
+      '체험단 제공 리뷰에 표시를 붙입니다',
+      '버튼 하나로 숨기고, 다시 누르면 다시 보여 줍니다',
+      '체험단 리뷰를 뺀 평점을 원래 평균과 나란히 보여 줍니다',
+    ])
+    expect(norm(section.querySelector('p'))).toBe(
+      '쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
+    )
+  })
+
+  it('통계 절의 세 문단이 그대로다', () => {
+    const section = doc.getElementById('stats')
+    expect([...section.querySelectorAll('p:not([id])')].map(norm)).toEqual([
+      '설치하면 익명 사용 통계를 보낼지 먼저 묻습니다. 동의하지 않아도 모든 기능을 쓸 수 있습니다.',
+      '리뷰 내용, 상품 이름, 상품 주소는 보내지 않습니다.',
+      '이 페이지는 방문 통계를 기록합니다. 기록하는 내용과 빠지는 방법은 개인정보 처리방침에 있습니다.',
+    ])
+  })
+
+  it('푸터에 쿠팡과 관계없다는 문장과 처리방침 링크가 있다', () => {
+    const footer = doc.querySelector('footer')
+    expect(norm(footer)).toContain('이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.')
+    const link = footer.querySelector('a')
+    expect(link.getAttribute('href')).toBe('/privacy')
+    expect(norm(link)).toBe('개인정보 처리방침')
+  })
+
+  it('따라오는 설치 바 문구가 그대로다', () => {
+    expect(norm(doc.getElementById('sticky'))).toBe('체험단 리뷰 제거기 for 쿠팡 크롬에 추가')
+    expect(norm(doc.getElementById('cta-sticky'))).toBe('크롬에 추가')
+  })
+
+  it('스크립트가 쓰는 DOM 계약: id 와 요소 종류가 맞다', () => {
+    const kinds = {
+      'cta-hero': 'A',
+      'store-pending': 'P',
+      handoff: 'DIV',
+      'handoff-copy': 'BUTTON',
+      'handoff-share': 'BUTTON',
+      'handoff-status': 'P',
+      demo: 'SECTION',
+      sticky: 'DIV',
+      'cta-sticky': 'A',
+      'optout-notice': 'P',
+    }
+    for (const [id, tag] of Object.entries(kinds)) {
+      const el = doc.getElementById(id)
+      expect(el, id).not.toBeNull()
+      expect(el.tagName, id).toBe(tag)
+    }
+    expect(doc.getElementById('handoff-status').getAttribute('role')).toBe('status')
+    expect(doc.getElementById('sticky').classList.contains('sticky')).toBe(true)
+    expect(doc.getElementById('handoff-copy').getAttribute('type')).toBe('button')
+    expect(doc.getElementById('handoff-share').getAttribute('type')).toBe('button')
+  })
+
+  it('스크립트가 없을 때의 기본 상태: 심사 중만 보이고 나머지는 hidden 이다', () => {
+    for (const id of ['cta-hero', 'handoff', 'handoff-share', 'sticky', 'optout-notice']) {
+      expect(doc.getElementById(id).hasAttribute('hidden'), id).toBe(true)
+    }
+    expect(doc.getElementById('store-pending').hasAttribute('hidden')).toBe(false)
+    expect(doc.getElementById('store-pending').closest('[hidden]')).toBeNull()
+  })
+
+  it('예시 숫자에 예시 표시가 있고, 정렬 방식과 표본 수 같은 관측값은 쓰지 않는다', () => {
+    expect(norm(doc.querySelector('.rating-card'))).toContain('예시')
+    for (const banned of ['베스트순', '최신순', '50개 중']) expect(bodyText).not.toContain(banned)
+  })
+
+  it('설치 버튼 두 개가 스토어 주소를 가리키고 rel 에 noopener 가 있다', () => {
+    for (const id of ['cta-hero', 'cta-sticky']) {
+      const a = doc.getElementById(id)
+      expect(a.getAttribute('href'), id).toBe(STORE_URL)
+      expect(a.getAttribute('rel').split(/\s+/), id).toContain('noopener')
+    }
+  })
+
+  it('사진 셋이 배너, 배지, 패널 순서로 있고 alt 가 그대로다', () => {
+    const imgs = [...doc.querySelectorAll('#demo img')]
+    expect(imgs.map((img) => img.getAttribute('src'))).toEqual(['/img/banner.png', '/img/badge.jpg', '/img/panel.png'])
+    expect(imgs.map((img) => img.getAttribute('alt'))).toEqual([
+      '리뷰 평균 5, 체험단 제외 4.8 이라고 알려 주는 배너',
+      '체험단 제공 리뷰에 표시가 붙은 쿠팡 리뷰 화면',
+      '체험단을 뺀 평점과 체험단 비중을 보여 주는 확장 패널',
+    ])
+  })
+
+  it('모든 img 에 alt, width, height, lazy 가 있고 src 의 파일이 실제로 있다', () => {
+    const imgs = [...doc.querySelectorAll('img')]
+    expect(imgs.length).toBeGreaterThan(0)
+    for (const img of imgs) {
+      expect(img.getAttribute('alt') ?? '', img.outerHTML).not.toBe('')
+      expect(Number(img.getAttribute('width')), img.outerHTML).toBeGreaterThan(0)
+      expect(Number(img.getAttribute('height')), img.outerHTML).toBeGreaterThan(0)
+      expect(img.getAttribute('loading')).toBe('lazy')
+      expect(existsSync(new URL(img.getAttribute('src').slice(1), PUBLIC_DIR)), img.getAttribute('src')).toBe(true)
+    }
+  })
+
+  it('/assets/landing.js 를 defer 로 불러온다', () => {
+    const script = doc.querySelector('script[src="/assets/landing.js"]')
+    expect(script).not.toBeNull()
+    expect(script.hasAttribute('defer')).toBe(true)
+  })
+})
+
+describe('랜딩 스타일시트', () => {
+  const css = readFileSync(new URL('style.css', PUBLIC_DIR), 'utf8')
+
+  it('[hidden] 이 display 설정에 지지 않는다', () => {
+    expect(css).toMatch(/\[hidden\]\s*\{[^}]*display:\s*none\s*!important/)
+  })
+
+  it('720px 이상에서 두 열로 바뀌고 랜딩에서만 main 을 넓힌다', () => {
+    expect(css).toContain('@media (min-width: 720px)')
+    expect(css).toMatch(/grid-template-columns:\s*minmax\(0,\s*1\.1fr\)\s*minmax\(0,\s*1fr\)/)
+    expect(css).toMatch(/body\.landing main\s*\{[^}]*max-width:\s*60rem/)
+  })
+
+  it('position: fixed 는 .sticky 규칙에만 있다', () => {
+    const selectors = [...css.matchAll(/([^{}]+)\{[^{}]*position:\s*fixed/g)].map((m) => m[1].trim())
+    expect(selectors).toEqual(['.sticky'])
+  })
+
+  it('설치 버튼은 48px 이상이고 사진은 화면보다 넓게 그리지 않는다', () => {
+    expect(css).toMatch(/\.cta\s*\{[^}]*min-height:\s*48px/)
+    expect(css).toMatch(/\.demo img\s*\{[^}]*max-width:\s*100%/)
+    expect(css).toMatch(/\.demo img\s*\{[^}]*height:\s*auto/)
+  })
+})
+
+describe('세 페이지: 엠대시와 가운데 점이 없다', () => {
+  for (const name of PAGES) {
+    it(name, () => {
+      const text = readFileSync(new URL(name, PUBLIC_DIR), 'utf8')
+      expect(text).not.toMatch(new RegExp(`[${String.fromCharCode(0x2014)}${String.fromCharCode(0xb7)}]`))
+    })
+  }
 })
 
 describe('세 페이지 공통', () => {

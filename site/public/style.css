@@ -141,3 +141,247 @@ button:focus-visible {
 .footer-links {
   margin-top: 32px;
 }
+
+/* 랜딩 화면 */
+[hidden] {
+  display: none !important;
+}
+
+body.landing main {
+  max-width: 60rem;
+}
+
+body.landing.has-sticky main {
+  padding-bottom: 120px;
+}
+
+body.landing section {
+  margin-top: 48px;
+}
+
+body.landing section h2 {
+  margin-top: 0;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.hero h1 {
+  margin-bottom: 12px;
+  font-size: 1.75rem;
+}
+
+.hero .lead {
+  margin-bottom: 24px;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 24px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.cta:hover {
+  opacity: 0.9;
+}
+
+.cta-note {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-sub);
+}
+
+.hero #store-pending {
+  margin-bottom: 0;
+}
+
+.handoff {
+  margin-top: 24px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.handoff h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn {
+  min-height: 48px;
+  padding: 0 24px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.handoff-status {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-sub);
+}
+
+.handoff-status:empty {
+  display: none;
+}
+
+/* 좁은 화면에서는 예시 카드가 문장 위에 온다 */
+.rating-card {
+  order: -1;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.rating-card p {
+  margin: 0;
+}
+
+.rating-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-sub);
+}
+
+.rating-tag {
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.rating-values {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 16px 0 8px;
+  line-height: 1.2;
+}
+
+.rating-values s {
+  font-size: 1.75rem;
+  color: var(--text-sub);
+}
+
+.rating-arrow {
+  font-size: 1.5rem;
+  color: var(--text-sub);
+}
+
+.rating-values strong {
+  font-size: 3.5rem;
+  color: var(--accent);
+}
+
+.rating-caption {
+  font-size: 0.95rem;
+  color: var(--text-sub);
+}
+
+.demo-shots {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+/* 사진은 원래 픽셀 폭(width 속성)보다 크게 그리지 않고, 좁은 화면에서는 줄어든다 */
+.demo img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.site-footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 0.9rem;
+  color: var(--text-sub);
+}
+
+.site-footer p {
+  margin-bottom: 8px;
+}
+
+.sticky {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+
+.sticky-title {
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.sticky .cta {
+  flex-shrink: 0;
+}
+
+@media (min-width: 720px) {
+  .hero {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: 48px;
+  }
+
+  .hero h1 {
+    font-size: 2.25rem;
+  }
+
+  .rating-card {
+    order: 0;
+  }
+
+  .demo-shots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .shot-banner {
+    grid-column: 1 / -1;
+  }
+}
