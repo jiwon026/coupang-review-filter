@@ -79,6 +79,23 @@ function throwingStorageGetter(window) {
   })
 }
 
+// 읽기는 되고 쓰기만 던진다. 방문자 번호와 제외 상태를 저장하지 못하는 저장소다.
+function throwingSetItem(window) {
+  const real = window.localStorage
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key) => real.getItem(key),
+      setItem() {
+        throw new DOMException('quota', 'QuotaExceededError')
+      },
+      removeItem() {
+        throw new DOMException('quota', 'QuotaExceededError')
+      },
+    },
+  })
+}
+
 function throwingStorageMethods(window) {
   const boom = () => {
     throw new DOMException('quota', 'QuotaExceededError')
@@ -100,6 +117,7 @@ function load({
   visibility = 'visible',
   withObserver = true,
   setup,
+  beforeInit,
   ...rest
 } = {}) {
   const dom = new JSDOM(PAGE_HTML, { url, ...(referrer ? { referrer } : {}), virtualConsole: new VirtualConsole() })
@@ -107,6 +125,7 @@ function load({
   setVisibility(window.document, visibility)
   const observers = withObserver ? installFakeObserver(window) : []
   if (setup) setup(window)
+  if (beforeInit) beforeInit(window.document)
   // 게터를 실행하지 않고 옮겨야 "읽는 것이 던지는" navigator 를 만들 수 있다.
   const navigator = Object.defineProperties(
     { userAgent, maxTouchPoints: 0, webdriver: false },
@@ -267,6 +286,13 @@ describe('Landing Viewed', () => {
     }
   })
 
+  it('포트가 있는 주소에서 자기 사이트(처리방침)로 돌아오면 internal 로 본다', () => {
+    load({ url: 'https://crf.test:8443/', referrer: 'https://crf.test:8443/privacy' })
+    const { event_properties: props } = sentOf('Landing Viewed')[0]
+    expect(props.entry_source).toBe('internal')
+    expect(props.referrer_domain).toBe('internal')
+  })
+
   it('없는 유입 정보는 싣지 않는다', () => {
     load()
     const { event_properties: props } = sentOf('Landing Viewed')[0]
@@ -306,6 +332,21 @@ describe('계측을 보내지 않는 경우에도 화면은 표대로다', () =>
     expect(notice.hidden).toBe(false)
     expect(notice.textContent).toBe(`이 브라우저의 방문은 더 기록하지 않습니다. 방문자 번호: ${deviceId}`)
     expect(screenOf(document)).toEqual({ ...DESKTOP_LIVE, 'optout-notice': false })
+  })
+
+  it('#notrack 을 저장하지 못하면 영구 제외라고 약속하지 않고 번호도 보이지 않는다', () => {
+    const { document } = load({ url: `${PAGE_URL}#notrack`, setup: throwingSetItem })
+    const notice = document.getElementById('optout-notice')
+    expect(notice.hidden).toBe(false)
+    expect(notice.textContent).toBe('이번 방문은 기록하지 않습니다. 이 브라우저는 설정을 저장하지 못해, 다음에도 주소 끝에 #notrack 을 붙여 열어 주세요.')
+    expect(notice.textContent).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('#notrack 을 저장했으면 기존 안내에 번호가 보인다', () => {
+    const { window, document } = load({ url: `${PAGE_URL}#notrack` })
+    const deviceId = window.localStorage.getItem(DEVICE_KEY)
+    expect(document.getElementById('optout-notice').textContent).toBe(`이 브라우저의 방문은 더 기록하지 않습니다. 방문자 번호: ${deviceId}`)
   })
 
   it('#notrack 뒤에는 조각 없이 다시 열어도 0번이고, 버튼을 눌러도 0번이다', () => {
@@ -377,6 +418,25 @@ describe('Install CTA Clicked', () => {
     expect(sentOf('Install CTA Clicked').map((e) => e.event_properties.cta_location)).toEqual(['sticky'])
   })
 
+  it.each([
+    ['cta-hero', 'hero'],
+    ['cta-sticky', 'sticky'],
+  ])('%s: 가운데 버튼(auxclick, button 1)은 한 번 보내고 이동을 막지 않는다', (id, location) => {
+    const { window } = load({ random: HERO_STICKY })
+    const event = new window.MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 })
+    window.document.getElementById(id).dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
+    const clicks = sentOf('Install CTA Clicked')
+    expect(clicks).toHaveLength(1)
+    expect(clicks[0].event_properties.cta_location).toBe(location)
+  })
+
+  it.each(['cta-hero', 'cta-sticky'])('%s: 오른쪽 버튼(auxclick, button 2)은 보내지 않는다', (id) => {
+    const { window } = load({ random: HERO_STICKY })
+    window.document.getElementById(id).dispatchEvent(new window.MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 2 }))
+    expect(sentOf('Install CTA Clicked')).toHaveLength(0)
+  })
+
   it('누를 때마다 보낸다', () => {
     const { window } = load()
     click(window, 'cta-hero')
@@ -393,16 +453,28 @@ describe('Install CTA Clicked', () => {
 })
 
 describe('Demo Viewed', () => {
-  it('절반 이상 보일 때 한 번만 보내고 관찰을 끊는다', () => {
+  it('윗변이 화면 세로 가운데에 닿는 기준으로 관찰한다', () => {
     const { observers } = load()
     const [demo] = observing(observers, 'demo')
-    expect(demo.options).toEqual({ threshold: 0.5 })
-    demo.trigger(seen(0.3))
+    expect(demo.options).toEqual({ rootMargin: '0px 0px -50% 0px', threshold: 0 })
+  })
+
+  it('교차하지 않는다는 알림에는 보내지 않는다', () => {
+    const { observers } = load()
+    const [demo] = observing(observers, 'demo')
+    demo.trigger([{ isIntersecting: false, intersectionRatio: 0 }])
     expect(sentOf('Demo Viewed')).toHaveLength(0)
-    demo.trigger(seen(0.6))
-    demo.trigger(seen(0.9))
+    expect(demo.disconnected).toBe(false)
+  })
+
+  it('보이는 비율이 아주 작아도(0.01) 교차하면 한 번 보내고 관찰을 끊는다', () => {
+    const { observers } = load()
+    const [demo] = observing(observers, 'demo')
+    demo.trigger([{ isIntersecting: true, intersectionRatio: 0.01 }])
     expect(sentOf('Demo Viewed')).toHaveLength(1)
     expect(demo.disconnected).toBe(true)
+    demo.trigger(seen(0.9))
+    expect(sentOf('Demo Viewed')).toHaveLength(1)
   })
 
   it('한 번의 알림에 항목이 여럿 들어와도 한 번만 보낸다', () => {
@@ -497,6 +569,32 @@ describe('넘기기', () => {
     await flush()
     expect(handoffParams(writeText).get('utm_campaign')).toBe('clien-net')
     expect(handoffParams(writeText).get('utm_source')).toBe('handoff')
+  })
+
+  it('처리방침에서 돌아온 방문(internal)은 원래 유입원으로 넘기지 않는다', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const { window } = mobile({ clipboard: { writeText } }, { referrer: `${PAGE_URL}privacy` })
+    expect(sentOf('Landing Viewed')[0].event_properties.entry_source).toBe('internal')
+    click(window, 'handoff-copy')
+    await flush()
+    expect(handoffParams(writeText).has('utm_campaign')).toBe(false)
+    expect(handoffParams(writeText).get('utm_source')).toBe('handoff')
+  })
+
+  it('#handoff-status 가 없어도 복사 실패가 처리되지 않은 거부로 번지지 않고 이벤트는 한 번 나간다', async () => {
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const writeText = vi.fn().mockRejectedValue(new DOMException('denied', 'NotAllowedError'))
+      const { window } = mobile({ clipboard: { writeText } }, { beforeInit: (doc) => doc.getElementById('handoff-status').remove() })
+      click(window, 'handoff-copy')
+      await flush()
+      await flush()
+      expect(unhandled).not.toHaveBeenCalled()
+      expect(sentOf('Handoff Link Requested')).toHaveLength(1)
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
   })
 
   it('handoff 가 아닌 유입은 entry_source 를 넘긴다', async () => {

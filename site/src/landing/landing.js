@@ -8,9 +8,11 @@ import { EVENTS, createTracker } from './tracker.js'
 const SHARE_TITLE = '체험단 리뷰 제거기 for 쿠팡'
 const COPIED = '복사했습니다'
 const COPY_FAILED = '복사하지 못했습니다. 주소창의 주소를 직접 복사해 주세요'
+const OPTED_OUT_UNSAVED_NOTICE = '이번 방문은 기록하지 않습니다. 이 브라우저는 설정을 저장하지 못해, 다음에도 주소 끝에 #notrack 을 붙여 열어 주세요.'
 const OPTED_IN_NOTICE = '이 브라우저의 방문을 다시 기록합니다.'
 const optedOutNotice = (deviceId) => `이 브라우저의 방문은 더 기록하지 않습니다. 방문자 번호: ${deviceId}`
-const DEMO_THRESHOLD = 0.5
+// 데모의 윗변이 화면 세로 가운데에 닿으면 본 것으로 센다. 비율 기준은 두 화면보다 긴 구간이 0.5 에 닿지 못해 쓰지 않는다.
+const DEMO_OBSERVER_OPTIONS = { rootMargin: '0px 0px -50% 0px', threshold: 0 }
 
 const noop = () => {}
 
@@ -46,13 +48,19 @@ function show(element, visible) {
   if (element) element.hidden = !visible
 }
 
+// 제외를 저장하지 못했다면 다음 방문에는 기록된다. 영구 제외라고 약속하지 않고 방문자 번호도 보이지 않는다.
+function noticeText(visitor) {
+  if (visitor.command !== 'optout') return OPTED_IN_NOTICE
+  return visitor.persisted === false ? OPTED_OUT_UNSAVED_NOTICE : optedOutNotice(visitor.deviceId)
+}
+
 // 읽은 명령을 따라 안내를 보이고 조각을 지운다. 둘은 서로 독립이다.
 function applyCommand({ document, location, history }, visitor) {
   if (visitor.command === null) return
   safely(() => history.replaceState(null, '', `${location.pathname}${location.search}`))
   const notice = document.getElementById('optout-notice')
   if (!notice) return
-  notice.textContent = visitor.command === 'optout' ? optedOutNotice(visitor.deviceId) : OPTED_IN_NOTICE
+  notice.textContent = noticeText(visitor)
   notice.hidden = false
 }
 
@@ -121,40 +129,52 @@ function sendViewOnce({ document }, track, source) {
   document.addEventListener('visibilitychange', onChange)
 }
 
-// 데모가 절반 이상 보이면 한 번 보내고 관찰을 끊는다. 경계를 지나 내려가는 알림(비율 0.5 미만)은 세지 않는다.
+// 데모가 기준선에 닿으면 한 번 보내고 관찰을 끊는다.
 function watchDemo({ window, document }, track) {
   const demo = document.getElementById('demo')
   if (typeof window.IntersectionObserver !== 'function' || !demo) return
   const observer = new window.IntersectionObserver(
     (entries) => {
-      if (!entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= DEMO_THRESHOLD)) return
+      if (!entries.some((entry) => entry.isIntersecting)) return
       track(EVENTS.DEMO_VIEWED, {})
       observer.disconnect()
     },
-    { threshold: DEMO_THRESHOLD },
+    DEMO_OBSERVER_OPTIONS,
   )
   observer.observe(demo)
 }
 
 // 이동은 막지 않는다. 전송은 keepalive 라 페이지를 떠나도 나간다.
+// 가운데 버튼은 click 이 아니라 auxclick 으로 오므로 button 1 만 같은 이벤트로 센다(오른쪽 버튼은 세지 않는다).
 function wireInstallButtons({ document }, track) {
   for (const [id, location] of [['cta-hero', 'hero'], ['cta-sticky', 'sticky']]) {
-    document.getElementById(id)?.addEventListener('click', () => track(EVENTS.INSTALL_CTA_CLICKED, { cta_location: location }))
+    const send = () => track(EVENTS.INSTALL_CTA_CLICKED, { cta_location: location })
+    const link = document.getElementById(id)
+    link?.addEventListener('click', send)
+    link?.addEventListener('auxclick', (event) => {
+      if (event.button === 1) send()
+    })
   }
 }
 
 // 넘기기 주소에 싣는 원래 유입원. handoff 로 들어온 방문자가 다시 넘기면 처음 유입원(utm_campaign)을 이어 간다.
+// 처리방침에서 돌아온 방문(internal)은 유입원이 아니므로 싣지 않는다.
 function handoffOrigin(source) {
-  return source.utm_source === 'handoff' ? source.utm_campaign : source.entry_source
+  if (source.utm_source === 'handoff') return source.utm_campaign
+  return source.entry_source === 'internal' ? undefined : source.entry_source
+}
+
+function setStatus(document, text) {
+  const status = document.getElementById('handoff-status')
+  if (status) status.textContent = text
 }
 
 async function copyLink({ document, navigator }, entrySource) {
-  const status = document.getElementById('handoff-status')
   try {
     await navigator.clipboard.writeText(handoffUrl({ channel: 'copy', entrySource }))
-    status.textContent = COPIED
+    setStatus(document, COPIED)
   } catch {
-    status.textContent = COPY_FAILED
+    setStatus(document, COPY_FAILED)
   }
 }
 
