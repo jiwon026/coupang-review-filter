@@ -20,13 +20,32 @@ function attempt(action) {
   }
 }
 
+// 로컬 생성기. crypto.randomUUID 가 없는 환경(옛 사파리, 비보안 컨텍스트)을 위한 대체이고 버전 4 형식을 맞춘다.
+// 통계용 익명 번호라서 암호학적 강도는 필요 없다.
+function fallbackUUID() {
+  const hex = (count) => Array.from({ length: count }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+  const variant = (8 + Math.floor(Math.random() * 4)).toString(16)
+  return `${hex(8)}-${hex(4)}-4${hex(3)}-${variant}${hex(3)}-${hex(12)}`
+}
+
+// 주입한 생성기는 던지거나 엉뚱한 값을 줄 수 있다. 형식이 틀린 값은 저장해 봐야 다음 로드에서 버려져 번호가 매번 바뀐다.
+function newDeviceId(randomUUID) {
+  try {
+    const id = randomUUID()
+    if (typeof id === 'string' && UUID.test(id)) return id
+  } catch {
+    // 생성기를 쓸 수 없으면 아래의 대체 생성으로 넘어간다.
+  }
+  return fallbackUUID()
+}
+
 // 방문자 번호는 저장소의 값도 신뢰 경계 밖의 입력으로 본다. UUID 형식이 아니면 새로 만들어 덮어쓴다.
 function loadDeviceId(storage, randomUUID) {
   const read = attempt(() => storage.getItem(DEVICE_KEY))
   if (read.ok && typeof read.value === 'string' && UUID.test(read.value)) {
     return { deviceId: read.value, persisted: true }
   }
-  const deviceId = randomUUID()
+  const deviceId = newDeviceId(randomUUID)
   // 읽기가 실패한 저장소는 쓰기도 기대하지 않는다. 이 페이지 로드에서만 쓰는 번호가 된다.
   if (!read.ok) return { deviceId, persisted: false }
   return { deviceId, persisted: attempt(() => storage.setItem(DEVICE_KEY, deviceId)).ok }

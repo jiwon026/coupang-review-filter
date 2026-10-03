@@ -13,6 +13,7 @@ function normalizeHost(hostname) {
 }
 
 // 유입 주소에서 호스트만 남긴다. 경로와 쿼리에는 개인 정보가 실릴 수 있어 읽지 않는다.
+// ownHost 는 포트 없는 호스트 이름이어야 한다(URL.hostname 과 비교한다).
 // 자기 호스트면 'internal' 이다(처리방침에서 돌아온 경우를 외부 유입과 구분한다).
 export function referrerDomain(referrer, ownHost) {
   if (typeof referrer !== 'string' || referrer === '') return null

@@ -54,3 +54,40 @@ describe('deviceClass', () => {
     expect(deviceClass()).toBe('desktop')
   })
 })
+
+// 아이패드 사파리는 아이패드OS 13 부터 데스크톱 모드가 기본이라 맥과 같은 UA 를 보내고 userAgentData 도 없다.
+// 실제 맥과 구별하는 단서는 터치 지점 수뿐이다(맥은 0, 아이패드는 5).
+const IPAD_DESKTOP_MODE_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15'
+
+describe('deviceClass 아이패드 데스크톱 모드', () => {
+  it('Macintosh UA 에 maxTouchPoints 5 면 mobile 이다', () => {
+    expect(deviceClass({ userAgent: IPAD_DESKTOP_MODE_UA, maxTouchPoints: 5 })).toBe('mobile')
+  })
+
+  it('같은 UA 에 maxTouchPoints 0 이면 desktop 이다(실제 맥)', () => {
+    expect(deviceClass({ userAgent: IPAD_DESKTOP_MODE_UA, maxTouchPoints: 0 })).toBe('desktop')
+  })
+
+  it('maxTouchPoints 가 없어도 맥 사파리는 desktop 이다', () => {
+    expect(deviceClass({ userAgent: UA.macSafari, maxTouchPoints: undefined })).toBe('desktop')
+  })
+
+  it('maxTouchPoints 가 1 이하이거나 숫자가 아니면 맥은 desktop 이다', () => {
+    expect(deviceClass({ userAgent: UA.macSafari, maxTouchPoints: 1 })).toBe('desktop')
+    expect(deviceClass({ userAgent: UA.macSafari, maxTouchPoints: '5' })).toBe('desktop')
+    expect(deviceClass({ userAgent: UA.macSafari, maxTouchPoints: null })).toBe('desktop')
+  })
+
+  it('터치 노트북(윈도우 크롬, maxTouchPoints 10)은 desktop 이다', () => {
+    expect(deviceClass({ userAgent: UA.windowsChrome, maxTouchPoints: 10 })).toBe('desktop')
+  })
+
+  it('uaDataMobile false 가 Macintosh UA 와 maxTouchPoints 5 를 이긴다', () => {
+    expect(deviceClass({ userAgent: IPAD_DESKTOP_MODE_UA, uaDataMobile: false, maxTouchPoints: 5 })).toBe('desktop')
+  })
+
+  it('uaDataMobile true 는 maxTouchPoints 와 상관없이 mobile 이다', () => {
+    expect(deviceClass({ userAgent: UA.windowsChrome, uaDataMobile: true, maxTouchPoints: 0 })).toBe('mobile')
+  })
+})

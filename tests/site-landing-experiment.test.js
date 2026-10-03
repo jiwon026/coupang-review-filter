@@ -128,3 +128,33 @@ describe('assignInstallCta 분포', () => {
     }
   })
 })
+
+// 읽기가 일시적으로 실패한 뒤 새 값을 쓰면 이미 있는 배정을 덮어쓸 수 있다. 읽지 못했으면 쓰지 않는다.
+describe('assignInstallCta 읽기 실패 뒤 쓰기 금지', () => {
+  it('getItem 이 던지면 변형을 돌려주되 setItem 은 부르지 않는다', () => {
+    const setItem = vi.fn()
+    const storage = {
+      getItem: () => {
+        throw new Error('SecurityError')
+      },
+      setItem,
+    }
+    expect(assign({ storage, random: () => 0.1 })).toBe('hero_only')
+    expect(assign({ storage, random: () => 0.9 })).toBe('hero_sticky')
+    expect(setItem).toHaveBeenCalledTimes(0)
+  })
+})
+
+// 모바일 외의 알 수 없는 값도 실험에 넣지 않는다. 판정이 어긋났을 때 저장소를 건드리지 않는 쪽으로 닫는다.
+describe('assignInstallCta desktop 이 아닌 값', () => {
+  it('tablet 과 undefined 는 none 이고 저장소를 부르지 않는다', () => {
+    for (const unknown of ['tablet', undefined, '']) {
+      const storage = fakeStorage({ [EXP_KEY]: 'hero_sticky' })
+      const random = vi.fn(() => 0.1)
+      expect(assignInstallCta({ deviceClass: unknown, storage, random })).toBe('none')
+      expect(storage.getItem).toHaveBeenCalledTimes(0)
+      expect(storage.setItem).toHaveBeenCalledTimes(0)
+      expect(random).not.toHaveBeenCalled()
+    }
+  })
+})

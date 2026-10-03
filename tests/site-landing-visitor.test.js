@@ -200,3 +200,56 @@ describe('resolveVisitor 계측 제외', () => {
     expect(result.deviceId).toBe(FIXED_ID)
   })
 })
+
+// crypto.randomUUID 는 옛 사파리와 비보안 컨텍스트에 없다. 주입한 함수가 던지거나 엉뚱한 값을 줘도 번호는 UUID 여야 한다.
+describe('resolveVisitor 번호 생성 보호', () => {
+  const boom = () => {
+    throw new Error('randomUUID is not a function')
+  }
+
+  it('randomUUID 가 던져도 UUID 를 만들어 저장하고 다음 호출은 같은 번호다', () => {
+    const storage = fakeStorage()
+    let first
+    expect(() => {
+      first = resolveVisitor({ storage, hash: '', randomUUID: boom })
+    }).not.toThrow()
+    expect(first.deviceId).toMatch(UUID)
+    expect(first.persisted).toBe(true)
+    expect(storage.getItem(DEVICE_KEY)).toBe(first.deviceId)
+
+    const second = resolveVisitor({ storage, hash: '', randomUUID: boom })
+    expect(second.deviceId).toBe(first.deviceId)
+  })
+
+  it('randomUUID 가 UUID 가 아닌 값을 주면 저장되는 번호는 UUID 이고 호출 사이에 안정적이다', () => {
+    const storage = fakeStorage()
+    const first = resolveVisitor({ storage, hash: '', randomUUID: () => 'x' })
+    expect(first.deviceId).toMatch(UUID)
+    expect(storage.getItem(DEVICE_KEY)).toBe(first.deviceId)
+
+    const second = resolveVisitor({ storage, hash: '', randomUUID: () => 'x' })
+    expect(second.deviceId).toBe(first.deviceId)
+  })
+
+  it('randomUUID 가 문자열이 아닌 값을 줘도 UUID 로 대체한다', () => {
+    for (const bad of [undefined, null, 123, {}]) {
+      const result = resolveVisitor({ storage: fakeStorage(), hash: '', randomUUID: () => bad })
+      expect(result.deviceId).toMatch(UUID)
+    }
+  })
+
+  it('randomUUID 가 undefined 여도 UUID 를 만들고 다음 호출은 같은 번호다', () => {
+    const storage = fakeStorage()
+    const first = resolveVisitor({ storage, hash: '', randomUUID: undefined })
+    expect(first.deviceId).toMatch(UUID)
+    const second = resolveVisitor({ storage, hash: '', randomUUID: undefined })
+    expect(second.deviceId).toBe(first.deviceId)
+  })
+
+  it('대체로 만든 번호는 버전 4 형식이고 호출마다 다르다', () => {
+    const a = resolveVisitor({ storage: fakeStorage(), hash: '', randomUUID: boom })
+    const b = resolveVisitor({ storage: fakeStorage(), hash: '', randomUUID: boom })
+    expect(a.deviceId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(a.deviceId).not.toBe(b.deviceId)
+  })
+})
