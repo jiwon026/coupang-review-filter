@@ -1,14 +1,31 @@
 # 쿠팡 체험단 리뷰 필터: 컨텍스트
 
-Last Updated: 2026-10-03 (계획 3b 설계 합의, 계획 문서 작성)
+Last Updated: 2026-10-03 (계획 3b 코드 완료, 배포 전)
 
-## 계획 3b 현재 상태 (2026-10-03)
+## 계획 3b 현재 상태 (2026-10-03 저녁)
 
-- 브랜치 `feat/landing`. 명세 12절과 계획 `docs/superpowers/plans/2026-10-03-landing.md` 를 썼다. **구현은 아직 시작하지 않았다.** 사용자가 계획을 검토하고 실행 방식을 고르면 Task 0 부터 한다
-- 사용자 결정: 랜딩과 확장은 집계 수준으로만 잇는다(사람 단위 연결은 재제출할 일이 생기면 그때). 모바일은 이메일 없는 넘기기. 방문자 번호는 localStorage 지속, 배너 없음. 실험은 2종(`hero_only`, `hero_sticky`), PC 만. 첫 화면은 B 절충형(왼쪽 문장과 버튼, 오른쪽 예시 숫자 카드)
-- 확인이 필요한 가정 둘: 스토어 대시보드가 UTM 별 설치를 보여 주는지, 브라우저에서 직접 보낸 이벤트에 IP 와 지역이 남는지. 둘 다 추정하지 말고 직접 확인한다
-- 제출용 스크린샷 중 `1-banner.jpg` 는 `5 → 5` 라 랜딩에 쓰지 않는다. `2-badge.jpg` 는 가려진 리뷰어 이름과 상품 이름이 보여서 흐리게 가공해 쓴다. 사용자가 10/03 에 평점이 달라지는 상품(5 → 4.8, 40개 중 29개)의 배너와 패널 사진을 줬다. `release/screenshots/raw/banner-4.8.png`, `panel-4.8.png`(gitignore, 이 기기에만). 랜딩은 이 둘과 가공한 배지 사진을 쓴다
-- 원장은 `.superpowers/sdd/2026-10-03-landing/progress.md` 에 만든다
+- 브랜치 `feat/landing`, 코드 완료. Task 0~7 과 최종 브랜치 리뷰(opus), fix wave, 재리뷰까지 끝났다. 테스트 1079개 통과. `extension/` 의 diff 는 0줄
+- **남은 것: main 에 합쳐 푸시(= 배포). 사용자 확인을 받고 한다.** 그 뒤 배포된 주소에서 실브라우저 확인, 앰플리튜드 도착 확인(사용자), Task 9(채널 링크와 글 초안)
+- 계획 `docs/superpowers/plans/2026-10-03-landing.md`, 근거는 명세 12절. 원장 `.superpowers/sdd/2026-10-03-landing/progress.md` 에 Ruling 15개와 보류 항목
+- 사용자 결정: 랜딩과 확장은 집계 수준으로만 잇는다. 모바일은 이메일 없는 넘기기. 방문자 번호는 localStorage 지속. 실험 2종(`hero_only`, `hero_sticky`), PC 만. 첫 화면은 B 절충형
+- 랜딩은 `STORE_LIVE = false`(`site/src/landing/config.js`)라 지금은 "심사 중" 안내만 보인다. 심사 통과 뒤 이 한 줄을 true 로 바꿔 푸시하면 설치 버튼, 따라오는 바, 모바일 넘기기가 켜진다
+- **기록은 운영 주소에서만 나간다.** `SITE_ORIGIN` 의 호스트와 `location.hostname` 이 같을 때만 보낸다. 사용자 도메인을 붙이면 `config.js` 도 바꿔야 한다(안 바꾸면 기록 0건). 로컬과 Vercel 미리보기에서는 보내지 않는다
+- 사진: 사용자가 준 배너와 패널(`release/screenshots/raw/banner-4.8.png`, `panel-4.8.png`, gitignore)과 가공한 배지. 바꿀 때는 `node scripts/build-site-images.js`
+- Task 0 실측: 스토어 대시보드는 UTM 별 설치를 직접 보여 주지 않는다. GA4 를 스토어 항목에 연결해야 보인다(연결 여부는 사용자가 통과 뒤 결정). 앰플리튜드는 `ip` 필드가 없으면 위치를 조회하지 않는다
+
+### 3c 로 넘길 분석 주의 사항 (최종 리뷰에서)
+
+- 분석 조건: `store_live = true`, 실험은 `device_class = desktop` 만, `id_persisted = true` 만 방문자 수에 쓴다
+- 실험과 F1 의 앞 두 칸은 이벤트 수가 아니라 고유 `device_id` 로 읽는다(새로고침, 여러 탭마다 `Landing Viewed` 가 또 나간다)
+- `entry_source` 는 그 로드의 값이다. 채널 비교는 방문자의 첫 `Landing Viewed` 로 귀속한다. `direct` 는 잡동사니(앱 내 브라우저, no-referrer, 북마크)
+- 넘겨받은 PC 방문: `utm_source = handoff AND device_class = desktop`. 원래 채널은 `utm_campaign` 에 `clien-net` 처럼 점이 - 로 바뀌어 온다
+- `desktop` 에는 설치할 수 없는 방문자(파이어폭스, 사파리, 데스크톱 모드 태블릿)가 섞인다. 클릭률 절대값은 낮게 나오고 변형 간 비교에는 영향이 없다
+- 광고 차단기는 앰플리튜드를 막는다. 스토어 설치 수가 `Install CTA Clicked` 보다 많아도 모순이 아니다
+- `Install CTA Clicked` 는 과소 집계(우클릭 새 탭 열기는 못 잡음). 변형 간 대칭
+- `Demo Viewed` 는 창 높이에 좌우된다(높은 모니터에서는 스크롤 없이 찍힐 수 있다). 핵심 분석에 쓰지 않는다
+- `time` 은 방문자 기기의 시계. 국가, OS, 브라우저 분해는 없다(보내지 않는다)
+- 한 프로젝트에 확장과 사이트 이벤트가 같이 들어간다. `surface = site` 로 나눠 읽는다
+- `internal` 은 처리방침과 제거 페이지가 no-referrer 라 지금은 나오지 않는다
 
 ## 다음에 가장 먼저 할 것
 
