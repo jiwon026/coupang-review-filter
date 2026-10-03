@@ -7,6 +7,9 @@ import { readCommand } from '../site/src/landing/visitor.js'
 
 const PUBLIC_DIR = new URL('../site/public/', import.meta.url)
 const SRC_DIR = new URL('../site/src/', import.meta.url)
+const BANNER_SRC = new URL('../extension/src/content/banner.js', import.meta.url)
+const HIDE_LABEL = '체험단 리뷰 숨기기'
+const SHOW_LABEL = '체험단 리뷰 다시 보기'
 const PAGES = ['index.html', 'privacy.html', 'uninstalled.html']
 
 function load(name) {
@@ -287,7 +290,7 @@ describe('랜딩', () => {
     ])
     expect(rows.map((row) => norm(row.querySelector('p')))).toEqual([
       '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 숫자는 지금까지 본 리뷰를 기준으로 하고, 리뷰 다음 페이지로 넘어가면 본 만큼 더해집니다.',
-      '체험단 제공 리뷰에 표시를 붙입니다. 버튼 하나로 숨기고, 다시 누르면 다시 보여 줍니다.',
+      '체험단 제공 리뷰에 표시를 붙입니다. 리뷰 위 배너의 "체험단 리뷰 숨기기" 버튼을 누르면 숨기고, "체험단 리뷰 다시 보기" 를 누르면 다시 보여 줍니다.',
       '체험단 비중을 한눈에 봅니다. 쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
     ])
     for (const row of rows) expect(row.querySelectorAll('h2, p')).toHaveLength(2)
@@ -297,6 +300,20 @@ describe('랜딩', () => {
     const rows = [...doc.querySelectorAll('#demo .row')]
     expect(rows).toHaveLength(3)
     expect(rows.map((row) => row.classList.contains('flip'))).toEqual([false, true, false])
+  })
+
+  it('첫 행만 넓은 사진 칸 수정 클래스 row-wide-shot 을 가진다', () => {
+    const rows = [...doc.querySelectorAll('#demo .row')]
+    expect(rows.map((row) => row.classList.contains('row-wide-shot'))).toEqual([true, false, false])
+  })
+
+  it('둘째 행 문단의 버튼 이름 둘은 확장 배너의 실제 버튼 이름과 같다', () => {
+    const banner = readFileSync(BANNER_SRC, 'utf8')
+    expect(banner).toContain(HIDE_LABEL)
+    expect(banner).toContain(SHOW_LABEL)
+    const paragraph = norm(doc.querySelectorAll('#demo .row')[1].querySelector('p'))
+    expect(paragraph).toContain(`"${HIDE_LABEL}"`)
+    expect(paragraph).toContain(`"${SHOW_LABEL}"`)
   })
 
   it('한 행은 글 덩어리가 먼저, 사진이 나중이다(좁은 화면의 읽는 순서)', () => {
@@ -526,11 +543,21 @@ describe('랜딩 스타일시트', () => {
     expect(wide).toMatch(/\.row\.flip \.shot\s*\{[^}]*order:\s*-1/)
   })
 
-  it('720px 이상 블록: 사진 폭 상한은 배너 400px, 배지 360px, 패널 260px 이다', () => {
+  it('720px 이상 블록: 사진 폭 상한은 배너 500px, 배지 360px, 패널 260px 이다', () => {
     const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
-    expect(wide).toMatch(/\.shot-banner img\s*\{[^}]*max-width:\s*400px/)
+    expect(wide).toMatch(/\.shot-banner img\s*\{[^}]*max-width:\s*500px/)
     expect(wide).toMatch(/\.shot-badge img\s*\{[^}]*max-width:\s*360px/)
     expect(wide).toMatch(/\.shot-panel img\s*\{[^}]*max-width:\s*260px/)
+  })
+
+  it('720px 이상 블록: 첫 행은 사진 칸을 넓혀(글 1 대 사진 1.3) 사진 500px 이 1280px 화면의 칸에 들어간다', () => {
+    const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
+    const match = wide.match(/\.row\.row-wide-shot\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*([\d.]+)fr\)/)
+    expect(match).not.toBeNull()
+    // main 60rem(960px) 에서 좌우 여백 16px 씩과 칸 사이 40px 을 빼고 남는 폭을 비율로 나눈다
+    const columns = 960 - 32 - 40
+    const imageColumn = (columns * Number(match[1])) / (1 + Number(match[1]))
+    expect(imageColumn).toBeGreaterThanOrEqual(500)
   })
 
   it('사진은 자기 칸 안에서 가운데에 놓인다', () => {
