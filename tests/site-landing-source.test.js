@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { normalizeUtm, referrerDomain, resolveSource } from '../site/src/landing/source.js'
 
 const OWN_HOST = 'site.test'
@@ -146,5 +147,40 @@ describe('resolveSource', () => {
   it('search 가 없거나 빈 값이어도 던지지 않는다', () => {
     expect(resolveSource({ referrer: '', ownHost: OWN_HOST }).entry_source).toBe('direct')
     expect(resolveSource({ search: '', referrer: undefined, ownHost: OWN_HOST }).entry_source).toBe('direct')
+  })
+})
+
+// 글에 붙여 넣는 링크는 docs/launch/channels.md 의 표에서 가져온다. 표의 값이 랜딩의 검증을 통과하지 못하면
+// 그 채널의 유입이 조용히 버려지므로, 문서의 링크를 직접 읽어 검사한다.
+describe('유입 채널 문서의 링크', () => {
+  const doc = readFileSync(new URL('../docs/launch/channels.md', import.meta.url), 'utf8')
+  const links = [...new Set(doc.match(/https:\/\/crf-review-remover\.vercel\.app\/\?[^\s`)]+/g) ?? [])]
+
+  it('표에 채널 링크가 여섯 개 이상 있다', () => {
+    expect(links.length).toBeGreaterThanOrEqual(6)
+  })
+
+  it('모든 링크의 표식 세 개가 normalizeUtm 을 그대로 통과한다', () => {
+    for (const link of links) {
+      const params = new URL(link).searchParams
+      for (const key of ['utm_source', 'utm_medium', 'utm_campaign']) {
+        const value = params.get(key)
+        expect(value, `${link} 의 ${key}`).not.toBeNull()
+        expect(normalizeUtm(value), `${link} 의 ${key}`).toBe(value)
+      }
+    }
+  })
+
+  it('랜딩이 읽으면 entry_source 가 그 채널의 utm_source 가 된다', () => {
+    for (const link of links) {
+      const url = new URL(link)
+      const result = resolveSource({ search: url.search, referrer: '', ownHost: url.hostname })
+      expect(result.entry_source, link).toBe(url.searchParams.get('utm_source'))
+    }
+  })
+
+  it('채널마다 utm_source 가 다르다(같은 링크의 반복은 하나로 센다)', () => {
+    const sources = links.map((link) => new URL(link).searchParams.get('utm_source'))
+    expect(new Set(sources).size).toBe(sources.length)
   })
 })
