@@ -21,6 +21,9 @@ Last Updated: 2026-10-05 (스토어 게시, 랜딩 설치 버튼 켬. Task 9 진
 
 ### 3c 로 넘길 분석 주의 사항 (최종 리뷰에서)
 
+- **분석에서 뺄 본인 기기(확장):** `17049ed0-4251-4438-ac15-621e452a31ac` (2026-10-05, 스토어에서 받은 1.0.0 을 사용자가 직접 설치해 확인한 기기. Extension Installed, Onboarding Viewed, Banner Rendered 가 이 번호로 들어왔다). 계획 2 때의 진단용 기기 2개와 함께 제외한다
+- 랜딩 쪽 본인 방문: `utm_source` 가 `test_` 로 시작하는 것(`test_owner`, `test_check`, `test_clien`)은 확인용이다. 제외한다
+
 - 분석 조건: `store_live = true`, 실험은 `device_class = desktop` 만, `id_persisted = true` 만 방문자 수에 쓴다
 - 실험과 F1 의 앞 두 칸은 이벤트 수가 아니라 고유 `device_id` 로 읽는다(새로고침, 여러 탭마다 `Landing Viewed` 가 또 나간다)
 - `entry_source` 는 그 로드의 값이다. 채널 비교는 방문자의 첫 `Landing Viewed` 로 귀속한다. `direct` 는 잡동사니(앱 내 브라우저, no-referrer, 북마크)
