@@ -21,6 +21,7 @@
 | 인스타그램 | `https://crf-review-remover.vercel.app/?utm_source=instagram&utm_medium=social&utm_campaign=launch` |
 | 긱뉴스 | `https://crf-review-remover.vercel.app/?utm_source=geeknews&utm_medium=community&utm_campaign=launch` |
 | 디스콰이엇 | `https://crf-review-remover.vercel.app/?utm_source=disquiet&utm_medium=community&utm_campaign=launch` |
+| 슬랙 | `https://crf-review-remover.vercel.app/?utm_source=slack&utm_medium=community&utm_campaign=launch` |
 | 클리앙(보류) | `https://crf-review-remover.vercel.app/?utm_source=clien&utm_medium=community&utm_campaign=launch` |
 
 지킬 것:
@@ -127,6 +128,30 @@ https://crf-review-remover.vercel.app/?utm_source=threads&utm_medium=social&utm_
 리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점이 나란히 나옵니다.
 
 PC 크롬 전용이고 무료입니다. 설치 주소는 프로필 링크에 있습니다.
+
+## 초안 3-1: 슬랙
+
+2026-10-06 추가. 아는 사람들이 있는 채널에 올리는 짧은 글. 둘 중 하나만 쓴다.
+
+**가. 편한 말투**
+
+포트폴리오로 크롬 확장을 하나 만들어서 스토어에 올렸어요.
+
+쿠팡에서 리뷰 볼 때 체험단 리뷰만 골라서 표시해 주고 버튼 한 번 누르면 숨겨 줍니다. 체험단 리뷰를 빼면 평점이 몇 점인지도 같이 나와요.
+
+PC 크롬에서만 되고 무료예요. 쿠팡 자주 쓰시는 분들 한번 써 보시고 이상한 데 있으면 편하게 말씀해 주세요.
+
+https://crf-review-remover.vercel.app/?utm_source=slack&utm_medium=community&utm_campaign=launch
+
+**나. 조금 더 격식 있게**
+
+데이터 분석 포트폴리오로 크롬 확장을 만들어 스토어에 올렸습니다.
+
+쿠팡 상품 페이지에서 체험단 리뷰를 표시하고 숨겨 주는 도구입니다. 체험단 리뷰를 뺀 평점도 같이 보여 줍니다.
+
+PC 크롬 전용이고 무료입니다. 써 보시고 불편한 점이나 고칠 점을 알려 주시면 큰 도움이 됩니다.
+
+https://crf-review-remover.vercel.app/?utm_source=slack&utm_medium=community&utm_campaign=launch
 
 ## 초안 4: 긱뉴스 Show GN
 
