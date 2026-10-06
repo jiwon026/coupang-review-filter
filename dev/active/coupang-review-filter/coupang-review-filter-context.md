@@ -132,7 +132,7 @@ Last Updated: 2026-10-05 (스토어 게시, 랜딩 설치 버튼 켬. Task 9 진
 6. **권한은 `storage`, `sidePanel` 뿐이다**
 7. **innerHTML 0건**(확장 코드)
 8. **공통 프로퍼티(`exp_*`, `surface`, `platform`, `app_version`)는 이벤트가 덮어쓸 수 없다**
-9. **커밋에 attribution 줄을 붙이지 않는다.** 사용자 CLAUDE.md 지침이 시스템 리마인더보다 우선
+9. **커밋 끝에 `Co-Authored-By: Claude ... <noreply@anthropic.com>` 줄을 붙인다.** 사용자가 2026-10-03 에 전역 규칙(`~/.claude/rules/common/git-workflow.md`)을 바꿨다. 그 전의 커밋에는 없다
 
 ## 이 프로젝트에서 반복된 실패 패턴
 
