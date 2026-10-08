@@ -15,16 +15,32 @@ function createDetailButton(onDetail) {
   return detail
 }
 
+function createNote(text) {
+  const note = document.createElement('p')
+  note.className = 'crf-note'
+  note.textContent = text
+  return note
+}
+
+// options.note 는 조건 보기(무신사의 체험단 조건)에서 숨김 버튼 자리에 두는 안내 글이다.
+// summary 가 null 이면 누적이 아직 없는 조건 보기다. 안내 글 한 줄만 둔다.
 export function createBanner(summary, options) {
   const root = document.createElement('div')
   root.className = 'crf-banner'
   root.setAttribute('data-crf-banner', '1')
+
+  if (summary === null) {
+    root.appendChild(createNote(options.note))
+    return root
+  }
 
   if (summary.sponsoredCount === 0) {
     const clean = document.createElement('p')
     clean.className = 'crf-headline'
     clean.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
     root.appendChild(clean)
+    // 누적에는 체험단이 없는데 화면에는 체험단 후기만 보이는 조건 보기다. 안내 글로 알린다.
+    if (options.note) root.appendChild(createNote(options.note))
     if (typeof options.onDetail === 'function') root.appendChild(createDetailButton(options.onDetail))
     return root
   }
@@ -52,12 +68,9 @@ export function createBanner(summary, options) {
   sub.textContent = subText
   root.appendChild(sub)
 
-  if (options.sponsoredOnly) {
-    // 체험단 후기만 모아 보는 조건에서는 숨기지 않으므로 버튼 대신 안내 글을 둔다.
-    const note = document.createElement('p')
-    note.className = 'crf-note'
-    note.textContent = '체험단 후기만 모아 보는 중입니다'
-    root.appendChild(note)
+  if (options.note) {
+    // 조건 보기에서는 숨기지 않으므로 버튼 대신 안내 글을 둔다.
+    root.appendChild(createNote(options.note))
   } else {
     const toggle = document.createElement('button')
     toggle.type = 'button'

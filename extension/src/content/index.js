@@ -22,6 +22,11 @@ const DEFAULT_VARIANTS = { default_filter: 'off', banner_copy: 'rating' }
 // 묶음 관측(무신사)에서 새로 본 후기 번호가 이만큼 쌓일 때마다 Banner Rendered 를 한 번 보낸다.
 const BATCH_SIZE = 10
 const BANNER_SELECTOR = '[data-crf-banner="1"]'
+// 조건 보기(체험단 조건의 상태가 on 이나 unknown)에서 숨김 버튼 대신 보여 주는 안내 글.
+const CONDITION_NOTES = Object.freeze({
+  on: '체험단 후기만 모아 보는 중입니다',
+  unknown: '무신사 화면이 바뀌어 지금은 숨기기를 쓸 수 없습니다',
+})
 
 const state = {
   hidden: false,
@@ -208,12 +213,14 @@ function currentSort() {
   return site === coupang ? detectSort(document) : site.detectSort(document)
 }
 
-// 체험단 후기만 모아 보는 조건인지. 읽다가 던져도 배지와 배너는 동작해야 하므로 아닌 것으로 본다.
-function sponsoredOnlyView() {
+// 체험단 후기만 모아 보는 조건의 상태: 'off', 'on', 'unknown'(버튼은 있는데 읽지 못한다).
+// 읽다가 던져도 배지와 배너는 동작해야 하므로 고르지 않은 것으로 본다.
+function sponsoredFilterState() {
   try {
-    return site.isSponsoredOnlyView(document) === true
+    const value = site.sponsoredFilterState(document)
+    return Object.hasOwn(CONDITION_NOTES, value) ? value : 'off'
   } catch (error) {
-    return false
+    return 'off'
   }
 }
 
@@ -301,7 +308,7 @@ function isNewObservation(observationKey) {
 }
 
 // Banner Rendered 프로퍼티. track 의 보호 안에서 계산한다.
-function observationProperties(reviews, summary, pagesSeen, sponsoredOnly) {
+function observationProperties(reviews, summary, pagesSeen) {
   const sort = currentSort()
   // 정렬을 바꾸면 쿠팡은 1페이지를 보여 주므로 sort_pages_seen = 1 이 그 정렬의 첫 페이지다.
   if (sort !== state.observedSort) {
@@ -324,9 +331,36 @@ function observationProperties(reviews, summary, pagesSeen, sponsoredOnly) {
     sort_pages_seen: state.sortPagesSeen,
     // 같은 페이지 재방문을 분석에서 중복 제거하는 키. 공개 id 만 쓰고 본문은 싣지 않는다.
     page_first_review_id: reviews[0].hasStableId ? withKeyPrefix(reviews[0].id) : null,
-    // 체험단 후기만 모아 보는 조건에서 그린 배너다. 이때의 체험단 비중은 조건이 고른 결과다.
-    sponsored_only_view: sponsoredOnly,
   }
+}
+
+function openPanel() {
+  sendToBackground({ type: MESSAGES.OPEN_PANEL })
+}
+
+function placeBanner(container, banner) {
+  removeBanner()
+  const anchor = site.bannerAnchor(container)
+  anchor.parentNode.insertBefore(banner, anchor)
+}
+
+// 조건 보기: 화면의 후기는 사용자가 고른 조건의 결과라 누적하지 않고 Banner Rendered 도 보내지 않는다.
+// 배너와 요약은 조건에 들어가기 전의 누적 그대로다. 누적이 비어 있으면 안내 글만 보여 주고 요약은 보내지 않는다.
+function renderConditionView(container, conditionState) {
+  if (conditionState === 'unknown') reportExtensionError({ error_type: 'SponsoredFilterUnknown' })
+
+  const summary = state.seen.size > 0 ? summarize([...state.seen.values()]) : null
+  if (summary !== null) {
+    sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary: { ...summary, site: site.id } })
+  }
+  placeBanner(
+    container,
+    createBanner(summary, {
+      copyVariant: state.variants.banner_copy,
+      note: CONDITION_NOTES[conditionState],
+      onDetail: openPanel,
+    }),
+  )
 }
 
 function renderReviews({ force = false } = {}) {
@@ -345,15 +379,21 @@ function renderReviews({ force = false } = {}) {
   if (reviews.length === 0) return
 
   // 같은 카드라도 조건 보기에 들어가거나 나오면 다시 그린다.
-  const sponsoredOnly = sponsoredOnlyView()
-  const redrawKey = `${redrawKeyOf(reviews)}|${sponsoredOnly}`
+  const conditionState = sponsoredFilterState()
+  const conditionView = conditionState !== 'off'
+  const redrawKey = `${redrawKeyOf(reviews)}|${conditionState}`
   const observationKey = observationKeyOf(reviews)
   const bannerPresent = document.querySelector(BANNER_SELECTOR) !== null
   if (redrawKey === state.redrawKey && bannerPresent && !force) return
 
   markSponsored(reviews)
-  // 조건 보기에서는 화면의 후기가 전부 체험단이라 숨기지 않는다. 나오면 다음 렌더가 원래 설정대로 다시 숨긴다.
-  applyFilter(reviews, state.hidden && !sponsoredOnly, site.hiddenClass)
+  // 조건 보기에서는 숨기지 않는다. 나오면 다음 렌더가 지금 화면의 카드를 누적하고 원래 설정대로 다시 숨긴다.
+  applyFilter(reviews, state.hidden && !conditionView, site.hiddenClass)
+  if (conditionView) {
+    renderConditionView(container, conditionState)
+    state.redrawKey = redrawKey
+    return
+  }
 
   state.unobservedCount += countUnseen(reviews)
   const summary = summarize(accumulate(reviews))
@@ -376,7 +416,7 @@ function renderReviews({ force = false } = {}) {
     const pagesSeen = state.pagesSeen
     track(
       EVENTS.BANNER_RENDERED,
-      () => observationProperties(reviews, summary, pagesSeen, sponsoredOnly),
+      () => observationProperties(reviews, summary, pagesSeen),
       () => ({ filter_state: filterState() }),
     )
   }
@@ -387,7 +427,6 @@ function renderReviews({ force = false } = {}) {
   const banner = createBanner(summary, {
     hidden: state.hidden,
     copyVariant: state.variants.banner_copy,
-    sponsoredOnly,
     onToggle: (next) => {
       state.hidden = next
       state.userToggled = true
@@ -403,14 +442,10 @@ function renderReviews({ force = false } = {}) {
       )
       render({ force: true })
     },
-    onDetail: () => {
-      sendToBackground({ type: MESSAGES.OPEN_PANEL })
-    },
+    onDetail: openPanel,
   })
 
-  removeBanner()
-  const anchor = site.bannerAnchor(container)
-  anchor.parentNode.insertBefore(banner, anchor)
+  placeBanner(container, banner)
 }
 
 // 변형 확정. 응답(변형 없음과 lastError 포함), 응답 대기 시간 초과, 요청 실패 중 먼저 오는 하나만 반영한다.

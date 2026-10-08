@@ -18,6 +18,7 @@ const LIST = '[class*="GoodsReviewStaticList__Container"]'
 const SPONSORED_FILTER = '[data-filter-value="체험단"]'
 const NOTICE = '이 후기는 제품을 무상으로 제공받아 직접 사용해 본 후 작성되었습니다.'
 const NOTE = '체험단 후기만 모아 보는 중입니다'
+const UNKNOWN_NOTE = '무신사 화면이 바뀌어 지금은 숨기기를 쓸 수 없습니다'
 
 const ON = { default_filter: 'on', banner_copy: 'rating' }
 const OFF = { default_filter: 'off', banner_copy: 'rating' }
@@ -196,7 +197,6 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
       expect(rendered).toHaveLength(1)
       expect(rendered[0].properties.page_first_review_id).toBe('musinsa:90000001')
       expect(rendered[0].properties.review_sort).toBe('useful')
-      expect(rendered[0].properties.sponsored_only_view).toBe(false)
       expect(rendered[0].properties.review_count).toBe(3)
       expect(rendered[0].properties.sponsored_count).toBe(1)
     })
@@ -321,30 +321,200 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
       expect(banners(doc)[0].querySelector('.crf-toggle').getAttribute('aria-pressed')).toBe('true')
     })
 
-    it('조건 안에서 그린 배너의 Banner Rendered 는 sponsored_only_view 가 true 다', async () => {
+    const sponsoredBatch = (from, count) =>
+      Array.from({ length: count }, (_, index) => card(String(from + index), { sponsored: true }))
+
+    // 조건 버튼과 카드를 한 번에 바꾼다.
+    async function switchView(doc, className, cards) {
+      doc.querySelector(SPONSORED_FILTER).className = className
+      await showCards(doc, cards)
+    }
+
+    it('조건 안에서 새 카드가 10장 나와도 누적하지 않고 Banner Rendered 를 보내지 않는다', async () => {
+      const doc = await boot(musinsaFixture)
+      expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+      const trackedBefore = tracked().length
+      const summariesBefore = summaries().length
+
+      await switchView(doc, 'border border-black', sponsoredBatch(101, 10))
+
+      expect(tracked()).toHaveLength(trackedBefore)
+      // 요약은 들어가기 전의 누적 그대로 다시 보낸다.
+      expect(summaries().length).toBeGreaterThan(summariesBefore)
+      expect(summaries().at(-1).summary.site).toBe('musinsa')
+      expect(summaries().at(-1).summary.total).toBe(3)
+      expect(summaries().at(-1).summary.sponsoredCount).toBe(1)
+      for (const message of summaries()) expect(message.summary.total).toBe(3)
+      // 화면의 숫자도 조건에 들어가기 전의 누적 그대로다. 배지는 붙인다.
+      expect(banners(doc)[0].textContent).toContain('리뷰 3개 중 체험단 1개')
+      expect(banners(doc)[0].querySelector('.crf-note').textContent).toBe(NOTE)
+      expect(doc.querySelectorAll('.crf-badge')).toHaveLength(10)
+
+      // 조건 안에서 카드가 더 바뀌어도 같다.
+      await showCards(doc, sponsoredBatch(111, 10))
+      expect(tracked()).toHaveLength(trackedBefore)
+      expect(summaries().at(-1).summary.total).toBe(3)
+    })
+
+    it('조건에서 나온 뒤의 Banner Rendered 에는 조건 안에서만 본 번호가 없다', async () => {
+      const doc = await boot(musinsaFixture)
+      await switchView(doc, 'border border-black', sponsoredBatch(101, 10))
+
+      // 나오면서 새 일반 후기 10장과 이미 본 체험단 후기 한 장이 보인다.
+      const fresh = Array.from({ length: 10 }, (_, index) => card(String(201 + index)))
+      await switchView(doc, 'border border-gray-300', [
+        card('90000001', { sponsored: true }),
+        ...fresh,
+      ])
+
+      const rendered = trackedOfType('Banner Rendered')
+      expect(rendered).toHaveLength(2)
+      expect(rendered[1].properties.review_count).toBe(13)
+      expect(rendered[1].properties.sponsored_count).toBe(1)
+      expect(rendered[1].properties.pages_seen).toBe(2)
+      expect(rendered[1].properties.sort_pages_seen).toBe(2)
+      expect(summaries().at(-1).summary.total).toBe(13)
+      expect(banners(doc)[0].textContent).toContain('리뷰 13개 중 체험단 1개')
+    })
+
+    it('조건 안에서 본 번호는 묶음 관측의 세던 수에도 넣지 않는다', async () => {
+      const doc = await boot(musinsaFixture)
+      // 새 번호 9개를 세어 둔다.
+      const nine = Array.from({ length: 9 }, (_, index) => card(String(201 + index)))
+      await showCards(doc, nine)
+      expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+
+      await switchView(doc, 'border border-black', sponsoredBatch(101, 10))
+      await switchView(doc, 'border border-gray-300', nine)
+      expect(trackedOfType('Banner Rendered')).toHaveLength(1)
+
+      // 열 번째 새 번호에서 나간다.
+      await showCards(doc, [card('210')])
+      const rendered = trackedOfType('Banner Rendered')
+      expect(rendered).toHaveLength(2)
+      expect(rendered[1].properties.review_count).toBe(13)
+    })
+
+    it('누적이 빈 채로 조건 보기면 안내 글만 있는 배너를 보이고 아무것도 보내지 않는다', async () => {
       const doc = await boot(musinsaFixture.replace('border-gray-300', 'border-black'), {
         variants: ON,
       })
 
+      expect(banners(doc)).toHaveLength(1)
+      expect([...banners(doc)[0].children].map((child) => child.className)).toEqual(['crf-note'])
+      expect(banners(doc)[0].textContent).toBe(NOTE)
+      expect(doc.querySelectorAll('.crf-badge')).toHaveLength(1)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+      expect(tracked()).toHaveLength(0)
+      expect(summaries()).toHaveLength(0)
+
+      // 나오면 지금 화면의 카드를 누적하고 원래 숨김 설정을 적용한다.
+      await setSponsoredOnly(doc, false)
+
       const rendered = trackedOfType('Banner Rendered')
       expect(rendered).toHaveLength(1)
-      expect(rendered[0].properties.sponsored_only_view).toBe(true)
+      expect(rendered[0].properties.pages_seen).toBe(1)
+      expect(rendered[0].properties.review_count).toBe(3)
       expect(rendered[0].properties.filter_state).toBe('on')
-      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
-      expect(banners(doc)[0].querySelector('.crf-note').textContent).toBe(NOTE)
+      expect(summaries().at(-1).summary.total).toBe(3)
+      expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+      expect(banners(doc)[0].querySelector('.crf-note')).toBeNull()
     })
 
-    it('조건 안에서 본 후기도 누적에 넣고 번호로 중복을 거른다', async () => {
-      const doc = await boot(musinsaFixture)
+    it('조건 안에서 누른 구매 버튼은 들어가기 전의 누적을 싣는다', async () => {
+      const doc = await boot(
+        `${musinsaFixture}<button type="button" data-button-id="basket_btn">장바구니</button>`,
+      )
+      await switchView(doc, 'border border-black', sponsoredBatch(101, 10))
 
-      doc.querySelector(SPONSORED_FILTER).className = 'border border-black'
-      await showCards(doc, [
-        card('90000001', { sponsored: true }),
-        card('101', { sponsored: true }),
-      ])
+      doc.querySelector('[data-button-id="basket_btn"]').click()
+      await tick()
 
-      expect(summaries().at(-1).summary.total).toBe(4)
-      expect(summaries().at(-1).summary.sponsoredCount).toBe(2)
+      const clicked = trackedOfType('Purchase Intent Clicked')
+      expect(clicked).toHaveLength(1)
+      expect(clicked[0].properties.review_count).toBe(3)
+      expect(clicked[0].properties.pages_seen).toBe(1)
+    })
+
+    describe('조건 버튼의 상태를 모를 때', () => {
+      it('숨기지 않고 다른 안내 글을 보이며 SponsoredFilterUnknown 을 상품당 한 번 보낸다', async () => {
+        const doc = await boot(musinsaFixture, { variants: ON })
+        expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+        const renderedBefore = trackedOfType('Banner Rendered').length
+
+        // 두 class 가 모두 없다.
+        doc.querySelector(SPONSORED_FILTER).className = 'border border-neutral-200'
+        await touchDom(doc)
+
+        expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+        expect(sponsoredCard(doc).querySelector('.crf-badge')).not.toBeNull()
+        expect(banners(doc)[0].querySelector('.crf-toggle')).toBeNull()
+        expect(banners(doc)[0].querySelector('.crf-note').textContent).toBe(UNKNOWN_NOTE)
+        expect(banners(doc)[0].textContent).toContain('리뷰 3개 중 체험단 1개')
+
+        // 모르는 동안 카드가 바뀌어도 누적하지 않고 오류도 다시 보내지 않는다.
+        await showCards(doc, sponsoredBatch(101, 10))
+        await showCards(doc, sponsoredBatch(111, 10))
+
+        const errors = trackedOfType('Extension Error')
+        expect(errors).toHaveLength(1)
+        expect(errors[0].properties.error_type).toBe('SponsoredFilterUnknown')
+        expect(errors[0].properties.site).toBe('musinsa')
+        expect(errors[0].properties.product_id).toBe('musinsa:4633343')
+        expect(trackedOfType('Banner Rendered')).toHaveLength(renderedBefore)
+        expect(summaries().at(-1).summary.total).toBe(3)
+      })
+
+      it('두 class 가 모두 있어도 모르는 상태다', async () => {
+        const doc = await boot(musinsaFixture, { variants: ON })
+
+        doc.querySelector(SPONSORED_FILTER).className = 'border border-black border-gray-300'
+        await touchDom(doc)
+
+        expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+        expect(banners(doc)[0].querySelector('.crf-note').textContent).toBe(UNKNOWN_NOTE)
+        expect(trackedOfType('Extension Error')).toHaveLength(1)
+      })
+
+      it('다른 상품으로 넘어가면 다시 한 번 보낸다', async () => {
+        const doc = await boot(musinsaFixture.replace('border-gray-300', 'border-neutral-200'))
+        expect(trackedOfType('Extension Error')).toHaveLength(1)
+        expect(banners(doc)[0].textContent).toBe(UNKNOWN_NOTE)
+
+        await moveTo(doc, '/products/777')
+
+        const errors = trackedOfType('Extension Error').filter(
+          (message) => message.properties.error_type === 'SponsoredFilterUnknown',
+        )
+        expect(errors).toHaveLength(2)
+        expect(errors[1].properties.product_id).toBe('musinsa:777')
+      })
+
+      it('조건을 고르기만 한 동안에는 오류를 보내지 않는다', async () => {
+        const doc = await boot(musinsaFixture)
+        await setSponsoredOnly(doc, true)
+        expect(trackedOfType('Extension Error')).toHaveLength(0)
+      })
+    })
+
+    it('어떤 이벤트에도 sponsored_only_view 가 없다', async () => {
+      const doc = await boot(
+        `${musinsaFixture}<button type="button" data-button-id="basket_btn">장바구니</button>`,
+      )
+      banners(doc)[0].querySelector('.crf-toggle').click()
+      await tick()
+      await switchView(doc, 'border border-black', sponsoredBatch(101, 10))
+      await switchView(doc, 'border border-neutral-200', sponsoredBatch(111, 10))
+      await switchView(doc, 'border border-gray-300', sponsoredBatch(121, 10))
+      doc.querySelector('[data-button-id="basket_btn"]').click()
+      await tick()
+
+      expect(new Set(tracked().map((message) => message.eventType))).toEqual(
+        new Set(['Banner Rendered', 'Filter Toggled', 'Extension Error', 'Purchase Intent Clicked']),
+      )
+      for (const message of tracked()) {
+        expect('sponsored_only_view' in message.properties).toBe(false)
+      }
     })
 
     it('조건 읽기가 던져도 배지와 배너는 동작한다', async () => {
@@ -354,7 +524,7 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
           ...actual,
           musinsa: {
             ...actual.musinsa,
-            isSponsoredOnlyView: () => {
+            sponsoredFilterState: () => {
               throw new Error('조건 읽기 실패')
             },
           },
@@ -366,7 +536,7 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
       expect(banners(doc)).toHaveLength(1)
       expect(doc.querySelectorAll('.crf-badge')).toHaveLength(1)
       expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
-      expect(trackedOfType('Banner Rendered')[0].properties.sponsored_only_view).toBe(false)
+      expect(trackedOfType('Banner Rendered')).toHaveLength(1)
       expect(trackedOfType('Extension Error')).toHaveLength(0)
     })
   })
@@ -532,13 +702,30 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
 })
 
 describe('쿠팡에서의 콘텐츠 스크립트(무신사 지원 뒤)', () => {
-  it('Banner Rendered 에 site 와 sponsored_only_view 가 더해지고 번호에는 접두가 없다', async () => {
+  it('Banner Rendered 에 site 만 더해지고 번호에는 접두가 없다', async () => {
     await boot(coupangFixture, { url: COUPANG_URL })
 
     const rendered = trackedOfType('Banner Rendered')
     expect(rendered).toHaveLength(1)
     expect(rendered[0].properties.site).toBe('coupang')
-    expect(rendered[0].properties.sponsored_only_view).toBe(false)
+    // 1.0.0 의 프로퍼티에 site 하나만 더해진 것이다.
+    expect(Object.keys(rendered[0].properties).sort()).toEqual([
+      'filter_state',
+      'page_first_review_id',
+      'page_review_count',
+      'page_sponsored_count',
+      'pages_seen',
+      'product_id',
+      'rating_delta',
+      'rating_filtered',
+      'rating_official',
+      'review_count',
+      'review_sort',
+      'site',
+      'sort_pages_seen',
+      'sponsored_count',
+      'sponsored_ratio',
+    ])
     expect(rendered[0].properties.product_id).toBe('1')
     expect(rendered[0].properties.page_first_review_id).toBe('9001001')
     expect(summaries().at(-1).summary.site).toBe('coupang')
@@ -553,6 +740,9 @@ describe('쿠팡에서의 콘텐츠 스크립트(무신사 지원 뒤)', () => {
     expect(doc.querySelectorAll('.crf-hidden')).toHaveLength(2)
     expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
     expect(trackedOfType('Filter Toggled')[0].properties.site).toBe('coupang')
+    for (const message of tracked()) {
+      expect('sponsored_only_view' in message.properties).toBe(false)
+    }
   })
 
   it('쿠팡의 관찰 옵션은 그대로다(속성을 보지 않는다)', async () => {

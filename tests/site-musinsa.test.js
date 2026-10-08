@@ -186,26 +186,45 @@ describe('무신사 부품이 픽스처를 읽는다', () => {
     })
   })
 
-  describe('isSponsoredOnlyView', () => {
-    it('픽스처는 false', () => {
+  describe('sponsoredFilterState', () => {
+    it('픽스처는 off', () => {
       expect(doc.querySelector(SPONSORED_FILTER).classList.contains('border-gray-300')).toBe(true)
-      expect(musinsa.isSponsoredOnlyView(doc)).toBe(false)
+      expect(musinsa.sponsoredFilterState(doc)).toBe('off')
     })
 
-    it('class 를 border-black 으로 바꾸면 true', () => {
+    it('class 를 border-black 으로 바꾸면 on', () => {
       const filter = doc.querySelector(SPONSORED_FILTER)
       filter.classList.replace('border-gray-300', 'border-black')
-      expect(musinsa.isSponsoredOnlyView(doc)).toBe(true)
+      expect(musinsa.sponsoredFilterState(doc)).toBe('on')
     })
 
-    it('요소가 없으면 false', () => {
+    it('버튼은 있는데 두 class 가 모두 없으면 unknown', () => {
+      doc.querySelector(SPONSORED_FILTER).className = 'border border-neutral-200'
+      expect(musinsa.sponsoredFilterState(doc)).toBe('unknown')
+    })
+
+    it('class 가 아예 없어도 unknown', () => {
+      doc.querySelector(SPONSORED_FILTER).removeAttribute('class')
+      expect(musinsa.sponsoredFilterState(doc)).toBe('unknown')
+    })
+
+    it('두 class 가 모두 있으면 unknown', () => {
+      doc.querySelector(SPONSORED_FILTER).classList.add('border-black')
+      expect(musinsa.sponsoredFilterState(doc)).toBe('unknown')
+    })
+
+    it('요소가 없으면 off', () => {
       doc.querySelector(SPONSORED_FILTER).remove()
-      expect(musinsa.isSponsoredOnlyView(doc)).toBe(false)
+      expect(musinsa.sponsoredFilterState(doc)).toBe('off')
     })
 
-    it('후기 구역이 없으면 false', () => {
+    it('후기 구역이 없으면 off', () => {
       const empty = new JSDOM('<body></body>').window.document
-      expect(musinsa.isSponsoredOnlyView(empty)).toBe(false)
+      expect(musinsa.sponsoredFilterState(empty)).toBe('off')
+    })
+
+    it('옛 이름의 함수는 없다', () => {
+      expect('isSponsoredOnlyView' in musinsa).toBe(false)
     })
   })
 

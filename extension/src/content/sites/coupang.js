@@ -82,7 +82,7 @@ export const coupang = {
   // 배너는 후기 구역 바로 앞에 넣는다.
   bannerAnchor: (container) => container,
   // 쿠팡에는 체험단 후기만 모아 보는 조건이 없다.
-  isSponsoredOnlyView: () => false,
+  sponsoredFilterState: () => 'off',
   hiddenClass: 'crf-hidden',
   observation: 'page',
   // 쿠팡은 페이지를 넘기면 카드를 새로 그린다. 속성 변화는 보지 않는다.

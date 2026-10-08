@@ -23,8 +23,10 @@ export const PURCHASE_SELECTORS = {
   buyNow: '[data-button-id="2depth_buy_btn"]',
 }
 
-// 체험단 조건을 고르면 버튼의 class 에 이 토큰이 붙는다. 다른 속성은 달라지지 않는다.
+// 체험단 조건을 고르면 버튼의 class 에 border-black 이 붙고 고르지 않으면 border-gray-300 이 붙는다.
+// 다른 속성은 달라지지 않는다.
 const SELECTED_FILTER_CLASS = 'border-black'
+const UNSELECTED_FILTER_CLASS = 'border-gray-300'
 
 // 상품 페이지와 후기 전체보기. 번호 뒤에 다른 글자가 이어지면 대상 페이지가 아니다.
 const PRODUCT_PATH = /^\/(?:products|review\/goods)\/(\d+)(?:\/|$)/
@@ -71,10 +73,17 @@ function detectSort(root) {
   return SORT_KEYS.get(button.textContent.trim()) ?? 'unknown'
 }
 
-function isSponsoredOnlyView(root) {
+// 체험단 조건을 골랐는지. 버튼이 없으면 고르지 않은 것이다.
+// 버튼은 있는데 두 토큰 가운데 정확히 하나가 아니면 화면이 바뀐 것이라 unknown 을 돌려준다.
+function sponsoredFilterState(root) {
   const container = findContainer(root)
   const filter = container ? container.querySelector(SELECTORS.sponsoredFilter) : null
-  return filter ? filter.classList.contains(SELECTED_FILTER_CLASS) : false
+  if (!filter) return 'off'
+
+  const selected = filter.classList.contains(SELECTED_FILTER_CLASS)
+  const unselected = filter.classList.contains(UNSELECTED_FILTER_CLASS)
+  if (selected === unselected) return 'unknown'
+  return selected ? 'on' : 'off'
 }
 
 export const musinsa = {
@@ -91,7 +100,7 @@ export const musinsa = {
   purchase: PURCHASE_SELECTORS,
   // 배너는 후기 구역 바로 앞에 넣는다.
   bannerAnchor: (container) => container,
-  isSponsoredOnlyView,
+  sponsoredFilterState,
   // 화면 밖 카드를 지우는 목록이 카드 높이로 자리를 잡으므로 없애지 않고 접는다.
   hiddenClass: 'crf-collapsed',
   observation: 'batch',

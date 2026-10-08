@@ -128,20 +128,24 @@ describe('createBanner', () => {
   })
 
   describe('체험단 후기만 모아 보는 조건', () => {
-    it('sponsoredOnly 면 숨김 버튼 대신 안내 글을 넣는다', () => {
-      const el = createBanner(summary, { hidden: true, sponsoredOnly: true, onToggle: () => {} })
-      expect(el.querySelector('.crf-toggle')).toBeNull()
-      const notes = el.querySelectorAll('.crf-note')
-      expect(notes).toHaveLength(1)
-      expect(notes[0].tagName).toBe('P')
-      expect(notes[0].textContent).toBe('체험단 후기만 모아 보는 중입니다')
+    const NOTE = '체험단 후기만 모아 보는 중입니다'
+
+    it('note 가 있으면 숨김 버튼 대신 그 글을 넣는다', () => {
+      for (const note of [NOTE, '무신사 화면이 바뀌어 지금은 숨기기를 쓸 수 없습니다']) {
+        const el = createBanner(summary, { hidden: true, note, onToggle: () => {} })
+        expect(el.querySelector('.crf-toggle')).toBeNull()
+        const notes = el.querySelectorAll('.crf-note')
+        expect(notes).toHaveLength(1)
+        expect(notes[0].tagName).toBe('P')
+        expect(notes[0].textContent).toBe(note)
+      }
     })
 
-    it('sponsoredOnly 여도 나머지 줄은 같다', () => {
+    it('note 가 있어도 나머지 줄은 같다', () => {
       const onDetail = vi.fn()
       const options = { hidden: false, onToggle: () => {}, onDetail }
       const plain = createBanner(summary, options)
-      const el = createBanner(summary, { ...options, sponsoredOnly: true })
+      const el = createBanner(summary, { ...options, note: NOTE })
 
       for (const selector of ['.crf-headline', '.crf-sub', '.crf-scope', '.crf-detail']) {
         expect(el.querySelector(selector).textContent).toBe(plain.querySelector(selector).textContent)
@@ -157,24 +161,41 @@ describe('createBanner', () => {
       expect(onDetail).toHaveBeenCalledTimes(1)
     })
 
-    it('옵션이 없거나 false 면 숨김 버튼을 넣고 안내 글은 없다', () => {
-      for (const options of [{}, { sponsoredOnly: false }]) {
+    it('note 가 없으면 숨김 버튼을 넣고 안내 글은 없다', () => {
+      for (const options of [{}, { note: undefined }, { note: null }]) {
         const el = createBanner(summary, { hidden: false, onToggle: () => {}, ...options })
         expect(el.querySelector('.crf-toggle')).not.toBeNull()
         expect(el.querySelector('.crf-note')).toBeNull()
       }
     })
 
-    it('체험단 0건 배너는 sponsoredOnly 여도 바뀌지 않는다', () => {
+    // 누적에 체험단이 없는데 화면에는 체험단 후기만 보이는 경우다. 안내 글이 없으면 배너와 화면이 어긋나 보인다.
+    it('체험단 0건 배너에도 note 가 있으면 안내 글을 더한다', () => {
       const clean = {
         total: 100, sponsoredCount: 0, organicCount: 100, sponsoredRatio: 0,
         ratingOfficial: 4.5, ratingFiltered: 4.5, ratingDelta: 0,
       }
       const options = { hidden: false, onToggle: () => {}, onDetail: () => {} }
       const plain = createBanner(clean, options)
-      const el = createBanner(clean, { ...options, sponsoredOnly: true })
-      expect(el.querySelector('.crf-note')).toBeNull()
-      expect(el.textContent).toBe(plain.textContent)
+      const el = createBanner(clean, { ...options, note: NOTE })
+      expect(plain.querySelector('.crf-note')).toBeNull()
+      expect([...el.children].map((child) => child.className)).toEqual([
+        'crf-headline',
+        'crf-note',
+        'crf-detail',
+      ])
+      expect(el.querySelector('.crf-headline').textContent).toBe(
+        plain.querySelector('.crf-headline').textContent,
+      )
+      expect(el.querySelector('.crf-note').textContent).toBe(NOTE)
+    })
+
+    it('요약이 없으면 안내 글 한 줄만 있는 배너를 만든다', () => {
+      const el = createBanner(null, { note: NOTE, onToggle: () => {}, onDetail: () => {} })
+      expect(el.getAttribute('data-crf-banner')).toBe('1')
+      expect(el.className).toBe('crf-banner')
+      expect([...el.children].map((child) => child.className)).toEqual(['crf-note'])
+      expect(el.textContent).toBe(NOTE)
     })
   })
 

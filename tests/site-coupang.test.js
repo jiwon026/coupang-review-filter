@@ -115,8 +115,9 @@ describe('쿠팡 부품이 픽스처를 읽는다', () => {
     expect(coupang.bannerAnchor(container)).toBe(container)
   })
 
-  it('조건 보기는 항상 false', () => {
-    expect(coupang.isSponsoredOnlyView(doc)).toBe(false)
+  it('체험단 조건은 항상 off', () => {
+    expect(coupang.sponsoredFilterState(doc)).toBe('off')
+    expect('isSponsoredOnlyView' in coupang).toBe(false)
   })
 
   it('detectSort 는 sort.js 가 내보내는 것과 같은 판정이다', () => {
