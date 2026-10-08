@@ -463,6 +463,62 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
     })
   })
 
+  // 다시 쓰인 카드에는 앞 후기에 붙인 배지와 접힘이 남아 있다. 판정이 바뀌면 함께 정리한다.
+  describe('다시 쓰인 카드의 표시와 숨김', () => {
+    it('체험단이던 카드가 일반 후기로 다시 쓰이면 배지와 접힘이 없다', async () => {
+      const doc = await boot(musinsaFixture, { variants: ON })
+      const element = sponsoredCard(doc)
+      expect(element.querySelectorAll('.crf-badge')).toHaveLength(1)
+      expect(element.classList.contains('crf-collapsed')).toBe(true)
+
+      element.setAttribute('data-content-id', '90000101')
+      element.querySelector('[class*="ExperienceLabelInfo__Wrapper"]').remove()
+      await tick()
+
+      expect(element.querySelector('.crf-badge')).toBeNull()
+      expect(element.classList.contains('crf-collapsed')).toBe(false)
+      expect(doc.querySelectorAll('.crf-badge')).toHaveLength(0)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+      expect(summaries().at(-1).summary.total).toBe(4)
+      expect(summaries().at(-1).summary.sponsoredCount).toBe(1)
+    })
+
+    it('배지가 남은 채로 들어온 일반 후기는 체험단으로 세지 않는다', async () => {
+      const doc = await boot(musinsaFixture)
+      const element = sponsoredCard(doc)
+
+      // 무신사가 내용을 배지 뒤에 이어 붙여 배지 글자가 글 가운데에 남는 경우.
+      element.setAttribute('data-content-id', '90000101')
+      element.querySelector('[class*="ExperienceLabelInfo__Wrapper"]').remove()
+      const body = doc.createElement('p')
+      body.textContent = '본문 5'
+      element.appendChild(body)
+      await tick()
+
+      expect(summaries().at(-1).summary.total).toBe(4)
+      expect(summaries().at(-1).summary.sponsoredCount).toBe(1)
+      expect(element.querySelector('.crf-badge')).toBeNull()
+    })
+
+    it('일반이던 카드가 체험단 후기로 다시 쓰이면 배지가 하나 붙고 접힌다', async () => {
+      const doc = await boot(musinsaFixture, { variants: ON })
+      const element = doc.querySelector('[data-content-id="90000002"]')
+      expect(element.querySelector('.crf-badge')).toBeNull()
+
+      element.setAttribute('data-content-id', '90000102')
+      const label = doc.createElement('div')
+      label.className = 'ExperienceLabelInfo__Wrapper-sc-mno345-0 pOiUy'
+      label.textContent = NOTICE
+      element.appendChild(label)
+      await tick()
+      await touchDom(doc)
+
+      expect(element.querySelectorAll('.crf-badge')).toHaveLength(1)
+      expect(element.classList.contains('crf-collapsed')).toBe(true)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(2)
+    })
+  })
+
   describe('스타일', () => {
     it('접는 class 는 카드를 없애지 않고 높이 1px 로 둔다', () => {
       const rule = /\.crf-collapsed\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
