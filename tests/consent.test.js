@@ -192,6 +192,110 @@ describe('setConsent', () => {
   })
 })
 
+describe('resetGrantedConsent', () => {
+  const RESET = { status: 'undecided', decidedAt: null, everGranted: true }
+  const stored = (status, everGranted) => ({ crf_consent: { status, decidedAt: T0, everGranted } })
+
+  it('granted 면 undecided 로 되돌리고 true 를 돌려준다. 동의한 적이 있다는 기록은 남는다', async () => {
+    const { store, resetGrantedConsent, getConsent, isCollectionAllowed } = await loadConsent(stored('granted', true))
+
+    expect(await resetGrantedConsent()).toBe(true)
+    expect(await getConsent()).toEqual(RESET)
+    expect(store.crf_consent).toEqual(RESET)
+    expect(await isCollectionAllowed()).toBe(false)
+  })
+
+  it('granted 인데 everGranted 기록이 없어도 true 로 쓴다', async () => {
+    const { store, resetGrantedConsent } = await loadConsent({ crf_consent: { status: 'granted', decidedAt: T0 } })
+
+    expect(await resetGrantedConsent()).toBe(true)
+    expect(store.crf_consent).toEqual(RESET)
+  })
+
+  it.each([
+    ['동의했다가 끈 denied', stored('denied', true)],
+    ['거절만 한 denied', stored('denied', false)],
+    ['저장값 없음', {}],
+    ['이미 되돌린 undecided', { crf_consent: { status: 'undecided', decidedAt: null, everGranted: true } }],
+    ['알 수 없는 상태', { crf_consent: { status: 'maybe', decidedAt: T0, everGranted: true } }],
+    ['객체가 아닌 저장값', { crf_consent: 'granted' }],
+  ])('%s 이면 false 를 돌려주고 저장값을 그대로 둔다', async (_label, initial) => {
+    const { store, resetGrantedConsent } = await loadConsent(initial)
+    const before = structuredClone(store)
+    const set = vi.spyOn(chrome.storage.local, 'set')
+
+    expect(await resetGrantedConsent()).toBe(false)
+    expect(store).toEqual(before)
+    expect(set).not.toHaveBeenCalled()
+  })
+
+  it('기기 번호와 설치 시각은 건드리지 않는다', async () => {
+    const { store, resetGrantedConsent } = await loadConsent({ ...stored('granted', true), crf_installed_at: T0 - 1000 })
+
+    await resetGrantedConsent()
+    expect(store.crf_device_id).toBe('dev-1')
+    expect(store.crf_installed_at).toBe(T0 - 1000)
+  })
+
+  it('되돌린 뒤 다시 동의해도 firstGrant 는 false 다(Extension Installed 를 또 보내지 않는다)', async () => {
+    const { resetGrantedConsent, setConsent } = await loadConsent(stored('granted', true))
+    await resetGrantedConsent()
+
+    expect(await setConsent('granted', T0 + 5)).toEqual({
+      status: 'granted',
+      decidedAt: T0 + 5,
+      firstGrant: false,
+      everGranted: true,
+    })
+  })
+
+  it('되돌린 뒤 거절하면 everGranted 는 true 로 남는다', async () => {
+    const { resetGrantedConsent, setConsent } = await loadConsent(stored('granted', true))
+    await resetGrantedConsent()
+    expect((await setConsent('denied', T0 + 5)).everGranted).toBe(true)
+  })
+
+  it('setConsent 와 같은 줄에 선다. 앞선 granted 저장이 끝난 뒤에 읽어 되돌린다', async () => {
+    const { store, setConsent, resetGrantedConsent } = await loadConsent()
+    const [saved, reset] = await Promise.all([setConsent('granted', T0), resetGrantedConsent()])
+
+    expect(saved.firstGrant).toBe(true)
+    expect(reset).toBe(true)
+    expect(store.crf_consent).toEqual(RESET)
+  })
+
+  it('되돌리기 뒤에 부른 setConsent 는 되돌린 값을 읽고 그 위에 쓴다', async () => {
+    const { store, setConsent, resetGrantedConsent } = await loadConsent(stored('granted', true))
+    const [reset, saved] = await Promise.all([resetGrantedConsent(), setConsent('denied', T0 + 1)])
+
+    expect(reset).toBe(true)
+    expect(saved.everGranted).toBe(true)
+    expect(store.crf_consent).toEqual({ status: 'denied', decidedAt: T0 + 1, everGranted: true })
+  })
+
+  it('저장이 실패하면 거절하고 뒤따르는 setConsent 를 막지 않는다', async () => {
+    const { store, setConsent, resetGrantedConsent } = await loadConsent(stored('granted', true))
+    const originalSet = chrome.storage.local.set
+    chrome.storage.local.set = () => Promise.reject(new Error('저장 실패'))
+    await expect(resetGrantedConsent()).rejects.toThrow('저장 실패')
+
+    chrome.storage.local.set = originalSet
+    expect((await setConsent('denied', T0 + 1)).status).toBe('denied')
+    expect(store.crf_consent.status).toBe('denied')
+  })
+
+  it('되돌린 직후 track 을 불러도 요청은 0건이다', async () => {
+    const { track, resetGrantedConsent } = await loadTrack(stored('granted', true))
+    await track('Banner Rendered')
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+
+    await resetGrantedConsent()
+    await track('Banner Rendered', { site: 'musinsa' })
+    await flush()
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('isCollectionAllowed', () => {
   it('granted 에서만 true', async () => {
     const { isCollectionAllowed, setConsent } = await loadConsent()

@@ -33,6 +33,9 @@ const DONE_COPY = {
 
 const SAVE_ERROR = '설정을 저장하지 못했습니다. 다시 시도해 주세요.'
 
+// 1.1.0 으로 올라오면서 동의를 되돌린 기기에 보여 준다(명세 13.6). 처음 설치한 기기에는 보여 주지 않는다.
+const REASK_NOTICE = '무신사에서도 동작하게 되어 통계를 보낼지 다시 여쭙니다. 고르기 전까지는 아무것도 보내지 않습니다.'
+
 function el(tag, className, text) {
   const node = document.createElement(tag)
   if (className) node.className = className
@@ -148,14 +151,19 @@ function detailsSection() {
 }
 
 // status 가 granted 나 denied 면 완료 상태, 그 밖에는 선택 화면이다. showExample 은 완료 상태에서만 쓰인다.
-export function renderOnboarding(root, { status, showExample, exampleUrl, privacyUrl, onChoose, onExample, onChange, saveFailed, saving = false }) {
+// deviceId 는 한 번이라도 동의한 기기에만 오는 익명 기기 번호다. 선택 화면에서 다시 묻는 안내를 보여 줄지 정하는 데만 쓰고 그리지 않는다.
+export function renderOnboarding(root, { status, deviceId = null, showExample, exampleUrl, privacyUrl, onChoose, onExample, onChange, saveFailed, saving = false }) {
   root.replaceChildren()
+
+  const decided = Object.hasOwn(DONE_COPY, status)
+  const grantedBefore = typeof deviceId === 'string' && deviceId !== ''
+  if (!decided && grantedBefore) root.appendChild(el('p', 'notice', REASK_NOTICE))
 
   root.appendChild(intro())
   root.appendChild(howTo())
   root.appendChild(el('hr'))
 
-  if (Object.hasOwn(DONE_COPY, status)) {
+  if (decided) {
     root.appendChild(doneSection({ status, onChange, saving, saveFailed, showExample, exampleUrl, onExample }))
     root.appendChild(el('hr'))
     root.appendChild(detailsSection())

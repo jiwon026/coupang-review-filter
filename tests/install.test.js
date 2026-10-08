@@ -254,6 +254,234 @@ describe('설치 직후 온보딩', () => {
   })
 })
 
+describe('isVersionBefore', () => {
+  async function load() {
+    installChromeMock()
+    vi.resetModules()
+    return (await import('../extension/src/background/lifecycle.js')).isVersionBefore
+  }
+
+  it.each([
+    ['1.0.0', '1.1.0'],
+    ['1.0.9', '1.1.0'],
+    ['1.0', '1.1.0'],
+    ['1', '1.1.0'],
+    ['0.9.9', '1.1.0'],
+    ['1.0.99.99', '1.1.0'],
+    ['1.9.0', '1.10.0'],
+  ])('%s 은 %s 보다 앞이다', async (version, target) => {
+    expect((await load())(version, target)).toBe(true)
+  })
+
+  it.each([
+    ['1.1.0', '1.1.0'],
+    ['1.1', '1.1.0'],
+    ['1.1.0.0', '1.1.0'],
+    ['1.1.1', '1.1.0'],
+    ['1.2.0', '1.1.0'],
+    ['2.0.0', '1.1.0'],
+    ['1.10.0', '1.9.0'],
+    ['1.1.0.1', '1.1.0'],
+  ])('%s 은 %s 보다 앞이 아니다', async (version, target) => {
+    expect((await load())(version, target)).toBe(false)
+  })
+
+  it.each([
+    ['글자', 'abc'],
+    ['글자가 섞인 버전', '1.0.0-beta'],
+    ['앞에 v 가 붙은 버전', 'v1.0.0'],
+    ['공백이 섞인 버전', '1.0.0 '],
+    ['빈 문자열', ''],
+    ['점만 있는 문자열', '.'],
+    ['빈 자리가 있는 버전', '1..0'],
+    ['음수 자리', '1.-1.0'],
+    ['undefined', undefined],
+    ['null', null],
+    ['숫자', 1],
+    ['배열', ['1.0.0']],
+    ['객체', { toString: () => '1.0.0' }],
+  ])('읽을 수 없는 버전(%s)이면 false 다(모르면 되돌리지 않는다)', async (_label, version) => {
+    expect((await load())(version, '1.1.0')).toBe(false)
+  })
+
+  it('기준 버전을 읽을 수 없어도 false 다', async () => {
+    const isVersionBefore = await load()
+    expect(isVersionBefore('1.0.0', 'abc')).toBe(false)
+    expect(isVersionBefore('1.0.0', undefined)).toBe(false)
+  })
+})
+
+describe('업데이트 때 동의 다시 받기', () => {
+  const ONBOARDING_URL = `${EXTENSION_ORIGIN}src/onboarding/index.html`
+  const INSTALLED_AT = 1_690_000_000_000
+  const GRANTED = { status: 'granted', decidedAt: 1_700_000_000_000, everGranted: true }
+  const RESET = { status: 'undecided', decidedAt: null, everGranted: true }
+  const extensionPage = { id: 'test-extension-id', url: ONBOARDING_URL }
+
+  function send(chrome, message, sender = extensionPage) {
+    return new Promise((resolve) => {
+      for (const listener of chrome.__listeners) listener(message, sender, resolve)
+    })
+  }
+
+  beforeEach(() => {
+    mockSite.landingOrigin = 'https://landing.test'
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('1.0.0 에서 올라온 동의했던 기기는 동의를 되돌리고 온보딩 탭을 한 번 연다', async () => {
+    const { chrome, store } = await loadBackground({ crf_installed_at: INSTALLED_AT }, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    expect(store.crf_consent).toEqual(RESET)
+    expect(chrome.__calls.tabsCreate).toEqual([{ url: ONBOARDING_URL }])
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('되돌린 뒤의 제거 주소에는 조각(#d=)이 없다', async () => {
+    const { chrome } = await loadBackground({ crf_installed_at: INSTALLED_AT }, 'granted')
+    expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
+
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    expect(chrome.__calls.setUninstallURL).toHaveLength(2)
+    expect(chrome.__calls.setUninstallURL.at(-1)).toBe('https://landing.test/uninstalled?v=0.1.0')
+    expectNoIdentifiers(lastUninstallUrl(chrome))
+  })
+
+  it('제거 주소에서 기기 번호를 뺀 뒤에 온보딩 탭을 연다', async () => {
+    const { chrome, store } = await loadBackground({}, 'granted')
+    const seen = []
+    chrome.tabs.create = (options) => {
+      seen.push({ status: store.crf_consent.status, uninstallUrl: chrome.__calls.setUninstallURL.at(-1) })
+      chrome.__calls.tabsCreate.push(options)
+      return Promise.resolve({ id: 1 })
+    }
+
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    expect(seen).toEqual([{ status: 'undecided', uninstallUrl: 'https://landing.test/uninstalled?v=0.1.0' }])
+  })
+
+  it('기기 번호와 설치 시각은 그대로다', async () => {
+    const { chrome, store } = await loadBackground({ crf_installed_at: INSTALLED_AT }, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.2' })
+
+    expect(store.crf_consent).toEqual(RESET)
+    expect(store.crf_device_id).toBe('dev-1')
+    expect(store.crf_installed_at).toBe(INSTALLED_AT)
+  })
+
+  it.each(['denied', 'undecided'])('%s 였던 기기는 그대로 두고 탭도 열지 않는다', async (consent) => {
+    const { chrome, store } = await loadBackground({ crf_installed_at: INSTALLED_AT }, consent)
+    const before = structuredClone(store)
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    expect(store).toEqual(before)
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+    expect(chrome.__calls.setUninstallURL).toHaveLength(1)
+  })
+
+  it.each([
+    ['1.1.0', '1.1.0'],
+    ['1.1.1', '1.1.1'],
+    ['2.0.0', '2.0.0'],
+    ['없음', undefined],
+    ['글자', 'abc'],
+    ['빈 문자열', ''],
+    ['null', null],
+    ['숫자', 1],
+  ])('이전 버전이 %s 이면 동의가 그대로고 탭이 열리지 않는다', async (_label, previousVersion) => {
+    const { chrome, store } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion })
+
+    expect(store.crf_consent).toEqual(GRANTED)
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+    expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
+  })
+
+  it.each(['chrome_update', 'shared_module_update'])('reason 이 %s 면 이전 버전이 낮아도 아무것도 하지 않는다', async (reason) => {
+    const { chrome, store } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason, previousVersion: '1.0.0' })
+
+    expect(store.crf_consent).toEqual(GRANTED)
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+    expect(chrome.__calls.setUninstallURL).toHaveLength(1)
+  })
+
+  it('reason 이 install 이면 동의를 되돌리지 않는다(설치 경로는 그대로다)', async () => {
+    const { chrome, store } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason: 'install', previousVersion: '1.0.0' })
+
+    expect(store.crf_consent).toEqual(GRANTED)
+    expect(chrome.__calls.tabsCreate).toHaveLength(1)
+    expect(typeof store.crf_installed_at).toBe('number')
+  })
+
+  it('업데이트는 설치 시각을 새로 쓰지 않는다', async () => {
+    const { chrome, store } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+    expect('crf_installed_at' in store).toBe(false)
+  })
+
+  it('되돌린 직후 TRACK 메시지가 와도 요청은 0건이다', async () => {
+    const { chrome } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    await send(chrome, { type: 'crf:track', eventType: 'Banner Rendered', properties: { site: 'musinsa' } })
+    await flush()
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+  })
+
+  it('되돌린 뒤 온보딩 페이지가 물으면 undecided 와 기기 번호를 돌려준다(다시 묻는 안내의 근거)', async () => {
+    const { chrome } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    const response = await send(chrome, { type: 'crf:get-consent' })
+    expect(response.consent).toEqual({ status: 'undecided', decidedAt: null, deviceId: 'dev-1' })
+  })
+
+  it('다시 동의하면 Extension Installed 는 보내지 않고 그 뒤의 이벤트부터 나간다', async () => {
+    const { chrome } = await loadBackground({}, 'granted')
+    await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
+
+    sendSetConsent(chrome, 'granted')
+    await flush()
+    expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+    expect(sentOfType('Extension Installed')).toHaveLength(0)
+    expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
+
+    await send(chrome, { type: 'crf:track', eventType: 'Banner Rendered', properties: { site: 'musinsa' } })
+    await flush()
+    expect(sentOfType('Banner Rendered')).toHaveLength(1)
+  })
+
+  it('되돌리기가 실패하면 경고만 하고 탭을 열지 않는다', async () => {
+    const { chrome } = await loadBackground({}, 'granted')
+    chrome.storage.local.set = () => Promise.reject(new Error('저장 실패'))
+    const { handleInstalled } = await import('../extension/src/background/lifecycle.js')
+
+    await expect(handleInstalled({ reason: 'update', previousVersion: '1.0.0' })).resolves.toBeUndefined()
+    expect(console.warn).toHaveBeenCalled()
+    expect(chrome.__calls.tabsCreate).toHaveLength(0)
+  })
+
+  it('온보딩 탭을 열지 못해도 던지지 않고 동의는 되돌린 채다', async () => {
+    const { chrome, store } = await loadBackground({}, 'granted')
+    chrome.tabs.create = () => Promise.reject(new Error('탭 열기 거부'))
+    const { handleInstalled } = await import('../extension/src/background/lifecycle.js')
+
+    await expect(handleInstalled({ reason: 'update', previousVersion: '1.0.0' })).resolves.toBeUndefined()
+    expect(store.crf_consent).toEqual(RESET)
+    expect(console.warn).toHaveBeenCalled()
+  })
+})
+
 describe('제거 주소', () => {
   beforeEach(() => {
     mockSite.landingOrigin = 'https://landing.test'

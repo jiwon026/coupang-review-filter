@@ -524,6 +524,122 @@ describe('온보딩 배선: 설정 바꾸기', () => {
   })
 })
 
+describe('온보딩 배선: 다시 묻는 안내', () => {
+  const DEVICE_ID = '3f2c1a9e-5b7d-4c8a-9e1f-0a2b4c6d8e0f'
+  const REASK_NOTICE = '무신사에서도 동작하게 되어 통계를 보낼지 다시 여쭙니다. 고르기 전까지는 아무것도 보내지 않습니다.'
+  const reply = (status, deviceId) => ({ consent: { status, decidedAt: status === 'undecided' ? null : 1, deviceId } })
+  const notice = (root) => root.querySelector('.notice')
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it('undecided 응답에 기기 번호가 있으면(동의했던 기기) 안내를 보여 주고 아무것도 보내지 않는다', async () => {
+    const root = await loadOnboarding({ consent: reply('undecided', DEVICE_ID) })
+    expect(notice(root).textContent).toBe(REASK_NOTICE)
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(ofType('crf:track')).toHaveLength(0)
+    expect(ofType('crf:set-consent')).toHaveLength(0)
+  })
+
+  it.each([
+    ['null', reply('undecided', null)],
+    ['필드 없음', { consent: { status: 'undecided', decidedAt: null } }],
+  ])('undecided 응답의 기기 번호가 %s 이면(처음 설치한 기기) 안내가 없다', async (_label, consent) => {
+    const root = await loadOnboarding({ consent })
+    expect(notice(root)).toBeNull()
+  })
+
+  it('읽기 실패 표지가 붙은 응답은 번호가 있어도 안내를 보여 주지 않는다', async () => {
+    const root = await loadOnboarding({ consent: { ...reply('undecided', DEVICE_ID), error: 'failed' } })
+    expect(notice(root)).toBeNull()
+  })
+
+  it.each(['granted', 'denied'])('%s 완료 화면에는 안내가 없고 설정 바꾸기로 연 선택 화면에도 없다', async (status) => {
+    const root = await loadOnboarding({ consent: reply(status, DEVICE_ID) })
+    expect(notice(root)).toBeNull()
+
+    buttonByText(root, '설정 바꾸기').click()
+    await tick()
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(notice(root)).toBeNull()
+  })
+
+  it.each([
+    ['동의하고 시작', 'granted'],
+    ['통계 없이 사용', 'denied'],
+  ])('%s 를 고르면 안내가 사라진다', async (label, status) => {
+    const root = await loadOnboarding({
+      consent: reply('undecided', DEVICE_ID),
+      setConsent: (message) => reply(message.status, DEVICE_ID),
+    })
+    buttonByText(root, label).click()
+    await tick()
+
+    expect(ofType('crf:set-consent')).toEqual([{ type: 'crf:set-consent', status, source: 'onboarding' }])
+    expect(notice(root)).toBeNull()
+  })
+
+  it('저장 실패 뒤에도 안내는 남는다', async () => {
+    const root = await loadOnboarding({ consent: reply('undecided', DEVICE_ID), setConsent: () => ({ error: 'failed' }) })
+    buttonByText(root, '동의하고 시작').click()
+    await tick()
+
+    expect(root.textContent).toContain(SAVE_ERROR)
+    expect(notice(root).textContent).toBe(REASK_NOTICE)
+  })
+
+  it('다른 곳에서 고르면(CONSENT_CHANGED) 안내가 사라진다', async () => {
+    const root = await loadOnboarding({ consent: reply('undecided', DEVICE_ID) })
+    deliver({ type: 'crf:consent-changed', consent: { status: 'denied', decidedAt: 5, deviceId: DEVICE_ID } })
+    await tick()
+    expect(notice(root)).toBeNull()
+  })
+
+  it('열려 있는 동안 동의가 되돌려졌으면 다시 보일 때 읽어 안내를 보여 준다', async () => {
+    let current = reply('granted', DEVICE_ID)
+    const root = await loadOnboarding({ consent: () => current })
+    expect(notice(root)).toBeNull()
+
+    current = reply('undecided', DEVICE_ID)
+    changeVisibility('visible')
+    await tick()
+    expect(notice(root).textContent).toBe(REASK_NOTICE)
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+  })
+
+  it('2초 뒤 기본 화면을 그린 다음 늦게 온 undecided 응답에 번호가 있으면 안내를 보여 준다', async () => {
+    vi.useFakeTimers()
+    const root = await loadOnboarding({ consent: 'hold' })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(buttonByText(root, '동의하고 시작')).toBeTruthy()
+    expect(notice(root)).toBeNull()
+
+    held['crf:get-consent'](reply('undecided', DEVICE_ID))
+    await tick()
+    expect(notice(root).textContent).toBe(REASK_NOTICE)
+  })
+
+  it('기기 번호는 화면에도, 이 페이지가 보내는 어떤 메시지에도 실리지 않는다', async () => {
+    const root = await loadOnboarding({
+      consent: reply('undecided', DEVICE_ID),
+      setConsent: (message) => reply(message.status, DEVICE_ID),
+    })
+    expect(root.outerHTML).not.toContain(DEVICE_ID)
+
+    buttonByText(root, '동의하고 시작').click()
+    await tick()
+    expect(tracked('Onboarding Viewed')).toHaveLength(1)
+    expect(root.outerHTML).not.toContain(DEVICE_ID)
+    expect(JSON.stringify(sent)).not.toContain(DEVICE_ID)
+  })
+})
+
 describe('온보딩 배선: 예시 링크', () => {
   beforeEach(() => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})

@@ -1,7 +1,7 @@
 import { SITE, isLandingConfigured } from '../shared/site.js'
 import { ONBOARDING_PATH } from '../shared/pages.js'
 import { getDeviceId, getInstalledAt, setInstalledAt } from './identity.js'
-import { isCollectionAllowed } from './consent.js'
+import { isCollectionAllowed, resetGrantedConsent } from './consent.js'
 
 const LOG_PREFIX = '[체험단 필터]'
 
@@ -54,7 +54,7 @@ async function applyUninstallUrl() {
   }
 }
 
-// 설치 직후 동의를 받는 온보딩 탭을 연다. tabs.create 는 tabs 권한이 필요 없다. 실패해도 설치 처리는 이어간다.
+// 설치 직후와 동의를 다시 받을 때 온보딩 탭을 연다. tabs.create 는 tabs 권한이 필요 없다. 실패해도 설치 처리는 이어간다.
 async function openOnboarding() {
   try {
     await chrome.tabs.create({ url: chrome.runtime.getURL(ONBOARDING_PATH) })
@@ -63,7 +63,54 @@ async function openOnboarding() {
   }
 }
 
+// 이 버전부터 무신사에서도 동작한다. 그 전 버전에서 받은 동의는 쿠팡 상품 페이지만 알리고 받은 것이다(명세 13.6).
+const RECONSENT_VERSION = '1.1.0'
+
+const VERSION_SHAPE = /^\d+(\.\d+)*$/
+
+function versionParts(value) {
+  return typeof value === 'string' && VERSION_SHAPE.test(value) ? value.split('.').map(Number) : null
+}
+
+// version 이 target 보다 앞선 버전인지. 없는 자리는 0 으로 본다('1.0' 은 '1.0.0' 과 같다).
+// 숫자와 점으로만 된 문자열이 아니면 false 다. 모르면 동의를 되돌리지 않는다.
+export function isVersionBefore(version, target) {
+  const parts = versionParts(version)
+  const targetParts = versionParts(target)
+  if (parts === null || targetParts === null) return false
+
+  const length = Math.max(parts.length, targetParts.length)
+  for (let index = 0; index < length; index += 1) {
+    const difference = (parts[index] ?? 0) - (targetParts[index] ?? 0)
+    if (difference !== 0) return difference < 0
+  }
+  return false
+}
+
+// 1.1.0 전 버전에서 올라온 기기가 동의한 상태였으면 아직 고르지 않은 상태로 되돌리고 온보딩 탭을 한 번 연다.
+// 거절했거나 고르지 않은 기기는 그대로 두고 탭도 열지 않는다. 기기 번호, 설치 시각, 실험 배정은 건드리지 않는다.
+async function reaskConsentAfterUpdate(previousVersion) {
+  if (!isVersionBefore(previousVersion, RECONSENT_VERSION)) return
+
+  let reset = false
+  try {
+    reset = await resetGrantedConsent()
+  } catch (error) {
+    warn('동의를 되돌리지 못했습니다:', error)
+  }
+  if (!reset) return
+
+  // 되돌린 뒤에 부르면 제거 주소에서 기기 번호와 설치 시각이 빠진다. 주소를 고친 뒤에 탭을 연다.
+  await configureUninstallUrl()
+
+  await openOnboarding()
+}
+
 export async function handleInstalled(details) {
+  if (details?.reason === 'update') {
+    await reaskConsentAfterUpdate(details.previousVersion)
+    return
+  }
   if (details?.reason !== 'install') return
 
   try {

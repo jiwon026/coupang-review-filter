@@ -3,7 +3,7 @@ import { EVENTS } from '../shared/events.js'
 import { SITE, privacyUrl } from '../shared/site.js'
 import { EXPERIMENTS } from '../core/experiment.js'
 import { request, GET_CONSENT_TIMEOUT_MS, SET_CONSENT_TIMEOUT_MS } from '../shared/request.js'
-import { CONSENT, DECIDED_STATUSES, consentStatusFrom } from '../shared/consent-status.js'
+import { CONSENT, DECIDED_STATUSES, consentStatusFrom, deviceIdFrom } from '../shared/consent-status.js'
 import { renderOnboarding } from './view.js'
 
 const LOG_PREFIX = '[체험단 필터]'
@@ -15,8 +15,11 @@ const root = document.getElementById('root')
 // status 는 실제 동의 상태, choosing 은 완료 상태에서 설정 바꾸기를 눌러 선택 화면으로 돌아온 상태다.
 // revision 은 더 새로운 정보(저장 성공, 다른 곳의 변경 알림, 다시 읽은 상태)가 도착할 때마다 올린다.
 // 응답을 기다리던 쪽은 그 사이에 revision 이 바뀌었으면 자기 응답을 버린다. loaded 는 첫 화면을 그렸는지다.
+// deviceId 는 한 번이라도 동의한 기기에만 백그라운드가 알려 주는 익명 기기 번호다. 다시 묻는 안내를 보여 줄지 정하는 데만 쓴다.
+// 이 값은 화면에 그리지 않고 어떤 메시지에도 다시 싣지 않는다.
 let state = {
   status: CONSENT.UNDECIDED,
+  deviceId: null,
   revision: 0,
   loaded: false,
   showExample: false,
@@ -51,6 +54,8 @@ function trackViewedOnce() {
 function draw() {
   renderOnboarding(root, {
     status: state.choosing ? 'undecided' : state.status,
+    // 설정 바꾸기로 연 선택 화면은 다시 묻는 것이 아니므로 안내를 보여 주지 않는다.
+    deviceId: state.choosing ? null : state.deviceId,
     showExample: state.showExample,
     exampleUrl: SITE.exampleProductUrl,
     privacyUrl: privacyUrl(),
@@ -74,10 +79,12 @@ function onExample() {
 
 // 다른 곳(패널의 변경, 늦게 온 응답, 다시 읽은 상태)에서 알게 된 상태를 반영한다. 예시 링크 표시는 바꾸지 않는다.
 // 상태가 달라졌을 때만 선택 화면(설정 바꾸기)에서 나온다. 첫 화면을 그리기 전에는 상태만 기록한다.
-function adoptStatus(status, { keepError = false } = {}) {
+// payload 는 응답이나 알림의 consent 다. 상태와 같은 출처의 기기 번호를 함께 받아들인다.
+function adoptStatus(status, payload, { keepError = false } = {}) {
   const changed = status !== state.status
   setState({
     status,
+    deviceId: deviceIdFrom(payload),
     revision: state.revision + 1,
     choosing: changed ? false : state.choosing,
     saveFailed: keepError ? state.saveFailed : false,
@@ -112,7 +119,7 @@ async function choose(status) {
   }
 
   setState({ saving: false, choosing: false })
-  adoptStatus(response.consent.status)
+  adoptStatus(response.consent.status, response.consent)
 }
 
 // 다시 보일 때와 저장 실패 뒤에 실제 상태를 다시 읽는다. 읽지 못하면 화면을 그대로 둔다.
@@ -125,28 +132,30 @@ async function refreshStatus({ requested = null } = {}) {
     if (status === null || state.revision !== startedAt) return
     const confirmed = requested !== null && status === requested
     if (confirmed) setState({ choosing: false })
-    adoptStatus(status, { keepError: requested !== null && !confirmed })
+    adoptStatus(status, response.consent, { keepError: requested !== null && !confirmed })
   } catch (error) {
     warn('동의 상태를 다시 읽지 못했습니다:', error)
   }
 }
 
 // 늦게 도착한 응답은 그 사이에 더 새로운 정보가 없었을 때만 반영한다.
+// 상태와 기기 번호를 함께 돌려준다. 읽지 못하면 아직 고르지 않았고 번호가 없는 것으로 본다.
 async function askStatus(startedAt) {
   const adoptLate = (response) => {
     const status = consentStatusFrom(response)
-    if (status !== null && state.revision === startedAt) adoptStatus(status)
+    if (status !== null && state.revision === startedAt) adoptStatus(status, response.consent)
   }
   try {
     const response = await request(
       { type: MESSAGES.GET_CONSENT },
       { timeoutMs: GET_CONSENT_TIMEOUT_MS, onLate: adoptLate },
     )
-    return consentStatusFrom(response) ?? CONSENT.UNDECIDED
+    const status = consentStatusFrom(response)
+    if (status !== null) return { status, deviceId: deviceIdFrom(response.consent) }
   } catch (error) {
     warn('동의 상태를 읽지 못했습니다:', error)
-    return CONSENT.UNDECIDED
   }
+  return { status: CONSENT.UNDECIDED, deviceId: null }
 }
 
 // 변형을 모르면(응답 없음, 실패, 배정 없음) 실험 노출을 만들지 않으려고 예시 링크를 숨긴다.
@@ -165,9 +174,9 @@ async function askShowExample() {
 // 늦게 도착한 동의 상태는 askStatus 가 다시 그리지만, 늦은 변형은 반영하지 않는다(실험 노출을 뒤늦게 바꾸지 않는다).
 async function load() {
   const startedAt = state.revision
-  const [status, showExample] = await Promise.all([askStatus(startedAt), askShowExample()])
+  const [consent, showExample] = await Promise.all([askStatus(startedAt), askShowExample()])
   // 읽는 동안 더 새로운 정보가 왔다면 그 상태가 이긴다.
-  setState({ showExample, loaded: true, ...(state.revision === startedAt ? { status } : {}) })
+  setState({ showExample, loaded: true, ...(state.revision === startedAt ? consent : {}) })
   draw()
   if (state.status === CONSENT.GRANTED) trackViewedOnce()
 }
@@ -176,7 +185,7 @@ async function load() {
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== MESSAGES.CONSENT_CHANGED) return false
   const status = message.consent?.status
-  if (!sender?.tab && DECIDED_STATUSES.includes(status)) adoptStatus(status)
+  if (!sender?.tab && DECIDED_STATUSES.includes(status)) adoptStatus(status, message.consent)
   return false
 })
 

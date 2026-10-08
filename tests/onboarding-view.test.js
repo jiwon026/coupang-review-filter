@@ -35,6 +35,8 @@ const HOW_TO_ITEMS = [
 ]
 
 const SAVE_ERROR = '설정을 저장하지 못했습니다. 다시 시도해 주세요.'
+const REASK_NOTICE = '무신사에서도 동작하게 되어 통계를 보낼지 다시 여쭙니다. 고르기 전까지는 아무것도 보내지 않습니다.'
+const DEVICE_ID = '3f2c1a9e-5b7d-4c8a-9e1f-0a2b4c6d8e0f'
 
 let root
 
@@ -164,6 +166,59 @@ describe('renderOnboarding: undecided', () => {
 })
 
 // 예시 링크는 선택을 마친 완료 화면에서만 보인다. 선택 전에 보이면 눌러서 떠난 사용자가 표본에서 빠져 실험이 치우친다.
+describe('renderOnboarding: 다시 묻는 안내', () => {
+  const notices = () => [...root.querySelectorAll('.notice')]
+
+  it('undecided 이고 기기 번호가 있으면(한 번 동의했던 기기) 안내 한 줄을 문구 그대로 보여 준다', () => {
+    render({ status: 'undecided', deviceId: DEVICE_ID })
+    expect(notices()).toHaveLength(1)
+    expect(notices()[0].textContent).toBe(REASK_NOTICE)
+  })
+
+  it('안내는 화면 맨 위에 있다', () => {
+    render({ status: 'undecided', deviceId: DEVICE_ID })
+    expect(root.firstElementChild).toBe(notices()[0])
+    expect(root.children[1].querySelector('h1')).toBeTruthy()
+  })
+
+  it.each([
+    ['번호 없음', {}],
+    ['null', { deviceId: null }],
+    ['빈 문자열', { deviceId: '' }],
+    ['문자열이 아닌 값', { deviceId: 1 }],
+  ])('undecided 이고 기기 번호가 %s 이면(처음 설치한 기기) 안내가 없다', (_label, overrides) => {
+    render({ status: 'undecided', ...overrides })
+    expect(notices()).toHaveLength(0)
+    expect(root.textContent).not.toContain('다시 여쭙니다')
+    expect(root.firstElementChild.querySelector('h1')).toBeTruthy()
+  })
+
+  it.each(['granted', 'denied'])('%s 화면에는 기기 번호가 있어도 안내가 없다', (status) => {
+    render({ status, deviceId: DEVICE_ID })
+    expect(notices()).toHaveLength(0)
+    expect(root.textContent).not.toContain('다시 여쭙니다')
+  })
+
+  it('기기 번호는 화면에 그리지 않는다', () => {
+    render({ status: 'undecided', deviceId: DEVICE_ID })
+    expect(root.textContent).not.toContain(DEVICE_ID)
+    expect(root.outerHTML).not.toContain(DEVICE_ID)
+  })
+
+  it('안내가 있어도 두 선택 버튼과 보내는 것 목록은 그대로다', () => {
+    render({ status: 'undecided', deviceId: DEVICE_ID })
+    expect(buttonByText('동의하고 시작')).toBeTruthy()
+    expect(buttonByText('통계 없이 사용')).toBeTruthy()
+    expect(listItems('보내는 것')).toEqual(SENT_ITEMS)
+  })
+
+  it('다시 그릴 때 번호가 없으면 안내가 사라진다', () => {
+    render({ status: 'undecided', deviceId: DEVICE_ID })
+    render({ status: 'undecided' })
+    expect(notices()).toHaveLength(0)
+  })
+})
+
 describe('renderOnboarding: 예시 링크', () => {
   const exampleLink = () => root.querySelector(`a[href="${EXAMPLE_URL}"]`)
 

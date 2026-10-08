@@ -46,6 +46,25 @@ export function setConsent(status, now = Date.now()) {
   return result
 }
 
+async function applyReset() {
+  const previous = await readStored()
+  if (previous?.status !== CONSENT.GRANTED) return false
+
+  await chrome.storage.local.set({
+    [CONSENT_KEY]: { ...UNDECIDED_STATE, everGranted: true },
+  })
+  return true
+}
+
+// 알린 내용이 달라져 동의를 다시 받아야 할 때 쓴다(명세 13.6). 동의한 상태만 아직 고르지 않은 상태로 되돌리고 true 를 돌려준다.
+// 거절했거나 고르지 않은 기기는 건드리지 않고 false 를 돌려준다. 동의한 적이 있다는 기록은 남겨서
+// 다시 동의해도 firstGrant 가 false 다. setConsent 와 같은 줄에 서서 진행 중인 저장이 끝난 뒤의 값을 본다.
+export function resetGrantedConsent() {
+  const result = writeQueue.then(applyReset)
+  writeQueue = result.catch(() => {})
+  return result
+}
+
 // 저장소를 읽지 못하면 보내지 않는다(실패 시 닫힘).
 export async function isCollectionAllowed() {
   try {

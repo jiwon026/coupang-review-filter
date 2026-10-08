@@ -108,6 +108,15 @@ hr {
   line-height: 1.6;
 }
 
+/* 동의를 다시 묻는 까닭을 알리는 한 줄. 화면 맨 위에 둔다. */
+.notice {
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  border: 1px solid var(--crf-border-strong);
+  border-radius: 8px;
+  font-weight: 600;
+}
+
 .choices {
   display: flex;
   gap: 12px;
