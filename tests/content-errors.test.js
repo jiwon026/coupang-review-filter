@@ -139,7 +139,7 @@ describe('렌더 예외 보고', () => {
     const events = errorEvents('RenderException')
     expect(events).toHaveLength(1)
     expect('error_message' in events[0].properties).toBe(false)
-    expect(Object.keys(events[0].properties).sort()).toEqual(['error_name', 'error_type', 'product_id', 'review_sort'])
+    expect(Object.keys(events[0].properties).sort()).toEqual(['error_name', 'error_type', 'product_id', 'review_sort', 'site'])
     expect(JSON.stringify(events[0])).not.toContain('리뷰 본문이 섞인 메시지')
     expect(JSON.stringify(events[0])).not.toContain('7590830589')
   })

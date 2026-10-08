@@ -19,6 +19,9 @@ const site = resolveSite(window.location.hostname) ?? coupang
 // 변형 응답이 오지 않을 때 기본값으로 확정하기까지 기다리는 시간.
 const VARIANT_WAIT_MS = 3000
 const DEFAULT_VARIANTS = { default_filter: 'off', banner_copy: 'rating' }
+// 묶음 관측(무신사)에서 새로 본 후기 번호가 이만큼 쌓일 때마다 Banner Rendered 를 한 번 보낸다.
+const BATCH_SIZE = 10
+const BANNER_SELECTOR = '[data-crf-banner="1"]'
 
 const state = {
   hidden: false,
@@ -38,6 +41,8 @@ const state = {
   // 같은 상품에서 마지막으로 관측한 정렬과 그 정렬에서 본 페이지 수.
   observedSort: null,
   sortPagesSeen: 0,
+  // 묶음 관측에서 마지막으로 Banner Rendered 를 보낸 뒤 새로 누적된 후기 번호 수.
+  unobservedCount: 0,
   lastSummary: null,
   reportedErrors: new Set(),
   observation: createObservation(),
@@ -80,8 +85,10 @@ function track(eventType, properties = {}, afterVariants = null) {
   try {
     const captured = {
       review_sort: currentSort(),
-      product_id: currentProductId(),
+      product_id: withKeyPrefix(currentProductId()),
       ...(typeof properties === 'function' ? properties() : properties),
+      // 이벤트 프로퍼티가 덮어쓸 수 없게 마지막에 넣는다.
+      site: site.id,
     }
     if (afterVariants && !state.variantsResolved) {
       state.pendingEvents.push({ eventType, captured, afterVariants })
@@ -144,12 +151,18 @@ function trackScroll() {
 // 마지막 스크롤은 pagehide 경로(leaving 없음)에서만 반영한다. 상품 전환 때의 scrollY 는 이미 새 페이지 값이다.
 function flushHealthSignals(leaving) {
   try {
+    // 대상 페이지가 아닌 주소에서 떠날 때는 판정할 상품이 없다.
+    if (leaving === undefined && currentProductId() === null) return
     if (leaving === undefined) trackScroll()
     for (const signal of selectHealthSignals(state.observation)) {
       reportExtensionError(
         leaving === undefined
           ? signal
-          : { ...signal, product_id: leaving.productId, review_sort: leaving.reviewSort },
+          : {
+              ...signal,
+              product_id: withKeyPrefix(leaving.productId),
+              review_sort: leaving.reviewSort,
+            },
       )
     }
   } catch (error) {
@@ -183,10 +196,30 @@ function currentProductId() {
   return site.productIdOf(window.location.pathname)
 }
 
+// 보내는 번호에는 쇼핑몰 접두를 붙여 두 쇼핑몰의 같은 번호가 겹치지 않게 한다. 쿠팡은 접두가 없다.
+// state.productId 와 누적 키에는 붙이지 않는다.
+function withKeyPrefix(value) {
+  return value === null ? null : `${site.keyPrefix}${value}`
+}
+
 // 쿠팡의 정렬은 sort.js 를 거쳐 읽는다(부품의 detectSort 와 같은 함수다).
 // 기존 테스트가 sort.js 를 바꿔 끼워 정렬 판별이 던지는 경우를 만들기 때문이다.
 function currentSort() {
   return site === coupang ? detectSort(document) : site.detectSort(document)
+}
+
+// 체험단 후기만 모아 보는 조건인지. 읽다가 던져도 배지와 배너는 동작해야 하므로 아닌 것으로 본다.
+function sponsoredOnlyView() {
+  try {
+    return site.isSponsoredOnlyView(document) === true
+  } catch (error) {
+    return false
+  }
+}
+
+function removeBanner() {
+  const existing = document.querySelector(BANNER_SELECTOR)
+  if (existing) existing.remove()
 }
 
 function resetIfProductChanged() {
@@ -204,8 +237,14 @@ function resetIfProductChanged() {
   state.pagesSeen = 0
   state.observedSort = null
   state.sortPagesSeen = 0
+  state.unobservedCount = 0
   state.reportedErrors.clear()
   state.observation = createObservation()
+}
+
+// 이번 화면에서 처음 본 후기 번호 수. 누적에 넣기 전에 센다.
+function countUnseen(reviews) {
+  return reviews.filter((review) => review.hasStableId && !state.seen.has(review.id)).length
 }
 
 function accumulate(reviews) {
@@ -252,8 +291,17 @@ function observationKeyOf(reviews) {
     .join(',')
 }
 
+// 새 관측인지. 페이지 관측(쿠팡)은 리뷰 묶음이 바뀔 때마다 새 관측이다.
+// 묶음 관측(무신사)은 카드가 한두 장씩 바뀌므로 상품에서 처음 한 번, 그 뒤로는 새 번호가 BATCH_SIZE 만큼 쌓일 때만이다.
+function isNewObservation(observationKey) {
+  if (site.observation === 'batch') {
+    return state.pagesSeen === 0 || state.unobservedCount >= BATCH_SIZE
+  }
+  return observationKey !== state.observationKey
+}
+
 // Banner Rendered 프로퍼티. track 의 보호 안에서 계산한다.
-function observationProperties(reviews, summary, pagesSeen) {
+function observationProperties(reviews, summary, pagesSeen, sponsoredOnly) {
   const sort = currentSort()
   // 정렬을 바꾸면 쿠팡은 1페이지를 보여 주므로 sort_pages_seen = 1 이 그 정렬의 첫 페이지다.
   if (sort !== state.observedSort) {
@@ -275,12 +323,19 @@ function observationProperties(reviews, summary, pagesSeen) {
     pages_seen: pagesSeen,
     sort_pages_seen: state.sortPagesSeen,
     // 같은 페이지 재방문을 분석에서 중복 제거하는 키. 공개 id 만 쓰고 본문은 싣지 않는다.
-    page_first_review_id: reviews[0].hasStableId ? reviews[0].id : null,
+    page_first_review_id: reviews[0].hasStableId ? withKeyPrefix(reviews[0].id) : null,
+    // 체험단 후기만 모아 보는 조건에서 그린 배너다. 이때의 체험단 비중은 조건이 고른 결과다.
+    sponsored_only_view: sponsoredOnly,
   }
 }
 
 function renderReviews({ force = false } = {}) {
   resetIfProductChanged()
+  // 주소와 화면만 바뀌어 대상 페이지를 벗어났으면 그리지 않고 남은 배너를 지운다.
+  if (state.productId === null) {
+    removeBanner()
+    return
+  }
 
   const container = findReviewContainer(document, site)
   if (!container) return
@@ -289,17 +344,21 @@ function renderReviews({ force = false } = {}) {
   observeReviews(container, reviews)
   if (reviews.length === 0) return
 
-  const redrawKey = redrawKeyOf(reviews)
+  // 같은 카드라도 조건 보기에 들어가거나 나오면 다시 그린다.
+  const sponsoredOnly = sponsoredOnlyView()
+  const redrawKey = `${redrawKeyOf(reviews)}|${sponsoredOnly}`
   const observationKey = observationKeyOf(reviews)
-  const bannerPresent = document.querySelector('[data-crf-banner="1"]') !== null
+  const bannerPresent = document.querySelector(BANNER_SELECTOR) !== null
   if (redrawKey === state.redrawKey && bannerPresent && !force) return
 
   markSponsored(reviews)
-  applyFilter(reviews, state.hidden, site.hiddenClass)
+  // 조건 보기에서는 화면의 후기가 전부 체험단이라 숨기지 않는다. 나오면 다음 렌더가 원래 설정대로 다시 숨긴다.
+  applyFilter(reviews, state.hidden && !sponsoredOnly, site.hiddenClass)
 
+  state.unobservedCount += countUnseen(reviews)
   const summary = summarize(accumulate(reviews))
   state.lastSummary = summary
-  sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary })
+  sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary: { ...summary, site: site.id } })
   /* @__PURE__ */ debugLog(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
       `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered} ` +
@@ -309,13 +368,15 @@ function renderReviews({ force = false } = {}) {
   // 관측은 리뷰 묶음이 실제로 바뀔 때만 기록한다.
   // 토글, 변형 도착, 배너 복구, 같은 리뷰의 글자 수 변화는 다시 그리기일 뿐 새 관측이 아니다.
   // filter_state 는 변형이 확정된 뒤 사용자가 실제로 보게 된 상태로 보낸다.
-  if (observationKey !== state.observationKey) {
+  // 묶음 관측(무신사)은 화면은 매번 갱신하고 이벤트만 드물게 보낸다(isNewObservation).
+  if (isNewObservation(observationKey)) {
     state.pagesSeen += 1
+    state.unobservedCount = 0
     if (state.renderedAt === 0) state.renderedAt = Date.now()
     const pagesSeen = state.pagesSeen
     track(
       EVENTS.BANNER_RENDERED,
-      () => observationProperties(reviews, summary, pagesSeen),
+      () => observationProperties(reviews, summary, pagesSeen, sponsoredOnly),
       () => ({ filter_state: filterState() }),
     )
   }
@@ -326,6 +387,7 @@ function renderReviews({ force = false } = {}) {
   const banner = createBanner(summary, {
     hidden: state.hidden,
     copyVariant: state.variants.banner_copy,
+    sponsoredOnly,
     onToggle: (next) => {
       state.hidden = next
       state.userToggled = true
@@ -346,8 +408,7 @@ function renderReviews({ force = false } = {}) {
     },
   })
 
-  const existing = document.querySelector('[data-crf-banner="1"]')
-  if (existing) existing.remove()
+  removeBanner()
   const anchor = site.bannerAnchor(container)
   anchor.parentNode.insertBefore(banner, anchor)
 }

@@ -127,6 +127,57 @@ describe('createBanner', () => {
     expect(el.querySelector('.crf-detail')).toBeNull()
   })
 
+  describe('체험단 후기만 모아 보는 조건', () => {
+    it('sponsoredOnly 면 숨김 버튼 대신 안내 글을 넣는다', () => {
+      const el = createBanner(summary, { hidden: true, sponsoredOnly: true, onToggle: () => {} })
+      expect(el.querySelector('.crf-toggle')).toBeNull()
+      const notes = el.querySelectorAll('.crf-note')
+      expect(notes).toHaveLength(1)
+      expect(notes[0].tagName).toBe('P')
+      expect(notes[0].textContent).toBe('체험단 후기만 모아 보는 중입니다')
+    })
+
+    it('sponsoredOnly 여도 나머지 줄은 같다', () => {
+      const onDetail = vi.fn()
+      const options = { hidden: false, onToggle: () => {}, onDetail }
+      const plain = createBanner(summary, options)
+      const el = createBanner(summary, { ...options, sponsoredOnly: true })
+
+      for (const selector of ['.crf-headline', '.crf-sub', '.crf-scope', '.crf-detail']) {
+        expect(el.querySelector(selector).textContent).toBe(plain.querySelector(selector).textContent)
+      }
+      expect([...el.children].map((child) => child.className)).toEqual([
+        'crf-headline',
+        'crf-sub',
+        'crf-note',
+        'crf-detail',
+        'crf-scope',
+      ])
+      el.querySelector('.crf-detail').click()
+      expect(onDetail).toHaveBeenCalledTimes(1)
+    })
+
+    it('옵션이 없거나 false 면 숨김 버튼을 넣고 안내 글은 없다', () => {
+      for (const options of [{}, { sponsoredOnly: false }]) {
+        const el = createBanner(summary, { hidden: false, onToggle: () => {}, ...options })
+        expect(el.querySelector('.crf-toggle')).not.toBeNull()
+        expect(el.querySelector('.crf-note')).toBeNull()
+      }
+    })
+
+    it('체험단 0건 배너는 sponsoredOnly 여도 바뀌지 않는다', () => {
+      const clean = {
+        total: 100, sponsoredCount: 0, organicCount: 100, sponsoredRatio: 0,
+        ratingOfficial: 4.5, ratingFiltered: 4.5, ratingDelta: 0,
+      }
+      const options = { hidden: false, onToggle: () => {}, onDetail: () => {} }
+      const plain = createBanner(clean, options)
+      const el = createBanner(clean, { ...options, sponsoredOnly: true })
+      expect(el.querySelector('.crf-note')).toBeNull()
+      expect(el.textContent).toBe(plain.textContent)
+    })
+  })
+
   describe('체험단 0건 요약', () => {
     const clean = {
       total: 100, sponsoredCount: 0, organicCount: 100, sponsoredRatio: 0,

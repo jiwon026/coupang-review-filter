@@ -45,6 +45,25 @@
   display: none !important;
 }
 
+/* 무신사의 후기 전체보기는 카드 높이를 재서 자리를 잡는다. 높이가 0 이면 계산이 깨질 수 있어 1px 로 접는다. */
+.crf-collapsed {
+  height: 1px !important;
+  min-height: 0 !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+}
+
+.crf-note {
+  margin: 0;
+  font-size: 13px;
+  color: #555;
+}
+
 .crf-badge {
   display: inline-block;
   margin-top: 6px;

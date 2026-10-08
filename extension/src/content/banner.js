@@ -52,13 +52,21 @@ export function createBanner(summary, options) {
   sub.textContent = subText
   root.appendChild(sub)
 
-  const toggle = document.createElement('button')
-  toggle.type = 'button'
-  toggle.className = 'crf-toggle'
-  toggle.setAttribute('aria-pressed', String(options.hidden))
-  toggle.textContent = options.hidden ? '체험단 리뷰 다시 보기' : '체험단 리뷰 숨기기'
-  toggle.addEventListener('click', () => options.onToggle(!options.hidden))
-  root.appendChild(toggle)
+  if (options.sponsoredOnly) {
+    // 체험단 후기만 모아 보는 조건에서는 숨기지 않으므로 버튼 대신 안내 글을 둔다.
+    const note = document.createElement('p')
+    note.className = 'crf-note'
+    note.textContent = '체험단 후기만 모아 보는 중입니다'
+    root.appendChild(note)
+  } else {
+    const toggle = document.createElement('button')
+    toggle.type = 'button'
+    toggle.className = 'crf-toggle'
+    toggle.setAttribute('aria-pressed', String(options.hidden))
+    toggle.textContent = options.hidden ? '체험단 리뷰 다시 보기' : '체험단 리뷰 숨기기'
+    toggle.addEventListener('click', () => options.onToggle(!options.hidden))
+    root.appendChild(toggle)
+  }
 
   if (typeof options.onDetail === 'function') root.appendChild(createDetailButton(options.onDetail))
 
