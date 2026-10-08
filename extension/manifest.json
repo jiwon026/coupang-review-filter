@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "체험단 리뷰 제거기 for 쿠팡",
+  "name": "체험단 리뷰 제거기",
   "short_name": "체험단 제거기",
-  "version": "1.0.0",
-  "description": "쿠팡 리뷰에서 체험단 리뷰를 찾아 숨기고, 체험단을 뺀 평점을 보여 줍니다. 숨긴 리뷰는 언제든 다시 볼 수 있습니다.",
+  "version": "1.1.0",
+  "description": "쿠팡과 무신사 리뷰에서 체험단 리뷰를 찾아 숨기고, 체험단을 뺀 평점을 보여 줍니다. 숨긴 리뷰는 언제든 다시 볼 수 있습니다.",
   "minimum_chrome_version": "120",
   "icons": {
     "16": "icons/icon-16.png",
@@ -17,7 +17,11 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.coupang.com/vp/products/*"],
+      "matches": [
+        "https://www.coupang.com/vp/products/*",
+        "https://www.musinsa.com/products/*",
+        "https://www.musinsa.com/review/goods/*"
+      ],
       "js": ["dist/content.js"],
       "css": ["src/content/content.css"],
       "run_at": "document_idle"

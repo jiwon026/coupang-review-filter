@@ -9,7 +9,7 @@ import { assignAll } from '../core/experiment.js'
 import { configureUninstallUrl, handleInstalled } from './lifecycle.js'
 import { markPanelTrigger, consumePanelTrigger } from './panel-trigger.js'
 
-// chrome.storage.local 은 기본으로 콘텐츠 스크립트 문맥에도 열려 있다. 그러면 쿠팡 페이지 안의 코드가 동의 값을 직접 바꿀 수 있다.
+// chrome.storage.local 은 기본으로 콘텐츠 스크립트 문맥에도 열려 있다. 그러면 쇼핑몰 페이지 안의 코드가 동의 값을 직접 바꿀 수 있다.
 // 확장 페이지와 워커에서만 읽고 쓰도록 닫는다. 실패해도 확장 동작은 막지 않는다.
 try {
   chrome.storage.local
@@ -42,7 +42,7 @@ chrome.sidePanel
 
 const CONSENT_SOURCES = ['onboarding', 'panel']
 
-// 확장 페이지(온보딩, 사이드 패널)에서 온 메시지만 동의를 바꿀 수 있고 기기 번호를 받을 수 있다. 콘텐츠 스크립트의 sender.url 은 쿠팡 주소다.
+// 확장 페이지(온보딩, 사이드 패널)에서 온 메시지만 동의를 바꿀 수 있고 기기 번호를 받을 수 있다. 콘텐츠 스크립트의 sender.url 은 쇼핑몰 주소다.
 function isFromExtensionPage(sender) {
   return typeof sender?.url === 'string' && sender.url.startsWith(chrome.runtime.getURL(''))
 }
@@ -61,7 +61,7 @@ async function secondsSinceInstall(at) {
 // 한 번이라도 동의한 적이 있을 때만 싣는다. 동의한 적이 없으면 보낸 통계가 없으므로 번호를 읽지도(없으면 새로 만들지도) 않는다.
 // 번호를 읽지 못하면 null 로 둔다. 던지지 않는다.
 // trusted 는 받는 쪽이 확장 페이지인지다. 저장소를 TRUSTED_CONTEXTS 로 닫아 세운 경계를 응답이 우회하지 않도록,
-// 콘텐츠 스크립트(쿠팡 페이지 안에서 도는 코드) 같은 다른 발신자에게는 상태만 주고 번호는 주지 않는다.
+// 콘텐츠 스크립트(쇼핑몰 페이지 안에서 도는 코드) 같은 다른 발신자에게는 상태만 주고 번호는 주지 않는다.
 async function consentForPage({ status, decidedAt, everGranted }, { trusted }) {
   let deviceId = null
   if (trusted === true && everGranted === true) {

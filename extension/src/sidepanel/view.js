@@ -13,7 +13,7 @@ export function renderPanel(root, summary) {
   root.replaceChildren()
 
   if (!summary) {
-    root.appendChild(el('p', 'empty', '쿠팡 상품 페이지에서 리뷰 영역까지 스크롤해 주세요.'))
+    root.appendChild(el('p', 'empty', '쿠팡이나 무신사 상품 페이지에서 리뷰 영역까지 스크롤해 주세요.'))
     return
   }
 

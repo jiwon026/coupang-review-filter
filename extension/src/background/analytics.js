@@ -33,11 +33,11 @@ export function buildPayload(input) {
   }
 }
 
-// 쿠팡의 상품 번호와 리뷰 번호 원문은 기기 밖으로 나가지 않는다(명세 11.3). 새 식별자가 생기면 한 줄 추가한다.
+// 쇼핑몰의 상품 번호와 리뷰 번호 원문은 기기 밖으로 나가지 않는다(명세 11.3). 새 식별자가 생기면 한 줄 추가한다.
 const PSEUDONYMIZED = { product_id: 'product_key', page_first_review_id: 'page_key' }
 
 // 두 번째 방어선. 표에 없는 식별자나 자유 텍스트가 새지 않게 한다.
-// 예외 메시지 같은 자유 텍스트에는 리뷰 본문이나 쿠팡 번호가 섞일 수 있다. 콘텐츠 스크립트가 싣지 않지만 들어와도 값과 무관하게 지운다.
+// 예외 메시지 같은 자유 텍스트에는 리뷰 본문이나 쇼핑몰의 번호가 섞일 수 있다. 콘텐츠 스크립트가 싣지 않지만 들어와도 값과 무관하게 지운다.
 const FREE_TEXT_KEYS = ['error_message']
 const ID_SUFFIX = /_id$/i
 

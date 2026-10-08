@@ -208,7 +208,7 @@ describe('온보딩 배선: 로드', () => {
     const root = await loadOnboarding({ consent: { consent: { status, decidedAt: 1 } } })
     const headings = [...root.querySelectorAll('h2, h3')].map((node) => node.textContent)
     expect(headings).toEqual(['사용 방법', '보내는 내용', '보내는 것', '보내지 않는 것'])
-    expect(root.querySelectorAll('section.box li')).toHaveLength(10)
+    expect(root.querySelectorAll('section.box li')).toHaveLength(11)
     expect(root.querySelectorAll('p.note')).toHaveLength(2)
     expect(buttonByText(root, '설정 바꾸기')).toBeTruthy()
   })

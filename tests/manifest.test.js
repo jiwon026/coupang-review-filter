@@ -32,9 +32,32 @@ describe('매니페스트: 권한과 대상', () => {
     expect(manifest).not.toHaveProperty('web_accessible_resources')
   })
 
-  it('콘텐츠 스크립트는 하나이고 쿠팡 상품 페이지에만 붙는다', () => {
+  it('콘텐츠 스크립트는 하나이고 쿠팡 상품 페이지, 무신사 상품 페이지, 무신사 후기 전체보기에만 붙는다', () => {
     expect(manifest.content_scripts).toHaveLength(1)
-    expect(manifest.content_scripts[0].matches).toEqual(['https://www.coupang.com/vp/products/*'])
+    expect(manifest.content_scripts[0].matches).toEqual([
+      'https://www.coupang.com/vp/products/*',
+      'https://www.musinsa.com/products/*',
+      'https://www.musinsa.com/review/goods/*',
+    ])
+  })
+
+  it('쇼핑몰 전체나 다른 호스트를 대상으로 잡지 않는다', () => {
+    const matches = manifest.content_scripts.flatMap((entry) => entry.matches)
+    for (const pattern of matches) {
+      const url = new URL(pattern.replace(/\*$/, ''))
+      expect(url.protocol).toBe('https:')
+      expect(['www.coupang.com', 'www.musinsa.com']).toContain(url.hostname)
+      expect(url.pathname).not.toBe('/')
+      expect(pattern.slice(0, -1)).not.toContain('*')
+    }
+    expect(manifest.content_scripts[0]).not.toHaveProperty('exclude_matches')
+    expect(manifest.content_scripts[0]).not.toHaveProperty('include_globs')
+    expect(manifest.content_scripts[0]).not.toHaveProperty('all_frames')
+  })
+
+  it('스크립트와 CSS 는 세 주소에 같이 붙는다', () => {
+    expect(manifest.content_scripts[0].js).toEqual(['dist/content.js'])
+    expect(manifest.content_scripts[0].css).toEqual(['src/content/content.css'])
   })
 })
 
@@ -45,9 +68,15 @@ describe('매니페스트: 스토어 메타데이터', () => {
   })
 
   it('이름, 짧은 이름, 툴바 제목이 정해진 값이다', () => {
-    expect(manifest.name).toBe('체험단 리뷰 제거기 for 쿠팡')
+    expect(manifest.name).toBe('체험단 리뷰 제거기')
     expect(manifest.short_name).toBe('체험단 제거기')
     expect(manifest.action.default_title).toBe('체험단 리뷰 제거기')
+  })
+
+  it('요약이 정해진 문장이고 두 쇼핑몰을 모두 적는다', () => {
+    expect(manifest.description).toBe(
+      '쿠팡과 무신사 리뷰에서 체험단 리뷰를 찾아 숨기고, 체험단을 뺀 평점을 보여 줍니다. 숨긴 리뷰는 언제든 다시 볼 수 있습니다.',
+    )
   })
 
   it('최소 크롬 버전이 120 이다', () => {
@@ -63,6 +92,16 @@ describe('매니페스트: 스토어 메타데이터', () => {
 
   it('manifest.version 이 package.json 의 version 과 같다', () => {
     expect(manifest.version).toBe(pkg.version)
+  })
+
+  it('버전은 1.1.0 이다', () => {
+    expect(manifest.version).toBe('1.1.0')
+  })
+
+  it('package-lock.json 의 버전도 같다', () => {
+    const lock = JSON.parse(readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'))
+    expect(lock.version).toBe(pkg.version)
+    expect(lock.packages[''].version).toBe(pkg.version)
   })
 })
 

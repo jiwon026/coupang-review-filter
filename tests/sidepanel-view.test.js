@@ -59,6 +59,8 @@ describe('renderPanel', () => {
   it('요약이 없으면 안내 문구를 보여준다', () => {
     renderPanel(root, null)
     expect(root.textContent).toContain('리뷰 영역까지 스크롤')
+    expect(root.querySelector('.empty').textContent).toBe('쿠팡이나 무신사 상품 페이지에서 리뷰 영역까지 스크롤해 주세요.')
+    expect(root.children).toHaveLength(1)
     expect(root.querySelector('.bar-fill')).toBeNull()
   })
 

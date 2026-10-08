@@ -10,7 +10,8 @@ const PRIVACY_URL = 'https://landing.test/privacy'
 const SENT_ITEMS = [
   '배너가 뜬 횟수, 체험단 리뷰 비중과 평점 같은 숫자, 필터가 켜져 있었는지',
   '숨기기 버튼, 패널, 장바구니와 바로구매 버튼, 설치 안내의 예시 링크를 눌렀는지',
-  '리뷰 정렬 방식(베스트순, 최신순)',
+  '리뷰 정렬 방식(베스트순, 최신순 등)',
+  '쿠팡과 무신사 중 어디에서 썼는지',
   '확장의 화면(설치 안내, 패널)을 열었는지, 이용한 시각과 머문 시간',
   '확장 버전, 화면 실험 그룹, 통계를 켠 화면, 오류가 났는지와 종류',
   '확장을 제거할 때 제거 사실과 사용 기간, 직접 고른 이유',
@@ -19,8 +20,8 @@ const SENT_ITEMS = [
 
 const NOT_SENT_ITEMS = [
   '리뷰 내용, 상품 이름, 상품 주소',
-  '쿠팡 계정, 이름, 이메일, 결제 정보',
-  '쿠팡 상품 페이지가 아닌 다른 사이트에서 무엇을 보거나 했는지',
+  '쿠팡과 무신사의 계정, 이름, 이메일, 결제 정보',
+  '쿠팡과 무신사의 상품 페이지와 후기 페이지 밖에서 무엇을 보거나 했는지',
 ]
 
 const NOTE_ITEMS = [
@@ -29,7 +30,7 @@ const NOTE_ITEMS = [
 ]
 
 const HOW_TO_ITEMS = [
-  '쿠팡에서 상품 페이지를 엽니다',
+  '쿠팡이나 무신사에서 상품 페이지를 엽니다',
   '리뷰까지 내려가면 체험단 리뷰 비중과 체험단을 뺀 평점이 보입니다',
   '버튼을 누르면 체험단 리뷰를 숨기고, 다시 누르면 다시 볼 수 있습니다',
 ]
@@ -72,7 +73,7 @@ describe('renderOnboarding: 안내', () => {
   it('제목과 설명을 h1 과 문단으로 보여 준다', () => {
     render()
     expect(root.querySelector('h1').textContent).toBe('설치가 끝났습니다')
-    expect(root.textContent).toContain('쿠팡 상품 페이지의 리뷰 영역에서 자동으로 동작합니다.')
+    expect(root.querySelector('.lead').textContent).toBe('쿠팡과 무신사 상품 페이지의 리뷰 영역에서 자동으로 동작합니다.')
   })
 
   it('사용 방법을 번호 목록 3줄로 보여 준다', () => {
@@ -118,10 +119,26 @@ describe('renderOnboarding: undecided', () => {
     expect(onChoose).toHaveBeenCalledTimes(2)
   })
 
-  it('"보내는 것" 목록은 7줄이고 문자열이 같다', () => {
+  it('"보내는 것" 목록은 8줄이고 문자열이 같다', () => {
     render()
-    expect(listItems('보내는 것')).toHaveLength(7)
+    expect(listItems('보내는 것')).toHaveLength(8)
     expect(listItems('보내는 것')).toEqual(SENT_ITEMS)
+  })
+
+  // 이벤트에 site 를 싣는다. 고지에서 이 줄이 빠지면 알리지 않은 항목을 보내게 된다.
+  it('"보내는 것" 에 어느 쇼핑몰에서 썼는지를 알리는 줄이 정렬 줄 바로 다음에 있다', () => {
+    render()
+    const items = listItems('보내는 것')
+    expect(items.filter((item) => item.includes('무신사'))).toEqual(['쿠팡과 무신사 중 어디에서 썼는지'])
+    expect(items.indexOf('쿠팡과 무신사 중 어디에서 썼는지')).toBe(items.indexOf('리뷰 정렬 방식(베스트순, 최신순 등)') + 1)
+  })
+
+  it.each(['undecided', 'granted', 'denied'])('%s 화면에 쿠팡만 적은 문장이 남아 있지 않다(쿠팡이 나오는 줄에는 무신사도 나온다)', (status) => {
+    render({ status })
+    const lines = [...root.querySelectorAll('p, li, h1, h2, h3')].map((node) => node.textContent)
+    const coupangOnly = lines.filter((line) => line.includes('쿠팡') && !line.includes('무신사'))
+    expect(coupangOnly).toEqual([])
+    expect(lines.some((line) => line.includes('쿠팡'))).toBe(true)
   })
 
   it('선택 화면에는 완료 화면용 소제목(보내는 내용)과 그 구역이 없다', () => {
@@ -165,7 +182,6 @@ describe('renderOnboarding: undecided', () => {
   })
 })
 
-// 예시 링크는 선택을 마친 완료 화면에서만 보인다. 선택 전에 보이면 눌러서 떠난 사용자가 표본에서 빠져 실험이 치우친다.
 describe('renderOnboarding: 다시 묻는 안내', () => {
   const notices = () => [...root.querySelectorAll('.notice')]
 
@@ -219,6 +235,7 @@ describe('renderOnboarding: 다시 묻는 안내', () => {
   })
 })
 
+// 예시 링크는 선택을 마친 완료 화면에서만 보인다. 선택 전에 보이면 눌러서 떠난 사용자가 표본에서 빠져 실험이 치우친다.
 describe('renderOnboarding: 예시 링크', () => {
   const exampleLink = () => root.querySelector(`a[href="${EXAMPLE_URL}"]`)
 
@@ -298,9 +315,9 @@ describe('renderOnboarding: 완료 상태', () => {
   })
 
   // 패널의 보내는 내용 보기는 이 페이지를 연다. 이미 고른 사용자도 여기서 무엇을 보내는지 볼 수 있어야 한다.
-  it.each(['granted', 'denied'])('%s 완료 화면에도 "보내는 것" 7줄과 "보내지 않는 것" 3줄이 같은 문자열로 있다', (status) => {
+  it.each(['granted', 'denied'])('%s 완료 화면에도 "보내는 것" 8줄과 "보내지 않는 것" 3줄이 같은 문자열로 있다', (status) => {
     render({ status })
-    expect(listItems('보내는 것')).toHaveLength(7)
+    expect(listItems('보내는 것')).toHaveLength(8)
     expect(listItems('보내는 것')).toEqual(SENT_ITEMS)
     expect(listItems('보내지 않는 것')).toHaveLength(3)
     expect(listItems('보내지 않는 것')).toEqual(NOT_SENT_ITEMS)
