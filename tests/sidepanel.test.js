@@ -30,9 +30,12 @@ const settle = () => (vi.isFakeTimers() ? vi.advanceTimersByTimeAsync(0) : tick(
 
 // trigger: CONSUME_PANEL_TRIGGER 에 돌려줄 응답. 'lastError' 면 응답 없이 lastError 를 설정한 채 부른다.
 // consent: GET_CONSENT 응답, setConsent: SET_CONSENT 응답을 돌려주는 함수. 'none' 이면 콜백을 부르지 않는다.
+// summaryReply: GET_SUMMARY 응답 방식. 'hold' 는 붙들어 두고, 'none' 은 응답하지 않고, 'lastError' 는 실패로 응답한다.
 async function loadPanel({
   trigger = { trigger: 'banner' },
   summaries = { 5: summaryFor(10) },
+  summaryReply,
+  queryTabs,
   getCurrent,
   consent = grantedReply,
   setConsent = (message) => ({ consent: { status: message.status, decidedAt: 2 } }),
@@ -48,7 +51,15 @@ async function loadPanel({
     lastError: undefined,
     sendMessage(message, callback) {
       sent.push(message)
-      if (message?.type === 'crf:get-summary') callback?.({ summary: summaries[message.tabId] ?? null })
+      if (message?.type === 'crf:get-summary') {
+        const answer = () => callback?.({ summary: summaries[message.tabId] ?? null })
+        if (summaryReply === 'hold') held['crf:get-summary'] = answer
+        else if (summaryReply === 'lastError') {
+          runtime.lastError = { message: 'Receiving end does not exist.' }
+          callback?.(undefined)
+          runtime.lastError = undefined
+        } else if (summaryReply !== 'none') answer()
+      }
       if (message?.type === 'crf:consume-panel-trigger') {
         if (trigger === 'lastError') {
           runtime.lastError = { message: 'Receiving end does not exist.' }
@@ -86,7 +97,7 @@ async function loadPanel({
         created.push(options)
         return Promise.resolve({ id: 99 })
       },
-      query: async () => [{ id: 5, windowId: 2 }],
+      query: queryTabs ?? (async () => [{ id: 5, windowId: 2 }]),
       onActivated: { addListener: (fn) => activatedListeners.push(fn) },
     },
     windows: { getCurrent: getCurrent ?? (async () => ({ id: 2 })) },
@@ -129,7 +140,7 @@ describe('사이드 패널 배선', () => {
     await loadPanel({ trigger: { trigger: 'banner' } })
     const events = panelOpened()
     expect(events).toHaveLength(1)
-    expect(events[0].properties).toEqual({ trigger: 'banner' })
+    expect(events[0].properties).toEqual({ trigger: 'banner', site: 'unknown' })
   })
 
   it('자기 창 id 로 패널 열기 경로를 묻는다', async () => {
@@ -177,6 +188,84 @@ describe('사이드 패널 배선', () => {
     await tick()
     expect(sent.filter((message) => message?.type === 'crf:get-summary')).toHaveLength(2)
     expect(panelOpened()).toHaveLength(1)
+  })
+})
+
+describe('사이드 패널 배선: Panel Opened 의 쇼핑몰 구분', () => {
+  const onSite = (site) => ({ 5: { ...summaryFor(10), site } })
+
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
+  it.each(['musinsa', 'coupang'])('요약에 site 가 %s 면 Panel Opened 의 site 도 같다', async (site) => {
+    await loadPanel({ summaries: onSite(site) })
+    expect(panelOpened()).toHaveLength(1)
+    expect(panelOpened()[0].properties).toEqual({ trigger: 'banner', site })
+  })
+
+  it('요약이 null 이면 site 는 unknown 이다', async () => {
+    await loadPanel({ summaries: {} })
+    expect(panelOpened()).toHaveLength(1)
+    expect(panelOpened()[0].properties.site).toBe('unknown')
+  })
+
+  it.each([
+    ['site 가 없는 요약', undefined],
+    ['목록에 없는 값', 'evil<script>'],
+    ['대문자가 섞인 값', 'Musinsa'],
+    ['객체', { id: 'musinsa' }],
+  ])('%s 이면 site 는 unknown 이다', async (_label, site) => {
+    await loadPanel({ summaries: onSite(site) })
+    expect(panelOpened()[0].properties.site).toBe('unknown')
+    expect(JSON.stringify(panelOpened())).not.toContain('evil')
+  })
+
+  it('요약 응답을 받기 전에는 Panel Opened 를 보내지 않고 받은 뒤에 그 요약의 site 로 보낸다', async () => {
+    await loadPanel({ summaries: onSite('musinsa'), summaryReply: 'hold' })
+    await settle()
+    expect(ofType('crf:consume-panel-trigger')).toHaveLength(1)
+    expect(panelOpened()).toHaveLength(0)
+
+    held['crf:get-summary']()
+    await settle()
+    expect(panelOpened()).toHaveLength(1)
+    expect(panelOpened()[0].properties).toEqual({ trigger: 'banner', site: 'musinsa' })
+  })
+
+  it('요약 응답이 실패하면 site unknown 으로 Panel Opened 를 1건 보낸다', async () => {
+    const root = await loadPanel({ summaries: onSite('musinsa'), summaryReply: 'lastError' })
+    expect(panelOpened()).toHaveLength(1)
+    expect(panelOpened()[0].properties).toEqual({ trigger: 'banner', site: 'unknown' })
+    expect(root.textContent).toContain('리뷰 영역까지 스크롤')
+  })
+
+  it('요약 응답이 2초 안에 없으면 site unknown 으로 Panel Opened 를 1건 보내고 늦은 응답으로 다시 보내지 않는다', async () => {
+    vi.useFakeTimers()
+    const root = await loadPanel({ summaries: onSite('musinsa'), summaryReply: 'hold' })
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(panelOpened()).toHaveLength(0)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(panelOpened()).toHaveLength(1)
+    expect(panelOpened()[0].properties).toEqual({ trigger: 'banner', site: 'unknown' })
+
+    // 늦게 온 요약은 그리기만 한다.
+    held['crf:get-summary']()
+    await settle()
+    expect(root.textContent).toContain('리뷰 10개 기준')
+    expect(panelOpened()).toHaveLength(1)
+  })
+
+  it('탭을 읽지 못해도 site unknown 으로 Panel Opened 를 1건 보낸다', async () => {
+    await loadPanel({ queryTabs: () => Promise.reject(new Error('탭 없음')) })
+    expect(panelOpened()).toHaveLength(1)
+    expect(panelOpened()[0].properties).toEqual({ trigger: 'banner', site: 'unknown' })
   })
 })
 

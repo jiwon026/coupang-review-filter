@@ -4,6 +4,7 @@ import { privacyUrl } from '../shared/site.js'
 import { ONBOARDING_PATH } from '../shared/pages.js'
 import { CONSENT, DECIDED_STATUSES, consentStatusFrom, deviceIdFrom } from '../shared/consent-status.js'
 import { request, GET_CONSENT_TIMEOUT_MS, SET_CONSENT_TIMEOUT_MS } from '../shared/request.js'
+import { UNKNOWN_SHOP_ID, safeShopId } from '../shared/shops.js'
 import { renderPanel, renderConsent } from './view.js'
 
 const LOG_PREFIX = '[체험단 필터]'
@@ -13,6 +14,8 @@ const TRIGGERS = ['banner', 'toolbar']
 const root = document.getElementById('root')
 const consentRoot = document.getElementById('consent')
 let activeTabId = null
+// 지금 그린 요약에 적힌 쇼핑몰. 패널이 보내는 이벤트의 site 로 쓴다. 요약이 없으면 unknown 이다.
+let shopId = UNKNOWN_SHOP_ID
 
 // revision 은 더 새로운 정보(저장 성공, 다른 곳의 변경 알림, 다시 읽은 상태)가 도착할 때마다 올린다.
 // 응답을 기다리던 쪽은 그 사이에 revision 이 바뀌었으면 자기 응답을 버린다.
@@ -25,15 +28,32 @@ async function currentTabId() {
   return tab?.id ?? null
 }
 
+// 요약을 그리고 그 쇼핑몰을 기억한다. 요약은 저장소를 거쳐 온 값이라 목록에 있는 쇼핑몰만 받아들인다.
+function showSummary(summary) {
+  shopId = safeShopId(summary?.site)
+  renderPanel(root, summary)
+}
+
+// 요약 응답을 받았거나 받지 못한 것으로 정리된 뒤에 끝난다. 읽기 시간 제한 안에 응답이 없으면 요약 없이 그리고
+// 늦게 온 응답은 도착했을 때 그린다.
 async function load() {
   activeTabId = await currentTabId()
   if (activeTabId === null) {
-    renderPanel(root, null)
+    showSummary(null)
     return
   }
-  chrome.runtime.sendMessage({ type: MESSAGES.GET_SUMMARY, tabId: activeTabId }, (response) => {
-    renderPanel(root, response?.summary ?? null)
-  })
+  const show = (response) => showSummary(response?.summary ?? null)
+  try {
+    show(
+      await request(
+        { type: MESSAGES.GET_SUMMARY, tabId: activeTabId },
+        { timeoutMs: GET_CONSENT_TIMEOUT_MS, onLate: show },
+      ),
+    )
+  } catch (error) {
+    console.warn(`${LOG_PREFIX} 요약을 읽지 못했습니다:`, error?.message)
+    showSummary(null)
+  }
 }
 
 function drawConsent() {
@@ -158,13 +178,18 @@ async function panelTrigger() {
 }
 
 // 패널은 배너 렌더 시각을 모르므로 seconds_since_render 는 싣지 않는다.
-async function trackPanelOpened() {
-  const trigger = await panelTrigger()
+// site 는 지금 탭의 요약에서 오므로 첫 요약 읽기(summaryLoaded)가 끝난 뒤에 보낸다. 읽지 못했어도 unknown 으로 보낸다.
+// 여는 경로는 기다리지 않고 바로 묻는다.
+async function trackPanelOpened(summaryLoaded) {
+  const [trigger] = await Promise.all([
+    panelTrigger(),
+    summaryLoaded.catch((error) => console.warn(`${LOG_PREFIX} 요약을 읽지 못했습니다:`, error?.message)),
+  ])
   try {
     const pending = chrome.runtime.sendMessage({
       type: MESSAGES.TRACK,
       eventType: EVENTS.PANEL_OPENED,
-      properties: { trigger },
+      properties: { trigger, site: shopId },
     })
     if (pending && typeof pending.catch === 'function') {
       pending.catch((error) => console.warn(`${LOG_PREFIX} 패널 열림을 기록하지 못했습니다:`, error?.message))
@@ -183,7 +208,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
   if (message?.type !== MESSAGES.SUMMARY_UPDATED) return false
   if (sender.tab?.id !== activeTabId) return false
-  renderPanel(root, message.summary)
+  showSummary(message.summary)
   return false
 })
 
@@ -196,7 +221,5 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') refreshConsent()
 })
 
-trackPanelOpened()
-
-load()
+trackPanelOpened(load())
 loadConsent()

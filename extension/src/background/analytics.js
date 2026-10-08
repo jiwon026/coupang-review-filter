@@ -5,6 +5,7 @@ import { getSessionId } from './session.js'
 import { isCollectionAllowed } from './consent.js'
 import { pseudonymize } from './pseudonym.js'
 import { safeErrorName } from '../shared/error-name.js'
+import { safeShopId } from '../shared/shops.js'
 
 // 앰플리튜드는 이벤트 최상위의 platform 과 app_version 을 기기 속성으로 쓴다.
 const AMPLITUDE_PLATFORM = 'Chrome Extension'
@@ -46,6 +47,8 @@ async function minimize(properties) {
   for (const key of FREE_TEXT_KEYS) delete result[key]
   // 오류 이름은 콘텐츠 스크립트가 이미 걸러 보내지만 메시지는 신뢰 경계 밖에서 온다. 고정된 모양이 아니면 Unknown 으로 바꾼다.
   if ('error_name' in result) result.error_name = safeErrorName(result.error_name)
+  // 쇼핑몰 구분도 같다. 목록에 없는 값은 unknown 으로 바꾼다. 키가 없는 이벤트(온보딩, 설치)에는 만들지 않는다.
+  if ('site' in result) result.site = safeShopId(result.site)
   for (const [rawKey, safeKey] of Object.entries(PSEUDONYMIZED)) {
     if (!(rawKey in result)) continue
     const raw = result[rawKey]

@@ -254,6 +254,27 @@ describe('track 의 식별자 최소화', () => {
     expect('page_key' in props).toBe(false)
   })
 
+  it('무신사 접두가 붙은 번호와 붙지 않은 같은 번호의 product_key, page_key 가 다르고 원문은 어디에도 없다', async () => {
+    const { track } = await loadTrack('device-abc')
+    await track('Banner Rendered', { product_id: `musinsa:${RAW_PRODUCT_ID}`, page_first_review_id: `musinsa:${RAW_REVIEW_ID}` })
+    await track('Banner Rendered', { product_id: RAW_PRODUCT_ID, page_first_review_id: RAW_REVIEW_ID })
+
+    const [musinsa, coupang] = sent.map((body) => body.events[0].event_properties)
+    expect(musinsa.product_key).toMatch(/^[0-9a-f]{16}$/)
+    expect(coupang.product_key).toMatch(/^[0-9a-f]{16}$/)
+    expect(musinsa.product_key).not.toBe(coupang.product_key)
+    expect(musinsa.page_key).not.toBe(coupang.page_key)
+    for (const props of [musinsa, coupang]) {
+      expect('product_id' in props).toBe(false)
+      expect('page_first_review_id' in props).toBe(false)
+    }
+
+    const body = JSON.stringify(sent)
+    expect(body).not.toContain(RAW_PRODUCT_ID)
+    expect(body).not.toContain(RAW_REVIEW_ID)
+    expect(body).not.toContain('musinsa:')
+  })
+
   it('미동의 상태(denied, undecided)에서는 보내지도 솔트를 만들지도 않는다', async () => {
     const { track } = await loadTrack('device-abc')
     const { setConsent } = await import('../extension/src/background/consent.js')
@@ -332,6 +353,36 @@ describe('track 의 최소 수집 두 번째 방어선', () => {
   it('error_name 이 없는 이벤트에는 키를 만들지 않는다', async () => {
     const props = await trackedProps('device-abc', { error_type: 'ReviewContainerNotFound' })
     expect('error_name' in props).toBe(false)
+  })
+
+  // 쇼핑몰 구분도 메시지로 들어온다. 목록에 없는 값은 그대로 내보내지 않는다.
+  it.each([
+    ['목록에 없는 문자열', 'evil<script>'],
+    ['대문자가 섞인 값', 'Coupang'],
+    ['빈 문자열', ''],
+    ['null', null],
+    ['객체', { text: '리뷰 본문' }],
+  ])('track 에 목록에 없는 site(%s)가 들어오면 unknown 으로 바꿔 보낸다', async (_label, value) => {
+    const { track } = await loadTrack('device-abc')
+    await track('Banner Rendered', { site: value, review_sort: 'best' })
+
+    expect(sent).toHaveLength(1)
+    const props = sent[0].events[0].event_properties
+    expect(props.site).toBe('unknown')
+    expect(props.review_sort).toBe('best')
+    const body = JSON.stringify(sent[0])
+    expect(body).not.toContain('evil')
+    expect(body).not.toContain('리뷰 본문')
+  })
+
+  it.each(['coupang', 'musinsa'])('목록에 있는 site(%s)는 그대로 보낸다', async (id) => {
+    const props = await trackedProps('device-abc', { site: id })
+    expect(props.site).toBe(id)
+  })
+
+  it('site 가 없는 이벤트에는 키를 만들지 않는다', async () => {
+    const props = await trackedProps('device-abc', { consent_source: 'onboarding' })
+    expect('site' in props).toBe(false)
   })
 
   it('표에 없는 _id 접미사 키는 제거하고 키 이름만 경고한다(실패 시 닫힘)', async () => {
