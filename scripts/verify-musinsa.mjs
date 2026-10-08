@@ -119,7 +119,12 @@ async function verifyProductPage(page) {
   )
   await saveShot(page, 'musinsa-hidden')
 
-  // 숨김을 켠 채 무신사의 체험단 조건을 고른다. 숨기지 않아야 한다.
+  const lastTotal = async () => (await page.evaluate('return window.__crfSent')).filter((m) => m.type === 'crf:summary-updated').at(-1)?.summary.total
+  const renderedCount = async () => bannerEvents(await page.evaluate('return window.__crfSent')).length
+  const totalBefore = await lastTotal()
+  const renderedBefore = await renderedCount()
+
+  // 숨김을 켠 채 무신사의 체험단 조건을 고른다. 숨기지 않아야 하고, 조건이 고른 후기는 누적에 넣지 않아야 한다.
   await page.evaluate(`document.querySelector('[data-filter-value="체험단"]').click(); await new Promise(r => setTimeout(r, 3000)); return true`)
   state = await page.evaluate(STATE)
   check(
@@ -129,6 +134,10 @@ async function verifyProductPage(page) {
   )
   check('체험단 조건에서 배너에 안내 글이 있고 숨김 버튼이 없다', state.hasNote && !state.hasToggle, (state.bannerText ?? '').replace(/\n/g, ' / '))
 
+  check('체험단 조건에서 본 후기는 누적에 넣지 않는다', (await lastTotal()) === totalBefore, `들어가기 전 ${totalBefore}건, 조건 안 ${await lastTotal()}건`)
+  check('체험단 조건 동안 Banner Rendered 가 늘지 않는다', (await renderedCount()) === renderedBefore)
+  check('조건 안에서도 배너의 숫자는 들어가기 전의 누적이다', (state.bannerText ?? '').includes(`리뷰 ${totalBefore}개`), (state.bannerText ?? '').split('\n').filter(Boolean)[1])
+
   // 조건을 풀면 원래 설정(숨김)으로 돌아간다.
   await page.evaluate(`document.querySelector('[data-filter-value="체험단"]').click(); await new Promise(r => setTimeout(r, 3000)); return true`)
   state = await page.evaluate(STATE)
@@ -137,6 +146,8 @@ async function verifyProductPage(page) {
     state.cards.filter((c) => c.sponsored).every((c) => c.collapsed) && state.hasToggle,
     state.cards.map((c) => `${c.sponsored ? 'S' : 'n'}${c.height}`).join(' '),
   )
+
+  check('조건에서 나온 뒤에도 누적이 그대로다', (await lastTotal()) === totalBefore, `${await lastTotal()}건`)
 
   await clickToggle(page)
   state = await page.evaluate(STATE)
@@ -151,7 +162,9 @@ async function verifyProductPage(page) {
   const summaries = sent.filter((m) => m.type === 'crf:summary-updated')
   const total = summaries.at(-1)?.summary.total ?? 0
   check('Banner Rendered 가 묶음 단위로만 나간다', rendered.length >= 1 && rendered.length <= 1 + Math.floor(total / 10), `누적 ${total}건에 ${rendered.length}번`)
-  check('조건 보기에서 보낸 Banner Rendered 는 sponsored_only_view 가 true 다', rendered.every((m) => typeof m.properties.sponsored_only_view === 'boolean'))
+  check('어떤 이벤트에도 sponsored_only_view 가 없다', events.every((m) => !('sponsored_only_view' in m.properties)))
+  const errors = events.filter((m) => m.eventType === 'Extension Error')
+  check('Extension Error 가 없다(조건 버튼의 모양을 알아본다)', errors.length === 0, errors.map((m) => m.properties.error_type).join(', '))
   check('요약에 site 가 실린다', summaries.length > 0 && summaries.every((m) => m.summary.site === 'musinsa'))
   console.log('  정렬 값:', [...new Set(events.map((m) => m.properties.review_sort))].join(', '))
 }
@@ -178,7 +191,7 @@ async function verifyReviewPage(page) {
 
   // 숨김을 켠 채 끝까지 스크롤한다. 목록이 이어지는지(새 번호가 계속 나오는지)와 숨긴 카드가 접혀 있는지 본다.
   const walk = await page.evaluate(`
-    const seen = window.__crfSeen; const isSponsored = ${IS_SPONSORED}; let stalled = 0; let bad = 0; let steps = 0;
+    const seen = window.__crfSeen; const isSponsored = ${IS_SPONSORED}; let stalled = 0; let bad = 0; let badBadge = 0; let steps = 0;
     for (let i = 0; i < 120 && stalled < 6; i++) {
       const before = seen.size;
       window.scrollBy(0, 1400); await new Promise(r => setTimeout(r, 700)); steps++;
@@ -186,14 +199,17 @@ async function verifyReviewPage(page) {
         const s = isSponsored(e);
         if (s && e.getBoundingClientRect().height > 2) bad++;
         if (!s && e.getBoundingClientRect().height < 100) bad++;
+        if (e.querySelectorAll('.crf-badge').length !== (s ? 1 : 0)) badBadge++;
+        if (e.classList.contains('crf-collapsed') !== s) badBadge++;
       }
       stalled = seen.size === before ? stalled + 1 : 0;
     }
 
     const banner = document.querySelector('[data-crf-banner="1"]');
-    return { seen: seen.size, sponsored: [...seen.values()].filter(Boolean).length, bad, steps, bannerText: banner ? banner.innerText : null, y: Math.round(scrollY), h: document.documentElement.scrollHeight };`)
+    return { seen: seen.size, sponsored: [...seen.values()].filter(Boolean).length, bad, badBadge, steps, bannerText: banner ? banner.innerText : null, y: Math.round(scrollY), h: document.documentElement.scrollHeight };`)
   check('숨긴 채 스크롤해도 목록이 이어진다', walk.seen >= 30, `${walk.steps}번 스크롤에 카드 ${walk.seen}장, 체험단 ${walk.sponsored}장`)
   check('스크롤하는 동안 체험단 카드는 접혀 있고 일반 카드는 보인다', walk.bad === 0, `어긋난 카드 ${walk.bad}번`)
+  check('다시 쓰이는 카드에 표시나 접힘이 남지 않는다', walk.badBadge === 0, `어긋난 카드 ${walk.badBadge}번`)
 
   const sent = await page.evaluate('return window.__crfSent')
   const summary = sent.filter((m) => m.type === 'crf:summary-updated').at(-1)?.summary
@@ -206,6 +222,8 @@ async function verifyReviewPage(page) {
   check('Banner Rendered 가 묶음 단위로만 나간다', rendered.length >= 2 && rendered.length <= 1 + Math.floor(walk.seen / 10), `누적 ${walk.seen}건에 ${rendered.length}번`)
   check('모든 이벤트의 site 가 musinsa 다', tracks(sent).every((m) => m.properties.site === 'musinsa' && m.properties.product_id === `musinsa:${PRODUCT_NO}`))
   check('배너가 남아 있다', walk.bannerText !== null, (walk.bannerText ?? '').split('\n')[0])
+  const errors = tracks(sent).filter((m) => m.eventType === 'Extension Error')
+  check('Extension Error 가 없다', errors.length === 0, errors.map((m) => m.properties.error_type).join(', '))
 }
 
 const page = await launch()
@@ -214,6 +232,7 @@ try {
   await verifyReviewPage(page)
   const zeroSized = page.consoleErrors.filter((line) => /zero-sized/i.test(line))
   check('콘솔에 Zero-sized 오류가 없다', zeroSized.length === 0, `콘솔 오류 ${page.consoleErrors.length}건`)
+  for (const line of page.consoleErrors.slice(0, 5)) console.log('  콘솔 오류:', String(line).slice(0, 160))
 } finally {
   await page.close()
 }
