@@ -32,7 +32,10 @@ const INJECT = `
   document.head.appendChild(style);
   window.__crfSent = [];
   window.chrome = window.chrome || {};
+  window.__crfListeners = [];
   window.chrome.runtime = {
+    id: 'crf-verify',
+    onMessage: { addListener(listener) { window.__crfListeners.push(listener); } },
     lastError: undefined,
     sendMessage(message, callback) {
       window.__crfSent.push(JSON.parse(JSON.stringify(message)));
@@ -152,6 +155,16 @@ async function verifyProductPage(page) {
   await clickToggle(page)
   state = await page.evaluate(STATE)
   check('다시 보기를 누르면 100px 이상으로 돌아온다', state.cards.every((c) => c.height >= 100))
+  check('배너가 본 리뷰 기준임을 알리고 더 보는 방법을 적는다', (state.bannerText ?? '').includes('지금까지 본 리뷰') && (state.bannerText ?? '').includes('후기 전체보기에서 더 보면 숫자가 늘어납니다'), (state.bannerText ?? '').split(/\n/).filter(Boolean).at(-1))
+
+  // 사이드 패널의 숨김 버튼이 보내는 메시지를 흉내 낸다(명세 13.11).
+  const panelMessage = (hidden) => `for (const l of window.__crfListeners) l({ type: 'crf:set-filter', hidden: ${hidden} }, { id: 'crf-verify' }, () => {}); await new Promise(r => setTimeout(r, 800)); return true`
+  await page.evaluate(panelMessage(true))
+  state = await page.evaluate(STATE)
+  check('패널에서 숨기면 페이지의 체험단 카드가 접히고 배너 버튼도 바뀐다', state.cards.filter((c) => c.sponsored).every((c) => c.collapsed) && (state.bannerText ?? '').includes('체험단 리뷰 다시 보기'))
+  await page.evaluate(panelMessage(false))
+  state = await page.evaluate(STATE)
+  check('패널에서 다시 보기를 누르면 돌아온다', state.cards.every((c) => !c.collapsed))
 
   const sent = await page.evaluate('return window.__crfSent')
   const events = tracks(sent)
@@ -162,6 +175,10 @@ async function verifyProductPage(page) {
   const summaries = sent.filter((m) => m.type === 'crf:summary-updated')
   const total = summaries.at(-1)?.summary.total ?? 0
   check('Banner Rendered 가 묶음 단위로만 나간다', rendered.length >= 1 && rendered.length <= 1 + Math.floor(total / 10), `누적 ${total}건에 ${rendered.length}번`)
+  const toggles = events.filter((m) => m.eventType === 'Filter Toggled').map((m) => m.properties.toggle_source)
+  check('Filter Toggled 에 누른 곳이 실린다', toggles.filter((t) => t === 'panel').length === 2 && toggles.filter((t) => t === 'banner').length === 2, toggles.join(' '))
+  const lastSummary = summaries.at(-1)?.summary
+  check('요약에 패널이 쓸 값(hidden, canToggle, scopeHint)이 실린다', lastSummary && lastSummary.hidden === false && lastSummary.canToggle === true && typeof lastSummary.scopeHint === 'string')
   check('어떤 이벤트에도 sponsored_only_view 가 없다', events.every((m) => !('sponsored_only_view' in m.properties)))
   const errors = events.filter((m) => m.eventType === 'Extension Error')
   check('Extension Error 가 없다(조건 버튼의 모양을 알아본다)', errors.length === 0, errors.map((m) => m.properties.error_type).join(', '))
