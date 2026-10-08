@@ -21,6 +21,8 @@ let sent = []
 let messageListeners = []
 let activatedListeners = []
 let created = []
+// chrome.tabs.sendMessage 로 탭에 보낸 것. [탭 번호, 메시지] 의 목록이다.
+let tabMessages = []
 let document
 // 'hold' 응답은 콜백을 붙들어 두었다가 테스트가 원하는 때에 부른다.
 let held = {}
@@ -36,6 +38,7 @@ async function loadPanel({
   summaries = { 5: summaryFor(10) },
   summaryReply,
   queryTabs,
+  sendToTab,
   getCurrent,
   consent = grantedReply,
   setConsent = (message) => ({ consent: { status: message.status, decidedAt: 2 } }),
@@ -46,6 +49,7 @@ async function loadPanel({
   messageListeners = []
   activatedListeners = []
   created = []
+  tabMessages = []
   held = {}
   const runtime = {
     lastError: undefined,
@@ -98,6 +102,10 @@ async function loadPanel({
         return Promise.resolve({ id: 99 })
       },
       query: queryTabs ?? (async () => [{ id: 5, windowId: 2 }]),
+      sendMessage: (...args) => {
+        tabMessages.push(args)
+        return sendToTab ? sendToTab(...args) : Promise.resolve()
+      },
       onActivated: { addListener: (fn) => activatedListeners.push(fn) },
     },
     windows: { getCurrent: getCurrent ?? (async () => ({ id: 2 })) },
@@ -179,6 +187,89 @@ describe('사이드 패널 배선', () => {
 
     deliver({ type: 'crf:summary-updated', summary: summaryFor(40) }, { tab: { id: 5 } })
     expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다')
+  })
+
+  describe('숨김 버튼', () => {
+    const toggleable = (hidden) => ({ ...summaryFor(10), canToggle: true, hidden })
+    const toggle = (root) => root.querySelector('button.panel-toggle')
+
+    it('누르면 지금 탭의 콘텐츠 스크립트로 다음 값을 한 번 보낸다', async () => {
+      const root = await loadPanel({ summaries: { 5: toggleable(false) } })
+      expect(toggle(root).textContent).toBe('체험단 리뷰 숨기기')
+
+      toggle(root).click()
+      await tick()
+
+      expect(tabMessages).toEqual([[5, { type: 'crf:set-filter', hidden: true }]])
+      // 탭으로만 보낸다. 백그라운드로는 보내지 않는다.
+      expect(ofType('crf:set-filter')).toHaveLength(0)
+    })
+
+    it('누른 뒤에는 그대로 두고 요약이 다시 오면 그에 맞춰 그린다', async () => {
+      const root = await loadPanel({ summaries: { 5: toggleable(false) } })
+
+      toggle(root).click()
+      await tick()
+      expect(toggle(root).textContent).toBe('체험단 리뷰 숨기기')
+      expect(toggle(root).getAttribute('aria-pressed')).toBe('false')
+
+      deliver({ type: 'crf:summary-updated', summary: toggleable(true) }, { tab: { id: 5 } })
+      expect(toggle(root).textContent).toBe('체험단 리뷰 다시 보기')
+      expect(toggle(root).getAttribute('aria-pressed')).toBe('true')
+
+      toggle(root).click()
+      await tick()
+      expect(tabMessages.at(-1)).toEqual([5, { type: 'crf:set-filter', hidden: false }])
+      expect(tabMessages).toHaveLength(2)
+    })
+
+    it('전송이 거절돼도 패널이 죽지 않고 경고만 한다', async () => {
+      const root = await loadPanel({
+        summaries: { 5: toggleable(false) },
+        sendToTab: () => Promise.reject(new Error('Receiving end does not exist.')),
+      })
+      const unhandled = []
+      const onUnhandled = (reason) => unhandled.push(reason)
+      process.on('unhandledRejection', onUnhandled)
+      try {
+        toggle(root).click()
+        await tick()
+        await tick()
+      } finally {
+        process.off('unhandledRejection', onUnhandled)
+      }
+
+      expect(unhandled).toEqual([])
+      expect(console.warn).toHaveBeenCalledWith(
+        '[체험단 필터] 숨김 요청을 보내지 못했습니다:',
+        'Receiving end does not exist.',
+      )
+      expect(toggle(root).textContent).toBe('체험단 리뷰 숨기기')
+
+      deliver({ type: 'crf:summary-updated', summary: summaryFor(40) }, { tab: { id: 5 } })
+      expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다')
+    })
+
+    it('전송이 바로 던져도 패널이 죽지 않는다', async () => {
+      const root = await loadPanel({
+        summaries: { 5: toggleable(false) },
+        sendToTab: () => {
+          throw new Error('컨텍스트 무효')
+        },
+      })
+
+      expect(() => toggle(root).click()).not.toThrow()
+      expect(console.warn).toHaveBeenCalledWith('[체험단 필터] 숨김 요청을 보내지 못했습니다:', '컨텍스트 무효')
+    })
+
+    it('요약의 canToggle 이 true 가 아니면 버튼이 없다', async () => {
+      const root = await loadPanel({ summaries: { 5: { ...summaryFor(10), canToggle: false, hidden: false } } })
+      expect(toggle(root)).toBeNull()
+
+      deliver({ type: 'crf:summary-updated', summary: summaryFor(40) }, { tab: { id: 5 } })
+      expect(toggle(root)).toBeNull()
+      expect(tabMessages).toHaveLength(0)
+    })
   })
 
   it('다른 탭의 SUMMARY_UPDATED 는 무시하고 같은 탭이면 갱신한다', async () => {

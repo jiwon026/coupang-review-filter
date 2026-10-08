@@ -25,8 +25,12 @@ const OFF = { default_filter: 'off', banner_copy: 'rating' }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
+const EXTENSION_ID = 'test-extension-id'
+
 let lastDom = null
 let sentMessages = []
+// 콘텐츠 스크립트가 chrome.runtime.onMessage 에 붙인 리스너.
+let messageListeners = []
 // 콘텐츠 스크립트가 MutationObserver.observe 에 넘긴 옵션.
 let observeOptions = []
 
@@ -35,8 +39,11 @@ async function boot(html, { url = PRODUCT_URL, variants = OFF } = {}) {
   const dom = new JSDOM(`<body>${html}</body>`, { url })
   lastDom = dom
   sentMessages = []
+  messageListeners = []
   globalThis.chrome = {
     runtime: {
+      id: EXTENSION_ID,
+      onMessage: { addListener: (fn) => messageListeners.push(fn) },
       sendMessage(message, callback) {
         sentMessages.push(message)
         if (message?.type === 'crf:get-variant') callback?.({ variants })
@@ -74,6 +81,21 @@ function trackedOfType(eventType) {
 function summaries() {
   return sentMessages.filter((message) => message?.type === 'crf:summary-updated')
 }
+
+// 사이드 패널이 chrome.tabs.sendMessage 로 보낸 것처럼 콘텐츠 스크립트의 리스너를 부른다.
+// 리스너가 돌려준 값과 응답 함수를 부른 횟수를 돌려준다.
+async function deliver(message, sender = { id: EXTENSION_ID }) {
+  let responses = 0
+  const returned = messageListeners.map((listener) =>
+    listener(message, sender, () => {
+      responses += 1
+    }),
+  )
+  await tick()
+  return { returned, responses }
+}
+
+const setFilter = (hidden, sender) => deliver({ type: 'crf:set-filter', hidden }, sender)
 
 function card(id, { sponsored = false, rating = '5' } = {}) {
   const label = sponsored
@@ -205,6 +227,258 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
 
       await setSponsoredOnly(doc, false)
       expect(scopes(doc)).toEqual(['지금까지 본 리뷰 3개 기준입니다. 후기 전체보기에서 더 보면 숫자가 늘어납니다'])
+    })
+  })
+
+  describe('패널에서 온 숨김 요청', () => {
+    const toggleOf = (doc) => banners(doc)[0].querySelector('.crf-toggle')
+
+    it('리스너를 하나 붙이고 요약에 숨김 설정과 숨길 수 있는지를 싣는다', async () => {
+      await boot(musinsaFixture)
+
+      expect(messageListeners).toHaveLength(1)
+      expect(summaries().at(-1).summary.hidden).toBe(false)
+      expect(summaries().at(-1).summary.canToggle).toBe(true)
+    })
+
+    it('기본 숨김 변형이면 요약의 hidden 이 true 다', async () => {
+      await boot(musinsaFixture, { variants: ON })
+
+      expect(summaries().at(-1).summary.hidden).toBe(true)
+      expect(summaries().at(-1).summary.canToggle).toBe(true)
+    })
+
+    it('숨기라는 요청을 받으면 체험단 카드를 접고 배너와 요약을 맞추고 Filter Toggled 를 한 번 보낸다', async () => {
+      const doc = await boot(musinsaFixture)
+
+      const { returned, responses } = await setFilter(true)
+
+      expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(1)
+      expect(toggleOf(doc).textContent).toBe('체험단 리뷰 다시 보기')
+      expect(toggleOf(doc).getAttribute('aria-pressed')).toBe('true')
+      const toggled = trackedOfType('Filter Toggled')
+      expect(toggled).toHaveLength(1)
+      expect(toggled[0].properties.toggle_source).toBe('panel')
+      expect(toggled[0].properties.to_state).toBe('on')
+      expect(toggled[0].properties.default_state).toBe('off')
+      expect(toggled[0].properties.site).toBe('musinsa')
+      expect(summaries().at(-1).summary.hidden).toBe(true)
+      expect(summaries().at(-1).summary.canToggle).toBe(true)
+      // 응답을 보내지 않는다.
+      expect(returned.every((value) => value === false || value === undefined)).toBe(true)
+      expect(responses).toBe(0)
+    })
+
+    it('다시 보이라는 요청을 받으면 편다', async () => {
+      const doc = await boot(musinsaFixture, { variants: ON })
+      expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+
+      await setFilter(false)
+
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+      expect(toggleOf(doc).textContent).toBe('체험단 리뷰 숨기기')
+      const toggled = trackedOfType('Filter Toggled')
+      expect(toggled).toHaveLength(1)
+      expect(toggled[0].properties.to_state).toBe('off')
+      expect(toggled[0].properties.default_state).toBe('on')
+      expect(toggled[0].properties.toggle_source).toBe('panel')
+      expect(summaries().at(-1).summary.hidden).toBe(false)
+    })
+
+    it('배너 버튼으로 누르면 toggle_source 가 banner 이고 프로퍼티는 그것 하나만 늘었다', async () => {
+      const doc = await boot(musinsaFixture)
+
+      toggleOf(doc).click()
+      await tick()
+
+      const toggled = trackedOfType('Filter Toggled')
+      expect(toggled).toHaveLength(1)
+      expect(toggled[0].properties.toggle_source).toBe('banner')
+      expect(Object.keys(toggled[0].properties).sort()).toEqual([
+        'default_state',
+        'pages_seen',
+        'product_id',
+        'review_sort',
+        'seconds_since_render',
+        'site',
+        'to_state',
+        'toggle_source',
+      ])
+      expect(summaries().at(-1).summary.hidden).toBe(true)
+    })
+
+    it('패널과 배너의 Filter Toggled 는 toggle_source 말고는 같은 프로퍼티를 싣는다', async () => {
+      const doc = await boot(musinsaFixture)
+
+      await setFilter(true)
+      toggleOf(doc).click()
+      await tick()
+
+      const [fromPanel, fromBanner] = trackedOfType('Filter Toggled')
+      expect(Object.keys(fromPanel.properties).sort()).toEqual(Object.keys(fromBanner.properties).sort())
+      expect(fromPanel.properties.toggle_source).toBe('panel')
+      expect(fromBanner.properties.toggle_source).toBe('banner')
+      expect(fromBanner.properties.to_state).toBe('off')
+    })
+
+    it('이미 같은 값이면 아무것도 하지 않는다', async () => {
+      const doc = await boot(musinsaFixture)
+      const before = sentMessages.length
+
+      await setFilter(false)
+
+      expect(sentMessages).toHaveLength(before)
+      expect(trackedOfType('Filter Toggled')).toHaveLength(0)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+
+      await setFilter(true)
+      const afterFirst = sentMessages.length
+      await setFilter(true)
+
+      expect(sentMessages).toHaveLength(afterFirst)
+      expect(trackedOfType('Filter Toggled')).toHaveLength(1)
+    })
+
+    it('hidden 이 boolean 이 아니면 무시한다', async () => {
+      const doc = await boot(musinsaFixture)
+      const before = sentMessages.length
+
+      for (const hidden of ['true', 1, null, undefined, {}]) await setFilter(hidden)
+
+      expect(sentMessages).toHaveLength(before)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+      expect(toggleOf(doc).getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('다른 확장이 보냈거나 보낸 쪽을 모르면 무시한다', async () => {
+      const doc = await boot(musinsaFixture)
+      const before = sentMessages.length
+
+      for (const sender of [{ id: 'another-extension-id' }, {}, null]) await setFilter(true, sender)
+
+      expect(sentMessages).toHaveLength(before)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+      expect(toggleOf(doc).getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('다른 종류의 메시지는 hidden 이 실려 있어도 무시한다', async () => {
+      const doc = await boot(musinsaFixture)
+      const before = sentMessages.length
+
+      await deliver({ type: 'crf:summary-updated', hidden: true })
+      await deliver({ hidden: true })
+      await deliver(null)
+
+      expect(sentMessages).toHaveLength(before)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+    })
+
+    it('조건 보기에서는 요청을 무시하고 요약의 canToggle 이 false 다', async () => {
+      const doc = await boot(musinsaFixture)
+      await setSponsoredOnly(doc, true)
+      expect(toggleOf(doc)).toBeNull()
+      expect(summaries().at(-1).summary.canToggle).toBe(false)
+      expect(summaries().at(-1).summary.hidden).toBe(false)
+      const before = sentMessages.length
+
+      await setFilter(true)
+
+      expect(sentMessages).toHaveLength(before)
+      expect(trackedOfType('Filter Toggled')).toHaveLength(0)
+
+      // 나온 뒤에도 숨김 설정은 그대로 꺼져 있다.
+      await setSponsoredOnly(doc, false)
+      expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
+      expect(toggleOf(doc).getAttribute('aria-pressed')).toBe('false')
+      expect(summaries().at(-1).summary.canToggle).toBe(true)
+
+      // 숨김 버튼이 돌아왔으므로 이제는 받는다.
+      await setFilter(true)
+      expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+    })
+
+    it('조건 상태를 모를 때도 요청을 무시한다', async () => {
+      const doc = await boot(musinsaFixture)
+      doc.querySelector(SPONSORED_FILTER).className = 'border border-neutral-200'
+      await touchDom(doc)
+      expect(summaries().at(-1).summary.canToggle).toBe(false)
+
+      await setFilter(true)
+
+      expect(trackedOfType('Filter Toggled')).toHaveLength(0)
+    })
+
+    it('체험단이 0건이면 요청을 무시하고 요약의 canToggle 이 false 다', async () => {
+      const doc = await boot(musinsaFixture.replace(NOTICE, '안내'))
+      expect(toggleOf(doc)).toBeNull()
+      expect(summaries().at(-1).summary.canToggle).toBe(false)
+      const before = sentMessages.length
+
+      await setFilter(true)
+
+      expect(sentMessages).toHaveLength(before)
+      expect(trackedOfType('Filter Toggled')).toHaveLength(0)
+    })
+
+    it('대상 페이지를 벗어나 배너가 지워지면 그 뒤의 요청은 무시한다', async () => {
+      const doc = await boot(musinsaFixture)
+      await moveTo(doc, '/main/musinsa/ranking')
+      expect(banners(doc)).toHaveLength(0)
+      const before = sentMessages.length
+
+      await setFilter(true)
+
+      expect(sentMessages).toHaveLength(before)
+    })
+
+    it('아직 그리기 전이면 요청을 무시한다', async () => {
+      await boot('<div></div>')
+      const before = sentMessages.length
+
+      await setFilter(true)
+
+      expect(sentMessages).toHaveLength(before)
+    })
+
+    it('변형이 확정되기 전에 패널로 숨겼으면 도착한 변형이 그 선택을 덮지 않는다', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      try {
+        const dom = new JSDOM(`<body>${musinsaFixture}</body>`, { url: PRODUCT_URL })
+        lastDom = dom
+        sentMessages = []
+        messageListeners = []
+        let answerVariant = null
+        globalThis.chrome = {
+          runtime: {
+            id: EXTENSION_ID,
+            onMessage: { addListener: (fn) => messageListeners.push(fn) },
+            sendMessage(message, callback) {
+              sentMessages.push(message)
+              if (message?.type === 'crf:get-variant') answerVariant = callback
+              return undefined
+            },
+          },
+        }
+        globalThis.window = dom.window
+        globalThis.document = dom.window.document
+        globalThis.MutationObserver = dom.window.MutationObserver
+        vi.resetModules()
+        await import('../extension/src/content/index.js')
+        const doc = dom.window.document
+
+        for (const listener of messageListeners) listener({ type: 'crf:set-filter', hidden: true }, { id: EXTENSION_ID }, () => {})
+        expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+
+        answerVariant({ variants: OFF })
+        expect(sponsoredCard(doc).classList.contains('crf-collapsed')).toBe(true)
+        const toggled = trackedOfType('Filter Toggled')
+        expect(toggled).toHaveLength(1)
+        expect(toggled[0].properties.toggle_source).toBe('panel')
+        expect(toggled[0].properties.default_state).toBe('off')
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 
@@ -793,6 +1067,51 @@ describe('쿠팡에서의 콘텐츠 스크립트(무신사 지원 뒤)', () => {
     )
     expect(banners(doc)[0].querySelectorAll('.crf-scope')).toHaveLength(1)
     expect(summaries().at(-1).summary.scopeHint).toBe('리뷰 페이지를 넘기면 숫자가 늘어납니다')
+  })
+
+  it('패널에서 온 숨김 요청으로 체험단 리뷰를 없애고 다시 보인다', async () => {
+    const doc = await boot(coupangFixture, { url: COUPANG_URL })
+    expect(summaries().at(-1).summary.hidden).toBe(false)
+    expect(summaries().at(-1).summary.canToggle).toBe(true)
+
+    await setFilter(true)
+
+    expect(doc.querySelectorAll('.crf-hidden')).toHaveLength(2)
+    expect(banners(doc)[0].querySelector('.crf-toggle').textContent).toBe('체험단 리뷰 다시 보기')
+    expect(summaries().at(-1).summary.hidden).toBe(true)
+
+    await setFilter(false)
+
+    expect(doc.querySelectorAll('.crf-hidden')).toHaveLength(0)
+    expect(banners(doc)[0].querySelector('.crf-toggle').textContent).toBe('체험단 리뷰 숨기기')
+    expect(summaries().at(-1).summary.hidden).toBe(false)
+    const toggled = trackedOfType('Filter Toggled')
+    expect(toggled.map((message) => message.properties.to_state)).toEqual(['on', 'off'])
+    for (const message of toggled) {
+      expect(message.properties.toggle_source).toBe('panel')
+      expect(message.properties.site).toBe('coupang')
+      expect(message.properties.product_id).toBe('1')
+    }
+  })
+
+  it('배너 버튼의 Filter Toggled 는 toggle_source 가 banner 다', async () => {
+    const doc = await boot(coupangFixture, { url: COUPANG_URL })
+
+    banners(doc)[0].querySelector('.crf-toggle').click()
+    await tick()
+
+    const toggled = trackedOfType('Filter Toggled')
+    expect(toggled).toHaveLength(1)
+    expect(toggled[0].properties.toggle_source).toBe('banner')
+  })
+
+  it('다른 확장이 보낸 숨김 요청은 무시한다', async () => {
+    const doc = await boot(coupangFixture, { url: COUPANG_URL })
+
+    await setFilter(true, { id: 'another-extension-id' })
+
+    expect(doc.querySelectorAll('.crf-hidden')).toHaveLength(0)
+    expect(trackedOfType('Filter Toggled')).toHaveLength(0)
   })
 
   it('쿠팡의 관찰 옵션은 그대로다(속성을 보지 않는다)', async () => {

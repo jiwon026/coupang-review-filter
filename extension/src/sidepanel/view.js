@@ -19,7 +19,19 @@ function scopeText(summary) {
   return usable ? `${base}. ${hint}` : base
 }
 
-export function renderPanel(root, summary) {
+// 숨김 버튼. 글자는 페이지 배너의 버튼과 같다. 누른 뒤에 여기서 바꾸지 않고 요약이 다시 오면 새로 그린다.
+function toggleButton(hidden, onToggle) {
+  const toggle = el('button', 'panel-toggle', hidden ? '체험단 리뷰 다시 보기' : '체험단 리뷰 숨기기')
+  toggle.type = 'button'
+  toggle.setAttribute('aria-pressed', String(hidden))
+  toggle.addEventListener('click', () => {
+    if (typeof onToggle === 'function') onToggle(!hidden)
+  })
+  return toggle
+}
+
+// onToggle 은 숨김 버튼을 눌렀을 때 다음 값(boolean)을 받는다. 버튼은 요약의 canToggle 이 true 일 때만 둔다.
+export function renderPanel(root, summary, { onToggle } = {}) {
   root.replaceChildren()
 
   if (!summary) {
@@ -49,6 +61,8 @@ export function renderPanel(root, summary) {
     el('p', 'stat-label', `리뷰 ${formatCount(summary.total)}개 중 ${formatCount(summary.sponsoredCount)}개`),
   )
   root.appendChild(ratio)
+
+  if (summary.canToggle === true) root.appendChild(toggleButton(summary.hidden === true, onToggle))
 
   root.appendChild(el('p', 'scope', scopeText(summary)))
 }

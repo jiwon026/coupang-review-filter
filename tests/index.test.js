@@ -365,6 +365,7 @@ describe('content 진입점', () => {
     expect(events).toHaveLength(1)
     expect(events[0].properties.to_state).toBe('on')
     expect(events[0].properties.default_state).toBe('off')
+    expect(events[0].properties.toggle_source).toBe('banner')
   })
 
   it('변형 응답이 없어도 배너를 렌더한다', async () => {

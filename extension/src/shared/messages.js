@@ -8,4 +8,5 @@ export const MESSAGES = {
   GET_CONSENT: 'crf:get-consent',
   SET_CONSENT: 'crf:set-consent',
   CONSENT_CHANGED: 'crf:consent-changed',
+  SET_FILTER: 'crf:set-filter',
 }

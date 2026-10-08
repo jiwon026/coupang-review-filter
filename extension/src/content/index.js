@@ -49,6 +49,9 @@ const state = {
   // 묶음 관측에서 마지막으로 Banner Rendered 를 보낸 뒤 새로 누적된 후기 번호 수.
   unobservedCount: 0,
   lastSummary: null,
+  // 지금 배너에 숨김 버튼이 있으면 그 화면의 리뷰, 없으면(체험단 0건, 조건 보기, 그리기 전) null 이다.
+  // 사이드 패널의 숨김 요청은 이 값이 있을 때만 받는다.
+  toggleReviews: null,
   reportedErrors: new Set(),
   observation: createObservation(),
 }
@@ -343,6 +346,38 @@ function openPanel() {
   sendToBackground({ type: MESSAGES.OPEN_PANEL })
 }
 
+// 숨김 설정을 바꾼다. 배너 버튼과 사이드 패널의 요청이 같이 쓴다. source 는 'banner' 나 'panel' 이다.
+// 다시 그리면서 요약도 다시 보내므로 패널이 따라온다.
+function toggleFilter(reviews, next, source) {
+  state.hidden = next
+  state.userToggled = true
+  applyFilter(reviews, next, site.hiddenClass)
+  track(
+    EVENTS.FILTER_TOGGLED,
+    {
+      to_state: next ? 'on' : 'off',
+      seconds_since_render: secondsSinceRender() ?? 0,
+      pages_seen: state.pagesSeen,
+      toggle_source: source,
+    },
+    () => ({ default_state: state.variants.default_filter }),
+  )
+  render({ force: true })
+}
+
+// 사이드 패널이 보낸 숨김 요청을 받는다. 응답은 보내지 않는다.
+// 웹 페이지는 이 메시지를 보낼 수 없지만 다른 확장이 보낸 것은 받지 않도록 보낸 쪽을 확인한다.
+function handleRuntimeMessage(message, sender) {
+  if (sender?.id !== chrome.runtime.id) return false
+  if (message?.type !== MESSAGES.SET_FILTER) return false
+  if (typeof message.hidden !== 'boolean') return false
+  // 배너에 숨김 버튼이 없는 동안에는 받지 않는다.
+  if (state.toggleReviews === null) return false
+  if (message.hidden === state.hidden) return false
+  toggleFilter(state.toggleReviews, message.hidden, 'panel')
+  return false
+}
+
 function placeBanner(container, banner) {
   removeBanner()
   const anchor = site.bannerAnchor(container)
@@ -354,9 +389,13 @@ function placeBanner(container, banner) {
 function renderConditionView(container, conditionState) {
   if (conditionState === 'unknown') reportExtensionError({ error_type: 'SponsoredFilterUnknown' })
 
+  state.toggleReviews = null
   const summary = state.seen.size > 0 ? summarize([...state.seen.values()]) : null
   if (summary !== null) {
-    sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary: { ...summary, site: site.id } })
+    sendToBackground({
+      type: MESSAGES.SUMMARY_UPDATED,
+      summary: { ...summary, site: site.id, hidden: state.hidden, canToggle: false },
+    })
   }
   placeBanner(
     container,
@@ -374,6 +413,7 @@ function renderReviews({ force = false } = {}) {
   // 주소와 화면만 바뀌어 대상 페이지를 벗어났으면 그리지 않고 남은 배너를 지운다.
   if (state.productId === null) {
     removeBanner()
+    state.toggleReviews = null
     return
   }
 
@@ -405,9 +445,11 @@ function renderReviews({ force = false } = {}) {
   const summary = summarize(accumulate(reviews))
   state.lastSummary = summary
   const scopeHint = currentScopeHint()
+  // 배너가 숨김 버튼을 두는 조건과 같다(banner.js). 패널은 이 값이 true 일 때만 숨김 버튼을 둔다.
+  const canToggle = summary.sponsoredCount > 0
   sendToBackground({
     type: MESSAGES.SUMMARY_UPDATED,
-    summary: { ...summary, site: site.id, scopeHint },
+    summary: { ...summary, site: site.id, scopeHint, hidden: state.hidden, canToggle },
   })
   /* @__PURE__ */ debugLog(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
@@ -438,25 +480,12 @@ function renderReviews({ force = false } = {}) {
     hidden: state.hidden,
     copyVariant: state.variants.banner_copy,
     scopeHint,
-    onToggle: (next) => {
-      state.hidden = next
-      state.userToggled = true
-      applyFilter(reviews, next, site.hiddenClass)
-      track(
-        EVENTS.FILTER_TOGGLED,
-        {
-          to_state: next ? 'on' : 'off',
-          seconds_since_render: secondsSinceRender() ?? 0,
-          pages_seen: state.pagesSeen,
-        },
-        () => ({ default_state: state.variants.default_filter }),
-      )
-      render({ force: true })
-    },
+    onToggle: (next) => toggleFilter(reviews, next, 'banner'),
     onDetail: openPanel,
   })
 
   placeBanner(container, banner)
+  state.toggleReviews = canToggle ? reviews : null
 }
 
 // 변형 확정. 응답(변형 없음과 lastError 포함), 응답 대기 시간 초과, 요청 실패 중 먼저 오는 하나만 반영한다.
@@ -528,6 +557,8 @@ function start() {
   }, site.purchase)
 
   applyVariants()
+  // 메시지를 받지 못하는 문맥이어도 배지와 배너는 동작해야 한다.
+  chrome.runtime.onMessage?.addListener(handleRuntimeMessage)
 }
 
 if (document.readyState === 'loading') {

@@ -14,7 +14,7 @@ export function installChromeMock(initial = {}) {
   const listeners = []
   const removedListeners = []
   const installedListeners = []
-  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [], tabsCreate: [], runtimeSent: [] }
+  const calls = { sidePanelOpen: [], setPanelBehavior: [], setUninstallURL: [], setAccessLevel: [], tabsCreate: [], tabsSent: [], runtimeSent: [] }
 
   const chrome = {
     storage: {
@@ -73,6 +73,11 @@ export function installChromeMock(initial = {}) {
       create: (options) => {
         calls.tabsCreate.push(options)
         return Promise.resolve({ id: calls.tabsCreate.length })
+      },
+      // 탭의 콘텐츠 스크립트로 보내는 메시지. 받는 쪽이 없으면 실제 크롬은 거절한다. 테스트가 필요하면 바꿔 끼운다.
+      sendMessage: (tabId, message) => {
+        calls.tabsSent.push({ tabId, message })
+        return Promise.resolve()
       },
       onRemoved: { addListener: (fn) => removedListeners.push(fn) },
     },

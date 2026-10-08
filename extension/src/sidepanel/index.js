@@ -31,7 +31,23 @@ async function currentTabId() {
 // 요약을 그리고 그 쇼핑몰을 기억한다. 요약은 저장소를 거쳐 온 값이라 목록에 있는 쇼핑몰만 받아들인다.
 function showSummary(summary) {
   shopId = safeShopId(summary?.site)
-  renderPanel(root, summary)
+  renderPanel(root, summary, { onToggle: requestFilter })
+}
+
+function warnFilterNotSent(error) {
+  console.warn(`${LOG_PREFIX} 숨김 요청을 보내지 못했습니다:`, error?.message)
+}
+
+// 숨김 버튼을 누르면 지금 탭의 콘텐츠 스크립트에 요청만 보낸다. 화면은 콘텐츠 스크립트가 다시 보내는 요약으로 바뀐다.
+// 탭에 콘텐츠 스크립트가 없으면(다른 사이트로 옮겼거나 확장을 새로 고친 뒤) 전송이 거절된다.
+function requestFilter(hidden) {
+  if (activeTabId === null) return
+  try {
+    const pending = chrome.tabs.sendMessage(activeTabId, { type: MESSAGES.SET_FILTER, hidden })
+    if (pending && typeof pending.catch === 'function') pending.catch(warnFilterNotSent)
+  } catch (error) {
+    warnFilterNotSent(error)
+  }
 }
 
 // 요약 응답을 받았거나 받지 못한 것으로 정리된 뒤에 끝난다. 읽기 시간 제한 안에 응답이 없으면 요약 없이 그리고

@@ -85,6 +85,73 @@ describe('renderPanel', () => {
     expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다. <b>굵게</b>')
   })
 
+  describe('숨김 버튼', () => {
+    const toggles = () => [...root.querySelectorAll('button.panel-toggle')]
+
+    it('canToggle 이 true 고 숨김이 꺼져 있으면 숨기기 버튼을 비중 구역 바로 아래에 둔다', () => {
+      renderPanel(root, { ...summary, canToggle: true, hidden: false })
+      expect(toggles()).toHaveLength(1)
+      const [button] = toggles()
+      expect(button.type).toBe('button')
+      expect(button.textContent).toBe('체험단 리뷰 숨기기')
+      expect(button.getAttribute('aria-pressed')).toBe('false')
+      expect(root.querySelectorAll('.stat')[1].nextElementSibling).toBe(button)
+      expect(button.nextElementSibling).toBe(root.querySelector('.scope'))
+    })
+
+    it('숨김이 켜져 있으면 다시 보기 버튼이다', () => {
+      renderPanel(root, { ...summary, canToggle: true, hidden: true })
+      expect(toggles()).toHaveLength(1)
+      expect(toggles()[0].textContent).toBe('체험단 리뷰 다시 보기')
+      expect(toggles()[0].getAttribute('aria-pressed')).toBe('true')
+    })
+
+    it('hidden 이 true 가 아니면 숨김이 꺼진 것으로 본다', () => {
+      for (const hidden of [undefined, null, 'true', 1]) {
+        renderPanel(root, { ...summary, canToggle: true, hidden })
+        expect(toggles()[0].textContent).toBe('체험단 리뷰 숨기기')
+        expect(toggles()[0].getAttribute('aria-pressed')).toBe('false')
+      }
+    })
+
+    it('canToggle 이 true 가 아니면 버튼이 없다', () => {
+      for (const extra of [{}, { canToggle: false }, { canToggle: 'true' }, { canToggle: 1 }, { canToggle: null }]) {
+        renderPanel(root, { ...summary, hidden: true, ...extra })
+        expect(toggles()).toHaveLength(0)
+        expect(root.querySelectorAll('button')).toHaveLength(0)
+      }
+    })
+
+    it('누르면 onToggle 에 다음 값을 한 번 넘긴다', () => {
+      const calls = []
+      renderPanel(root, { ...summary, canToggle: true, hidden: false }, { onToggle: (next) => calls.push(next) })
+      toggles()[0].click()
+      expect(calls).toEqual([true])
+
+      renderPanel(root, { ...summary, canToggle: true, hidden: true }, { onToggle: (next) => calls.push(next) })
+      toggles()[0].click()
+      expect(calls).toEqual([true, false])
+    })
+
+    it('누른 것만으로는 버튼이 바뀌지 않는다(요약이 다시 와야 그린다)', () => {
+      renderPanel(root, { ...summary, canToggle: true, hidden: false }, { onToggle: () => {} })
+      toggles()[0].click()
+      expect(toggles()[0].textContent).toBe('체험단 리뷰 숨기기')
+      expect(toggles()[0].getAttribute('aria-pressed')).toBe('false')
+    })
+
+    it('onToggle 을 주지 않아도 눌러서 던지지 않는다', () => {
+      renderPanel(root, { ...summary, canToggle: true, hidden: false })
+      expect(() => toggles()[0].click()).not.toThrow()
+    })
+
+    it('다시 그려도 버튼은 하나다', () => {
+      renderPanel(root, { ...summary, canToggle: true, hidden: false })
+      renderPanel(root, { ...summary, canToggle: true, hidden: true })
+      expect(toggles()).toHaveLength(1)
+    })
+  })
+
   it('요약이 없으면 안내 문구를 보여준다', () => {
     renderPanel(root, null)
     expect(root.textContent).toContain('리뷰 영역까지 스크롤')

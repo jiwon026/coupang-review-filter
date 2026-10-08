@@ -49,6 +49,27 @@ h1 {
   background: #e8a33d;
 }
 
+/* 페이지 배너의 숨김 버튼과 같은 일을 한다. 모양은 아래 동의 버튼에 맞춘다. */
+.panel-toggle {
+  padding: 6px 12px;
+  border: 1px solid #888;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.panel-toggle:hover {
+  background: #f3f4f6;
+}
+
+.panel-toggle:focus-visible {
+  outline: 2px solid var(--crf-accent);
+  outline-offset: 2px;
+}
+
 .scope,
 .empty {
   color: #888;
