@@ -448,10 +448,18 @@ function applyVariants() {
   }
 }
 
+// 부품이 정한 속성(watchAttributes)이 있으면 그 속성만 바뀐 카드도 다시 읽는다.
+// 볼 속성이 없는 쇼핑몰의 옵션에는 속성 항목을 넣지 않는다.
+function observerOptions() {
+  const options = { childList: true, subtree: true }
+  if (site.watchAttributes.length === 0) return options
+  return { ...options, attributes: true, attributeFilter: site.watchAttributes }
+}
+
 function start() {
   render()
   const observer = new MutationObserver(() => render())
-  observer.observe(document.body, { childList: true, subtree: true })
+  observer.observe(document.body, observerOptions())
 
   window.addEventListener('scroll', trackScroll, { passive: true })
   // 리뷰는 스크롤해야 지연 로딩되므로, 떠나는 시점에 컨테이너를 못 찾았는지 판정한다.

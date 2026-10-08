@@ -17,6 +17,7 @@ describe('무신사 부품의 값', () => {
     expect(musinsa.keyPrefix).toBe('musinsa:')
     expect(musinsa.hiddenClass).toBe('crf-collapsed')
     expect(musinsa.observation).toBe('batch')
+    expect(musinsa.watchAttributes).toEqual(['data-content-id'])
   })
 
   it('체험단 문구는 무신사 문구 하나다', () => {

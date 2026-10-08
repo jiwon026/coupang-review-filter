@@ -95,4 +95,6 @@ export const musinsa = {
   // 화면 밖 카드를 지우는 목록이 카드 높이로 자리를 잡으므로 없애지 않고 접는다.
   hiddenClass: 'crf-collapsed',
   observation: 'batch',
+  // 후기 전체보기는 스크롤할 때 카드 요소를 새로 만들지 않고 번호 속성만 바꿔 다시 쓰기도 한다.
+  watchAttributes: [REVIEW_ID_ATTRIBUTE],
 }

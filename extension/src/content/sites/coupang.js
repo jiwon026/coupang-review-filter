@@ -85,4 +85,6 @@ export const coupang = {
   isSponsoredOnlyView: () => false,
   hiddenClass: 'crf-hidden',
   observation: 'page',
+  // 쿠팡은 페이지를 넘기면 카드를 새로 그린다. 속성 변화는 보지 않는다.
+  watchAttributes: [],
 }

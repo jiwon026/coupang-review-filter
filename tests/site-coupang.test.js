@@ -31,6 +31,7 @@ describe('쿠팡 부품의 값', () => {
     expect(coupang.keyPrefix).toBe('')
     expect(coupang.hiddenClass).toBe('crf-hidden')
     expect(coupang.observation).toBe('page')
+    expect(coupang.watchAttributes).toEqual([])
   })
 
   it('체험단 문구는 쿠팡 문구 목록이다', () => {

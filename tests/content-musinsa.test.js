@@ -26,6 +26,8 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 let lastDom = null
 let sentMessages = []
+// 콘텐츠 스크립트가 MutationObserver.observe 에 넘긴 옵션.
+let observeOptions = []
 
 // 콘텐츠 스크립트는 불러올 때의 호스트로 쇼핑몰을 정한다. 그래서 주소를 먼저 정하고 모듈을 새로 부른다.
 async function boot(html, { url = PRODUCT_URL, variants = OFF } = {}) {
@@ -44,6 +46,12 @@ async function boot(html, { url = PRODUCT_URL, variants = OFF } = {}) {
   globalThis.window = dom.window
   globalThis.document = dom.window.document
   globalThis.MutationObserver = dom.window.MutationObserver
+  observeOptions = []
+  const observe = dom.window.MutationObserver.prototype.observe
+  dom.window.MutationObserver.prototype.observe = function (target, options) {
+    observeOptions.push(options)
+    return observe.call(this, target, options)
+  }
   vi.resetModules()
   await import('../extension/src/content/index.js')
   await tick()
@@ -423,6 +431,38 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
     })
   })
 
+  // 후기 전체보기는 스크롤할 때 카드 요소를 새로 만들지 않고 번호 속성만 바꿔 다시 쓰기도 한다.
+  describe('번호 속성만 바뀌는 카드', () => {
+    it('관찰 옵션에 번호 속성이 들어 있다', async () => {
+      await boot(musinsaFixture)
+      expect(observeOptions).toEqual([
+        { childList: true, subtree: true, attributes: true, attributeFilter: ['data-content-id'] },
+      ])
+    })
+
+    it('카드의 번호 속성만 새 번호로 바꿔도(자식 변화 없이) 누적 수가 늘어난다', async () => {
+      const doc = await boot(musinsaFixture)
+      expect(summaries().at(-1).summary.total).toBe(3)
+      const summariesBefore = summaries().length
+
+      doc.querySelector('[data-content-id="90000002"]').setAttribute('data-content-id', '90000102')
+      await tick()
+
+      expect(summaries().length).toBeGreaterThan(summariesBefore)
+      expect(summaries().at(-1).summary.total).toBe(4)
+    })
+
+    it('번호가 아닌 다른 속성만 바뀌면 다시 읽지 않는다', async () => {
+      const doc = await boot(musinsaFixture)
+      const summariesBefore = summaries().length
+
+      doc.querySelector('[data-content-id="90000002"]').setAttribute('data-index', '7')
+      await tick()
+
+      expect(summaries()).toHaveLength(summariesBefore)
+    })
+  })
+
   describe('스타일', () => {
     it('접는 class 는 카드를 없애지 않고 높이 1px 로 둔다', () => {
       const rule = /\.crf-collapsed\s*\{([^}]*)\}/.exec(css)?.[1] ?? ''
@@ -457,6 +497,14 @@ describe('쿠팡에서의 콘텐츠 스크립트(무신사 지원 뒤)', () => {
     expect(doc.querySelectorAll('.crf-hidden')).toHaveLength(2)
     expect(doc.querySelectorAll('.crf-collapsed')).toHaveLength(0)
     expect(trackedOfType('Filter Toggled')[0].properties.site).toBe('coupang')
+  })
+
+  it('쿠팡의 관찰 옵션은 그대로다(속성을 보지 않는다)', async () => {
+    await boot(coupangFixture, { url: COUPANG_URL })
+
+    expect(observeOptions).toEqual([{ childList: true, subtree: true }])
+    expect('attributes' in observeOptions[0]).toBe(false)
+    expect('attributeFilter' in observeOptions[0]).toBe(false)
   })
 
   it('쿠팡은 페이지 단위로 관측한다(새 번호가 10개 미만이어도 묶음이 바뀌면 보낸다)', async () => {
