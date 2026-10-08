@@ -4,6 +4,10 @@ export { CONSENT }
 
 export const CONSENT_KEY = 'crf_consent'
 
+// 동의를 받을 때 알린 범위다. 1 은 쿠팡만 알리던 1.0.x, 2 는 쿠팡과 무신사를 알리는 1.1.0 부터다.
+// 1.0.x 는 이 값을 저장하지 않았으므로 값이 없으면 1 로 본다. 알리는 범위가 넓어지면 올린다(명세 13.6).
+export const CONSENT_SCOPE = 2
+
 const UNDECIDED_STATE = { status: CONSENT.UNDECIDED, decidedAt: null }
 
 async function readStored() {
@@ -12,13 +16,30 @@ async function readStored() {
   return value && typeof value === 'object' ? value : null
 }
 
+// 지금보다 좁은 범위를 알리고 받은 동의인지. 거절은 넓어진 범위에도 유효하므로 동의한 상태만 본다.
+function isOutdatedGrant(value) {
+  return value?.status === CONSENT.GRANTED && value.scope !== CONSENT_SCOPE
+}
+
 // 저장값이 없거나 알 수 없는 상태면 아직 고르지 않은 것으로 본다.
 // everGranted 는 한 번이라도 동의한 적이 있는지다. 지금 꺼져 있어도 이미 보낸 통계가 있을 수 있다.
+// 옛 범위의 동의는 저장값을 고치지 않고 읽을 때마다 아직 고르지 않은 것으로 돌려준다.
+// 업데이트 처리가 늦거나 빠지거나 저장이 실패해도 넓어진 범위의 통계가 나가지 않는다(실패 시 닫힘).
 export async function getConsent() {
   const value = await readStored()
+  if (isOutdatedGrant(value)) return { ...UNDECIDED_STATE, everGranted: true }
   const everGranted = value?.everGranted === true
   if (value?.status !== CONSENT.GRANTED && value?.status !== CONSENT.DENIED) return { ...UNDECIDED_STATE, everGranted }
   return { status: value.status, decidedAt: value.decidedAt ?? null, everGranted }
+}
+
+// 다시 물어야 하는 기기인지. 저장된 동의가 옛 범위의 granted 일 때만 true 다. 읽지 못하면 false 다.
+export async function needsReconsent() {
+  try {
+    return isOutdatedGrant(await readStored())
+  } catch {
+    return false
+  }
 }
 
 // 읽고 쓰는 사이에 다른 호출이 끼면 firstGrant 가 두 번 true 가 될 수 있다. 쓰기를 한 줄로 세운다.
@@ -26,12 +47,13 @@ let writeQueue = Promise.resolve()
 
 async function applyConsent(status, now) {
   const previous = await readStored()
-  const grantedBefore = previous?.everGranted === true
+  // 옛 범위의 동의도 동의한 적이 있는 것이다. 다시 동의해도 firstGrant 는 false 다.
+  const grantedBefore = previous?.everGranted === true || previous?.status === CONSENT.GRANTED
   const firstGrant = status === CONSENT.GRANTED && !grantedBefore
   const everGranted = grantedBefore || status === CONSENT.GRANTED
 
   await chrome.storage.local.set({
-    [CONSENT_KEY]: { status, decidedAt: now, everGranted },
+    [CONSENT_KEY]: { status, decidedAt: now, everGranted, scope: CONSENT_SCOPE },
   })
   return { status, decidedAt: now, firstGrant, everGranted }
 }
@@ -42,25 +64,6 @@ export function setConsent(status, now = Date.now()) {
   }
   const result = writeQueue.then(() => applyConsent(status, now))
   // 앞선 호출의 실패가 뒤따르는 호출을 막지 않게 한다.
-  writeQueue = result.catch(() => {})
-  return result
-}
-
-async function applyReset() {
-  const previous = await readStored()
-  if (previous?.status !== CONSENT.GRANTED) return false
-
-  await chrome.storage.local.set({
-    [CONSENT_KEY]: { ...UNDECIDED_STATE, everGranted: true },
-  })
-  return true
-}
-
-// 알린 내용이 달라져 동의를 다시 받아야 할 때 쓴다(명세 13.6). 동의한 상태만 아직 고르지 않은 상태로 되돌리고 true 를 돌려준다.
-// 거절했거나 고르지 않은 기기는 건드리지 않고 false 를 돌려준다. 동의한 적이 있다는 기록은 남겨서
-// 다시 동의해도 firstGrant 가 false 다. setConsent 와 같은 줄에 서서 진행 중인 저장이 끝난 뒤의 값을 본다.
-export function resetGrantedConsent() {
-  const result = writeQueue.then(applyReset)
   writeQueue = result.catch(() => {})
   return result
 }

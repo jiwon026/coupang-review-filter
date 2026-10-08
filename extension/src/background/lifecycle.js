@@ -1,7 +1,7 @@
 import { SITE, isLandingConfigured } from '../shared/site.js'
 import { ONBOARDING_PATH } from '../shared/pages.js'
 import { getDeviceId, getInstalledAt, setInstalledAt } from './identity.js'
-import { isCollectionAllowed, resetGrantedConsent } from './consent.js'
+import { isCollectionAllowed, needsReconsent } from './consent.js'
 
 const LOG_PREFIX = '[체험단 필터]'
 
@@ -73,7 +73,7 @@ function versionParts(value) {
 }
 
 // version 이 target 보다 앞선 버전인지. 없는 자리는 0 으로 본다('1.0' 은 '1.0.0' 과 같다).
-// 숫자와 점으로만 된 문자열이 아니면 false 다. 모르면 동의를 되돌리지 않는다.
+// 숫자와 점으로만 된 문자열이 아니면 false 다. 모르면 다시 묻는 탭을 열지 않는다.
 export function isVersionBefore(version, target) {
   const parts = versionParts(version)
   const targetParts = versionParts(target)
@@ -87,20 +87,14 @@ export function isVersionBefore(version, target) {
   return false
 }
 
-// 1.1.0 전 버전에서 올라온 기기가 동의한 상태였으면 아직 고르지 않은 상태로 되돌리고 온보딩 탭을 한 번 연다.
-// 거절했거나 고르지 않은 기기는 그대로 두고 탭도 열지 않는다. 기기 번호, 설치 시각, 실험 배정은 건드리지 않는다.
+// 1.1.0 전 버전에서 올라온 기기에 옛 범위의 동의가 남아 있으면 온보딩 탭을 한 번 연다. 저장값은 고치지 않는다.
+// 옛 범위의 동의는 getConsent 가 읽을 때부터 아직 고르지 않은 것으로 돌려주므로 이 함수가 불리지 않아도 통계는 나가지 않는다.
+// 거절했거나 고르지 않은 기기에는 탭을 열지 않는다. 기기 번호, 설치 시각, 실험 배정은 건드리지 않는다.
 async function reaskConsentAfterUpdate(previousVersion) {
   if (!isVersionBefore(previousVersion, RECONSENT_VERSION)) return
+  if (!(await needsReconsent())) return
 
-  let reset = false
-  try {
-    reset = await resetGrantedConsent()
-  } catch (error) {
-    warn('동의를 되돌리지 못했습니다:', error)
-  }
-  if (!reset) return
-
-  // 되돌린 뒤에 부르면 제거 주소에서 기기 번호와 설치 시각이 빠진다. 주소를 고친 뒤에 탭을 연다.
+  // 업데이트 전에 설정된 제거 주소에는 기기 번호가 실려 있을 수 있다. 번호를 뺀 주소로 맞춘 뒤에 탭을 연다.
   await configureUninstallUrl()
 
   await openOnboarding()

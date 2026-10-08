@@ -2,8 +2,9 @@ const CONSENT_STORAGE_KEY = 'crf_consent'
 export const EXTENSION_ORIGIN = 'chrome-extension://test-extension-id/'
 
 // 이벤트 전송을 기대하는 테스트의 준비 단계에서 쓴다. 저장소에 동의 상태를 granted 로 미리 둔다.
+// scope 는 지금 알리는 범위(consent.js 의 CONSENT_SCOPE)다. 없으면 옛 범위의 동의라 아무것도 나가지 않는다.
 export function grantConsent(store, decidedAt = 1_700_000_000_000) {
-  store[CONSENT_STORAGE_KEY] = { status: 'granted', decidedAt, everGranted: true }
+  store[CONSENT_STORAGE_KEY] = { status: 'granted', decidedAt, everGranted: true, scope: 2 }
   return store
 }
 
