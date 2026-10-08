@@ -5,7 +5,7 @@ import { assignInstallCta } from './experiment.js'
 import { storeUrl, handoffUrl } from './links.js'
 import { EVENTS, createTracker } from './tracker.js'
 
-const SHARE_TITLE = '체험단 리뷰 제거기 for 쿠팡'
+const SHARE_TITLE = '체험단 리뷰 제거기'
 const COPIED = '복사했습니다'
 const COPY_FAILED = '복사하지 못했습니다. 주소창의 주소를 직접 복사해 주세요'
 const OPTED_OUT_UNSAVED_NOTICE = '이번 방문은 기록하지 않습니다. 이 브라우저는 설정을 저장하지 못해, 다음에도 주소 끝에 #notrack 을 붙여 열어 주세요.'

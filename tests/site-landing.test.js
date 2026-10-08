@@ -601,7 +601,7 @@ describe('넘기기', () => {
     await flush()
     expect(share).toHaveBeenCalledTimes(1)
     const [data] = share.mock.calls[0]
-    expect(data.title).toBe('체험단 리뷰 제거기 for 쿠팡')
+    expect(data.title).toBe('체험단 리뷰 제거기')
     expect(new URL(data.url).searchParams.get('utm_medium')).toBe('share')
     expect(sentOf('Handoff Link Requested').map((e) => e.event_properties.channel)).toEqual(['share'])
   })

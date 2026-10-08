@@ -8,6 +8,7 @@ import { readCommand } from '../site/src/landing/visitor.js'
 const PUBLIC_DIR = new URL('../site/public/', import.meta.url)
 const SRC_DIR = new URL('../site/src/', import.meta.url)
 const BANNER_SRC = new URL('../extension/src/content/banner.js', import.meta.url)
+const ONBOARDING_VIEW_SRC = new URL('../extension/src/onboarding/view.js', import.meta.url)
 const HIDE_LABEL = '체험단 리뷰 숨기기'
 const SHOW_LABEL = '체험단 리뷰 다시 보기'
 const PAGES = ['index.html', 'privacy.html', 'uninstalled.html']
@@ -20,7 +21,8 @@ function load(name) {
 const PRIVACY_SENT = [
   '배너가 표시된 횟수, 체험단 리뷰의 개수와 비중, 평점 같은 숫자, 필터가 켜져 있었는지',
   '숨기기 버튼, 패널, 장바구니와 바로구매 버튼, 설치 안내의 예시 링크를 눌렀는지',
-  '리뷰 정렬 방식(베스트순, 최신순)',
+  '리뷰 정렬 방식(베스트순, 최신순 등)',
+  '쿠팡과 무신사 중 어디에서 썼는지',
   '확장의 화면(설치 안내, 패널)을 열었는지, 이용한 시각과 머문 시간',
   '무작위로 만든 익명 기기 번호, 확장 버전',
   '화면 문구와 기본 설정의 실험 그룹, 통계를 켠 화면',
@@ -37,9 +39,12 @@ const PRIVACY_SITE_STATS = [
 
 const PRIVACY_NOT_SENT = [
   '리뷰 내용, 상품 이름, 상품 주소',
-  '쿠팡 계정, 이름, 이메일, 주소, 결제 정보',
-  '쿠팡 상품 페이지가 아닌 다른 사이트에서 무엇을 보거나 했는지',
+  '쿠팡과 무신사의 계정, 이름, 이메일, 결제 정보',
+  '쿠팡과 무신사의 상품 페이지와 후기 페이지 밖에서 무엇을 보거나 했는지',
 ]
+
+const UNRELATED = '이 확장은 쿠팡, 무신사와 관계가 없는 개인이 만든 도구입니다.'
+const REASK = '버전 1.1.0 에서 무신사를 지원하면서 이전에 동의하신 분께는 통계를 보낼지 다시 여쭙니다. 다시 고르기 전까지는 통계를 보내지 않습니다.'
 
 describe('처리방침', () => {
   const doc = load('privacy.html')
@@ -58,7 +63,35 @@ describe('처리방침', () => {
 
   it('이름과 제목을 쓴다', () => {
     expect(doc.querySelector('h1').textContent).toBe('개인정보 처리방침')
-    expect(text).toContain('체험단 리뷰 제거기 for 쿠팡(이하 "확장")이 어떤 정보를 다루는지 설명합니다.')
+    expect(doc.title).toBe('개인정보 처리방침 | 체험단 리뷰 제거기')
+    expect(text).toContain('체험단 리뷰 제거기(이하 "확장")이 어떤 정보를 다루는지 설명합니다.')
+  })
+
+  it('1절: 대상이 쿠팡과 무신사의 상품 페이지이고 무신사는 후기 전체보기까지다', () => {
+    expect(sectionParagraphs(1)).toEqual([
+      '쿠팡과 무신사의 상품 페이지(무신사는 후기 전체보기 포함)의 리뷰 영역에서 체험단 제공 리뷰를 찾아 표시하고, 숨기고, 체험단 리뷰를 뺀 평점을 보여 줍니다. 이 작업은 모두 사용자의 브라우저 안에서 이뤄집니다. 리뷰 내용은 어디로도 전송되지 않습니다.',
+    ])
+  })
+
+  it('무신사를 적고 9절의 문장이 글자 그대로 있다', () => {
+    expect(text).toContain('무신사')
+    expect(sectionParagraphs(9)).toEqual([UNRELATED])
+  })
+
+  // 온보딩의 고지(동의 전에 보여 주는 목록)와 처리방침이 같은 내용이어야 한다. 온보딩 쪽 글자를 고치면 여기서 걸린다.
+  it('온보딩의 보내지 않는 것 두 줄이 처리방침에 글자 그대로 있다', () => {
+    const view = readFileSync(ONBOARDING_VIEW_SRC, 'utf8')
+    for (const line of PRIVACY_NOT_SENT.slice(1)) {
+      expect(view).toContain(`'${line}'`)
+      expect(listItems(1)).toContain(line)
+    }
+  })
+
+  it('온보딩의 정렬 줄과 쇼핑몰 구분 줄이 처리방침에 글자 그대로 이어서 있다', () => {
+    const view = readFileSync(ONBOARDING_VIEW_SRC, 'utf8')
+    const lines = ['리뷰 정렬 방식(베스트순, 최신순 등)', '쿠팡과 무신사 중 어디에서 썼는지']
+    for (const line of lines) expect(view).toContain(`'${line}'`)
+    expect(listItems(0).slice(2, 4)).toEqual(lines)
   })
 
   it('열 개 절의 제목이 순서대로 있다', () => {
@@ -72,7 +105,7 @@ describe('처리방침', () => {
       '6. 동의를 바꾸는 방법',
       '7. 확장을 제거할 때',
       '8. 삭제 요청과 문의',
-      '9. 쿠팡과의 관계',
+      '9. 쿠팡, 무신사와의 관계',
       '10. 이 사이트의 방문 통계',
     ])
   })
@@ -85,20 +118,21 @@ describe('처리방침', () => {
       '광고에 쓰지 않고, 판매하거나 다른 곳에 넘기지 않습니다.',
       '통계는 분석 서비스 Amplitude(Amplitude, Inc., 미국)에 저장됩니다.',
       '확장 아이콘을 눌러 패널을 열면 맨 아래에서 언제든 켜고 끌 수 있습니다.',
-      '이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.',
+      UNRELATED,
     ]) {
       expect(text).toContain(sentence)
     }
   })
 
-  it('2절: 켜는 곳(설치 직후 화면이나 확장 패널)을 사실대로 적는다', () => {
+  it('2절: 켜는 곳(설치 직후 화면이나 확장 패널)을 사실대로 적고 1.1.0 에서 다시 묻는다는 것을 알린다', () => {
     expect(sectionParagraphs(2)).toEqual([
       '설치 직후 화면이나 확장 패널에서 통계 전송을 켠 경우에만 아래 정보를 보냅니다. 동의하지 않으면 아무것도 보내지 않으며, 모든 기능은 그대로 쓸 수 있습니다.',
+      REASK,
     ])
   })
 
-  it('2절: 보내는 정보 목록은 8줄이고 문자열이 같다', () => {
-    expect(listItems(0)).toHaveLength(8)
+  it('2절: 보내는 정보 목록은 9줄이고 문자열이 같다', () => {
+    expect(listItems(0)).toHaveLength(9)
     expect(listItems(0)).toEqual(PRIVACY_SENT)
   })
 
@@ -170,8 +204,8 @@ describe('처리방침', () => {
     expect(text).not.toContain('아무것도 기록되지 않습니다')
   })
 
-  it('시행일은 2026-10-03 이다', () => {
-    expect(doc.querySelector('.effective').textContent).toBe('시행일: 2026-10-03')
+  it('시행일은 2026-10-08 이다', () => {
+    expect(doc.querySelector('.effective').textContent).toBe('시행일: 2026-10-08')
   })
 
   // 배포 때 실제 날짜로 바뀐다. 자리표시자와 날짜 형식 둘 다 받는다.
@@ -215,10 +249,15 @@ describe('랜딩', () => {
   const bodyText = norm(doc.body)
 
   it('제목과 설명(meta description)이 그대로다', () => {
-    expect(doc.title).toBe('체험단 리뷰 제거기 for 쿠팡')
+    expect(doc.title).toBe('체험단 리뷰 제거기')
     expect(doc.querySelector('meta[name="description"]').content).toBe(
       '쿠팡 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기고, 체험단 리뷰를 뺀 평점을 보여 주는 크롬 확장입니다.',
     )
+  })
+
+  // 1.1.0 이 스토어에 올라가기 전에는 랜딩이 무신사를 말하면 거짓이다. 계획 Task 10(승인 뒤)에서 이 테스트를 뒤집는다.
+  it('랜딩은 아직 무신사를 말하지 않는다', () => {
+    expect(readFileSync(new URL('index.html', PUBLIC_DIR), 'utf8')).not.toContain('무신사')
   })
 
   it('body 에 landing 클래스가 있다', () => {
@@ -381,7 +420,7 @@ describe('랜딩', () => {
   })
 
   it('따라오는 설치 바 문구가 그대로다', () => {
-    expect(norm(doc.getElementById('sticky'))).toBe('체험단 리뷰 제거기 for 쿠팡 크롬에 추가')
+    expect(norm(doc.getElementById('sticky'))).toBe('체험단 리뷰 제거기 크롬에 추가')
     expect(norm(doc.getElementById('cta-sticky'))).toBe('크롬에 추가')
   })
 
@@ -612,6 +651,14 @@ describe('세 페이지: 엠대시와 가운데 점이 없다', () => {
   }
 })
 
+describe('사이트 어디에도 옛 이름(for 쿠팡)이 없다', () => {
+  for (const name of PAGES) {
+    it(name, () => {
+      expect(readFileSync(new URL(name, PUBLIC_DIR), 'utf8')).not.toContain('for 쿠팡')
+    })
+  }
+})
+
 describe('세 페이지 공통', () => {
   for (const name of PAGES) {
     const html = readFileSync(new URL(name, PUBLIC_DIR), 'utf8')
@@ -661,6 +708,12 @@ describe('사이트 스크립트 경계', () => {
     expect(files).toContain('landing/landing.js')
     expect(files).toContain('landing/tracker.js')
     expect(files).toContain('uninstalled.js')
+  })
+
+  it('옛 이름(for 쿠팡)을 쓰지 않는다', () => {
+    for (const name of files) {
+      expect(readFileSync(new URL(name, SRC_DIR), 'utf8'), name).not.toContain('for 쿠팡')
+    }
   })
 
   it('innerHTML 을 쓰지 않는다', () => {

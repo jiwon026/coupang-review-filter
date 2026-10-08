@@ -11,7 +11,8 @@
     "build:site": "node site/build.js",
     "watch": "node build.js --watch",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:musinsa": "node scripts/verify-musinsa.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

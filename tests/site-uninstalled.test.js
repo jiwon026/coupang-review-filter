@@ -239,7 +239,7 @@ describe('제거 사유 버튼', () => {
     expect(buttons.map((el) => el.dataset.reason)).toEqual(['detection', 'layout', 'rarely_used', 'other'])
     expect(buttons.map((el) => el.textContent.trim())).toEqual([
       '체험단 리뷰가 잘 안 걸러져요',
-      '쿠팡 화면이 이상해져요',
+      '쇼핑몰 화면이 이상해져요',
       '쓸 일이 별로 없어요',
       '기타',
     ])
