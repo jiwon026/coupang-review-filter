@@ -16,20 +16,21 @@ async function readStored() {
   return value && typeof value === 'object' ? value : null
 }
 
-// 지금보다 좁은 범위를 알리고 받은 동의인지. 거절은 넓어진 범위에도 유효하므로 동의한 상태만 본다.
+// 지금보다 좁은 범위를 알리고 받은 동의인지. 업데이트 때 안내 화면을 여는 기준이라 동의한 상태만 본다.
 function isOutdatedGrant(value) {
   return value?.status === CONSENT.GRANTED && value.scope !== CONSENT_SCOPE
 }
 
 // 저장값이 없거나 알 수 없는 상태면 아직 고르지 않은 것으로 본다.
 // everGranted 는 한 번이라도 동의한 적이 있는지다. 지금 꺼져 있어도 이미 보낸 통계가 있을 수 있다.
-// 옛 범위의 동의는 저장값을 고치지 않고 읽을 때마다 아직 고르지 않은 것으로 돌려준다.
+// 옛 범위의 결정은 동의든 거절이든 저장값을 고치지 않고 읽을 때마다 아직 고르지 않은 것으로 돌려준다.
 // 업데이트 처리가 늦거나 빠지거나 저장이 실패해도 넓어진 범위의 통계가 나가지 않는다(실패 시 닫힘).
+// 옛 범위에서 거절한 사람이 본 고지는 쿠팡만 적힌 화면이다. 패널에서 켜려면 안내 화면을 거치게 한다.
 export async function getConsent() {
   const value = await readStored()
-  if (isOutdatedGrant(value)) return { ...UNDECIDED_STATE, everGranted: true }
-  const everGranted = value?.everGranted === true
-  if (value?.status !== CONSENT.GRANTED && value?.status !== CONSENT.DENIED) return { ...UNDECIDED_STATE, everGranted }
+  const everGranted = value?.everGranted === true || isOutdatedGrant(value)
+  const decided = value?.status === CONSENT.GRANTED || value?.status === CONSENT.DENIED
+  if (!decided || value.scope !== CONSENT_SCOPE) return { ...UNDECIDED_STATE, everGranted }
   return { status: value.status, decidedAt: value.decidedAt ?? null, everGranted }
 }
 

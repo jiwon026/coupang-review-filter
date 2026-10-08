@@ -28,12 +28,16 @@ let sent = []
 // 1.0.x 가 저장한 동의에는 scope 가 없다. 쿠팡만 알리고 받은 옛 범위의 동의다.
 const OLD_GRANTED = { status: 'granted', decidedAt: 1_700_000_000_000, everGranted: true }
 
-// consent 는 'granted'(기본, 지금 범위), 'granted-old'(옛 범위), 'denied', 'undecided' 중 하나다.
+// 1.0.x 에서 거절한 기기. 다시 고르기 전까지 아직 고르지 않은 것으로 읽힌다.
+const OLD_DENIED = { status: 'denied', decidedAt: 1_700_000_000_000, everGranted: true }
+
+// consent 는 'granted'(기본, 지금 범위), 'granted-old'(옛 범위), 'denied'(지금 범위), 'denied-old'(옛 범위), 'undecided' 중 하나다.
 async function loadBackground(initial = {}, consent = 'granted') {
   // 기본은 동의한 상태로 시작한다. 설치만으로는 동의 여부와 무관하게 아무것도 보내지 않음을 검증하기 위해서다.
   const store = installChromeMock({ crf_device_id: 'dev-1', ...initial })
   if (consent === 'granted') grantConsent(store)
-  if (consent === 'denied') store.crf_consent = { status: 'denied', decidedAt: 1_700_000_000_000, everGranted: true }
+  if (consent === 'denied') store.crf_consent = { ...OLD_DENIED, scope: 2 }
+  if (consent === 'denied-old') store.crf_consent = { ...OLD_DENIED }
   if (consent === 'granted-old') store.crf_consent = { ...OLD_GRANTED }
   sent = []
   globalThis.fetch = vi.fn(async (_url, init) => {
@@ -393,7 +397,7 @@ describe('업데이트 때 동의 다시 받기', () => {
     expect(frag(lastUninstallUrl(chrome)).get('d')).toBe('dev-1')
   })
 
-  it.each(['denied', 'undecided'])('%s 였던 기기는 그대로 두고 탭도 열지 않는다', async (consent) => {
+  it.each(['denied', 'denied-old', 'undecided'])('%s 였던 기기는 그대로 두고 탭도 열지 않는다', async (consent) => {
     const { chrome, store } = await loadBackground({ crf_installed_at: INSTALLED_AT }, consent)
     const before = structuredClone(store)
     await fireInstalled(chrome, { reason: 'update', previousVersion: '1.0.0' })
@@ -594,7 +598,7 @@ describe('제거 주소', () => {
     expect(url.search).not.toContain('1700000000000')
   })
 
-  it.each(['denied', 'undecided'])('%s 이면 주소에 # 이 없고 쿼리에는 v 만 있다', async (consent) => {
+  it.each(['denied', 'denied-old', 'undecided'])('%s 이면 주소에 # 이 없고 쿼리에는 v 만 있다', async (consent) => {
     const { chrome } = await loadBackground({ crf_installed_at: 1700000000000 }, consent)
     expect(chrome.__calls.setUninstallURL.at(-1)).toBe('https://landing.test/uninstalled?v=0.1.0')
     expectNoIdentifiers(lastUninstallUrl(chrome))

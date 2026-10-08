@@ -271,12 +271,101 @@ describe('동의의 범위(scope)', () => {
     expect((await setConsent('granted', T0 + 5)).firstGrant).toBe(false)
   })
 
-  it.each(OLD_SCOPES)('옛 범위의 denied(%s)는 denied 그대로다(거절은 넓어진 범위에도 유효하다)', async (_label, extra) => {
-    const { getConsent, isCollectionAllowed, needsReconsent } = await loadConsent(stored('denied', extra))
+  // 옛 범위에서 거절한 사람이 본 고지는 쿠팡만 적힌 화면이다. 패널의 보내기 한 번으로 넓어진 범위에 동의하게 두지 않는다.
+  describe.each(OLD_SCOPES)('옛 범위의 denied(%s)', (_label, extra) => {
+    it('getConsent 는 아직 고르지 않은 것으로 돌려주고 보내지 않는다', async () => {
+      const { getConsent, isCollectionAllowed } = await loadConsent(stored('denied', extra))
+
+      expect(await getConsent()).toEqual(REASK)
+      expect(await isCollectionAllowed()).toBe(false)
+    })
+
+    it('needsReconsent 는 false 다(업데이트 때 안내 화면을 따로 열지 않는다)', async () => {
+      const { needsReconsent } = await loadConsent(stored('denied', extra))
+      expect(await needsReconsent()).toBe(false)
+    })
+
+    it('읽기만 하고 저장소는 고치지 않는다', async () => {
+      const { store, getConsent, isCollectionAllowed, needsReconsent } = await loadConsent(stored('denied', extra))
+      const before = structuredClone(store)
+      const set = vi.spyOn(chrome.storage.local, 'set')
+
+      await getConsent()
+      await isCollectionAllowed()
+      await needsReconsent()
+
+      expect(store).toEqual(before)
+      expect(set).not.toHaveBeenCalled()
+    })
+
+    it('track 을 불러도 요청은 0건이다', async () => {
+      const { track } = await loadTrack(stored('denied', extra))
+      await track('Banner Rendered', { site: 'musinsa' })
+      await flush()
+      expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+    })
+
+    it('다시 거절하면 저장값에 scope 2 가 붙고 denied 로 읽힌다', async () => {
+      const { store, setConsent, getConsent } = await loadConsent(stored('denied', extra))
+
+      await setConsent('denied', T0 + 5)
+
+      expect(store.crf_consent).toEqual({ status: 'denied', decidedAt: T0 + 5, everGranted: true, scope: 2 })
+      expect(await getConsent()).toEqual({ status: 'denied', decidedAt: T0 + 5, everGranted: true })
+    })
+  })
+
+  it('옛 범위의 denied 는 동의한 적이 없으면 everGranted 가 false 다(처음 동의하면 firstGrant 는 true)', async () => {
+    const { getConsent, setConsent } = await loadConsent({
+      crf_consent: { status: 'denied', decidedAt: T0, everGranted: false },
+    })
+
+    expect(await getConsent()).toEqual({ status: 'undecided', decidedAt: null, everGranted: false })
+    expect((await setConsent('granted', T0 + 5)).firstGrant).toBe(true)
+  })
+
+  it('지금 범위의 denied 는 denied 그대로다', async () => {
+    const { getConsent, isCollectionAllowed, needsReconsent } = await loadConsent(stored('denied', { scope: 2 }))
 
     expect(await getConsent()).toEqual({ status: 'denied', decidedAt: T0, everGranted: true })
     expect(await isCollectionAllowed()).toBe(false)
     expect(await needsReconsent()).toBe(false)
+  })
+
+  describe('옛 범위 denied 기기의 메시지 응답', () => {
+    it('GET_CONSENT 는 undecided 로 응답한다(동의한 적이 있으면 확장 페이지에 기기 번호를 준다)', async () => {
+      const { chrome } = await loadBackground(stored('denied'))
+      const response = await dispatch(chrome, { type: 'crf:get-consent' }, extensionSender()).response
+      expect(response).toEqual({ consent: { status: 'undecided', decidedAt: null, deviceId: 'dev-1' } })
+    })
+
+    it('거절만 했던 기기의 GET_CONSENT 는 undecided 이고 기기 번호가 없다', async () => {
+      const { chrome } = await loadBackground({
+        crf_consent: { status: 'denied', decidedAt: T0, everGranted: false },
+      })
+      const response = await dispatch(chrome, { type: 'crf:get-consent' }, extensionSender()).response
+      expect(response).toEqual({ consent: { status: 'undecided', decidedAt: null, deviceId: null } })
+    })
+
+    it('온보딩에서 거절하면 저장값에 scope 2 가 붙고 그 뒤로 denied 로 응답하며 아무것도 보내지 않는다', async () => {
+      const { chrome, store } = await loadBackground({
+        crf_consent: { status: 'denied', decidedAt: T0, everGranted: false },
+      })
+
+      await dispatch(chrome, { type: 'crf:set-consent', status: 'denied', source: 'onboarding' }, extensionSender())
+        .response
+      await flush()
+
+      expect(store.crf_consent).toEqual({
+        status: 'denied',
+        decidedAt: expect.any(Number),
+        everGranted: false,
+        scope: 2,
+      })
+      const response = await dispatch(chrome, { type: 'crf:get-consent' }, extensionSender()).response
+      expect(response.consent.status).toBe('denied')
+      expect(globalThis.fetch).toHaveBeenCalledTimes(0)
+    })
   })
 
   it('지금 범위의 granted 는 granted 이고 track 요청이 나간다', async () => {
@@ -792,7 +881,7 @@ describe('동의 응답의 기기 번호(deviceId)', () => {
   })
 
   it('기기 번호를 읽지 못해도 정확히 한 번 응답하고 deviceId 는 null 이다', async () => {
-    const { chrome } = await loadBackground({ crf_consent: { status: 'denied', decidedAt: T0, everGranted: true } })
+    const { chrome } = await loadBackground({ crf_consent: { status: 'denied', decidedAt: T0, everGranted: true, scope: 2 } })
     const originalGet = chrome.storage.local.get
     chrome.storage.local.get = (keys) =>
       (Array.isArray(keys) ? keys : [keys]).includes('crf_device_id')
@@ -889,7 +978,7 @@ describe('TRACK 메시지 경로의 동의 게이트', () => {
 
   it('denied 에서는 fetch 를 부르지 않는다', async () => {
     const { chrome, store } = await loadBackground({
-      crf_consent: { status: 'denied', decidedAt: T0, everGranted: false },
+      crf_consent: { status: 'denied', decidedAt: T0, everGranted: false, scope: 2 },
     })
     expect(store.crf_consent.status).toBe('denied')
     dispatch(chrome, trackMessage, contentScriptSender())
