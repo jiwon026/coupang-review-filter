@@ -1,25 +1,10 @@
-export const SELECTORS = {
-  reviewContainer: '#sdpReview',
-  reviewItem: 'article',
-  reviewIdNode: '[data-review-id]',
-  reviewStar: 'i[class*="twc-bg-full-star"]',
-}
-
-export const REVIEW_ID_ATTRIBUTE = 'data-review-id'
+// 쿠팡 전용 값은 쿠팡 부품에 있다. 기존 이름으로도 가져다 쓸 수 있게 다시 내보낸다.
+export {
+  SELECTORS,
+  REVIEW_ID_ATTRIBUTE,
+  SORT_SELECTORS,
+  SORT_LABELS,
+  PURCHASE_SELECTORS,
+} from './sites/coupang.js'
 
 export const OWN_BADGE_CLASS = 'crf-badge'
-
-export const SORT_SELECTORS = {
-  sortButton: 'button',
-  inactiveClass: 'twc-font-normal',
-}
-
-export const SORT_LABELS = {
-  best: '베스트순',
-  latest: '최신순',
-}
-
-export const PURCHASE_SELECTORS = {
-  cart: 'button.prod-cart-btn',
-  buyNow: 'button.prod-buy-btn',
-}

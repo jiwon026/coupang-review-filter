@@ -11,8 +11,13 @@ function squash(value) {
   return value.replace(/\s+/g, '')
 }
 
-export function isSponsored(text) {
+export function isSponsored(text, markers = SPONSORED_MARKERS) {
   if (typeof text !== 'string' || text.length === 0) return false
   const target = squash(text)
-  return SPONSORED_MARKERS.some((marker) => target.includes(squash(marker)))
+  return markers.some((marker) => target.includes(squash(marker)))
+}
+
+// 파서가 이미 판정해 둔 리뷰는 그 값을 쓰고, 판정이 없는 리뷰만 글로 다시 본다.
+export function isSponsoredReview(review, markers) {
+  return typeof review.sponsored === 'boolean' ? review.sponsored : isSponsored(review.text, markers)
 }

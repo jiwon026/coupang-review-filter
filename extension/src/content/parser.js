@@ -1,14 +1,6 @@
-import { SELECTORS, REVIEW_ID_ATTRIBUTE, OWN_BADGE_CLASS } from './selectors.js'
-
-function extractRating(item) {
-  return item.querySelectorAll(SELECTORS.reviewStar).length
-}
-
-function extractId(item, index) {
-  const node = item.querySelector(SELECTORS.reviewIdNode)
-  const id = node ? node.getAttribute(REVIEW_ID_ATTRIBUTE) : null
-  return id || null
-}
+import { OWN_BADGE_CLASS } from './selectors.js'
+import { coupang } from './sites/coupang.js'
+import { isSponsored } from '../core/sponsored.js'
 
 function extractText(item) {
   const full = item.textContent.trim()
@@ -19,28 +11,30 @@ function extractText(item) {
   return full.endsWith(badgeText) ? full.slice(0, -badgeText.length).trim() : full
 }
 
-export function findReviewContainer(root) {
-  return root.querySelector(SELECTORS.reviewContainer)
+export function findReviewContainer(root, site = coupang) {
+  return site.findContainer(root)
 }
 
-export function parseReviews(root) {
-  const container = findReviewContainer(root)
+export function parseReviews(root, site = coupang) {
+  const container = findReviewContainer(root, site)
   if (!container) return []
 
-  const items = container.querySelectorAll(SELECTORS.reviewItem)
+  const items = site.findItems(container)
   const reviews = []
 
   items.forEach((item, index) => {
-    const rating = extractRating(item)
+    const rating = site.readRating(item)
     if (rating < 1 || rating > 5) return
 
-    const stableId = extractId(item, index)
+    const stableId = site.readId(item)
+    const text = extractText(item)
 
     reviews.push({
       id: stableId || `crf-${index}`,
       hasStableId: stableId !== null,
       rating,
-      text: extractText(item),
+      text,
+      sponsored: isSponsored(text, site.markers),
       element: item,
     })
   })

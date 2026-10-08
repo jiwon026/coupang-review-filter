@@ -1,9 +1,7 @@
 import { parseReviews, findReviewContainer } from './parser.js'
-import { SELECTORS } from './selectors.js'
 import { scrollRatio, createObservation, selectHealthSignals } from './health.js'
 import { safeErrorName } from '../shared/error-name.js'
 import { summarize } from '../core/rating.js'
-import { isSponsored } from '../core/sponsored.js'
 import { createBanner } from './banner.js'
 import { markSponsored, applyFilter } from './filter.js'
 import { MESSAGES } from '../shared/messages.js'
@@ -11,9 +9,13 @@ import { EVENTS } from '../shared/events.js'
 import { debugLog } from '../shared/log.js'
 import { detectSort } from './sort.js'
 import { watchPurchaseIntent } from './purchase.js'
+import { coupang } from './sites/coupang.js'
+import { resolveSite } from './sites/index.js'
 
 const LOG_PREFIX = '[체험단 필터]'
-const PRODUCT_PATH = /\/vp\/products\/(\d+)/
+// 대상 주소는 매니페스트가 정하므로 실제 크롬에서는 항상 부품이 있는 호스트다.
+// 테스트의 jsdom 은 호스트가 쿠팡이 아닐 수 있어 기본값을 쿠팡으로 둔다.
+const site = resolveSite(window.location.hostname) ?? coupang
 // 변형 응답이 오지 않을 때 기본값으로 확정하기까지 기다리는 시간.
 const VARIANT_WAIT_MS = 3000
 const DEFAULT_VARIANTS = { default_filter: 'off', banner_copy: 'rating' }
@@ -77,7 +79,7 @@ function filterState() {
 function track(eventType, properties = {}, afterVariants = null) {
   try {
     const captured = {
-      review_sort: detectSort(document),
+      review_sort: currentSort(),
       product_id: currentProductId(),
       ...(typeof properties === 'function' ? properties() : properties),
     }
@@ -160,7 +162,7 @@ function observeReviews(container, reviews) {
   observation.containerFound = true
   observation.maxItemCount = Math.max(
     observation.maxItemCount,
-    container.querySelectorAll(SELECTORS.reviewItem).length,
+    site.findItems(container).length,
   )
   observation.maxParsedCount = Math.max(observation.maxParsedCount, reviews.length)
   if (reviews.length > 0) observation.parsedAnyReview = true
@@ -178,8 +180,13 @@ function secondsOnPage() {
 }
 
 function currentProductId() {
-  const matched = window.location.pathname.match(PRODUCT_PATH)
-  return matched ? matched[1] : null
+  return site.productIdOf(window.location.pathname)
+}
+
+// 쿠팡의 정렬은 sort.js 를 거쳐 읽는다(부품의 detectSort 와 같은 함수다).
+// 기존 테스트가 sort.js 를 바꿔 끼워 정렬 판별이 던지는 경우를 만들기 때문이다.
+function currentSort() {
+  return site === coupang ? detectSort(document) : site.detectSort(document)
 }
 
 function resetIfProductChanged() {
@@ -207,14 +214,14 @@ function accumulate(reviews) {
   if (identified.length === 0) {
     return reviews.map((review) => ({
       rating: review.rating,
-      sponsored: isSponsored(review.text),
+      sponsored: review.sponsored,
     }))
   }
 
   for (const review of identified) {
     state.seen.set(review.id, {
       rating: review.rating,
-      sponsored: isSponsored(review.text),
+      sponsored: review.sponsored,
     })
   }
 
@@ -247,7 +254,7 @@ function observationKeyOf(reviews) {
 
 // Banner Rendered 프로퍼티. track 의 보호 안에서 계산한다.
 function observationProperties(reviews, summary, pagesSeen) {
-  const sort = detectSort(document)
+  const sort = currentSort()
   // 정렬을 바꾸면 쿠팡은 1페이지를 보여 주므로 sort_pages_seen = 1 이 그 정렬의 첫 페이지다.
   if (sort !== state.observedSort) {
     state.observedSort = sort
@@ -264,7 +271,7 @@ function observationProperties(reviews, summary, pagesSeen) {
     rating_filtered: summary.ratingFiltered,
     rating_delta: summary.ratingDelta,
     page_review_count: reviews.length,
-    page_sponsored_count: reviews.filter((review) => isSponsored(review.text)).length,
+    page_sponsored_count: reviews.filter((review) => review.sponsored).length,
     pages_seen: pagesSeen,
     sort_pages_seen: state.sortPagesSeen,
     // 같은 페이지 재방문을 분석에서 중복 제거하는 키. 공개 id 만 쓰고 본문은 싣지 않는다.
@@ -275,10 +282,10 @@ function observationProperties(reviews, summary, pagesSeen) {
 function renderReviews({ force = false } = {}) {
   resetIfProductChanged()
 
-  const container = findReviewContainer(document)
+  const container = findReviewContainer(document, site)
   if (!container) return
 
-  const reviews = parseReviews(document)
+  const reviews = parseReviews(document, site)
   observeReviews(container, reviews)
   if (reviews.length === 0) return
 
@@ -288,7 +295,7 @@ function renderReviews({ force = false } = {}) {
   if (redrawKey === state.redrawKey && bannerPresent && !force) return
 
   markSponsored(reviews)
-  applyFilter(reviews, state.hidden)
+  applyFilter(reviews, state.hidden, site.hiddenClass)
 
   const summary = summarize(accumulate(reviews))
   state.lastSummary = summary
@@ -322,7 +329,7 @@ function renderReviews({ force = false } = {}) {
     onToggle: (next) => {
       state.hidden = next
       state.userToggled = true
-      applyFilter(reviews, next)
+      applyFilter(reviews, next, site.hiddenClass)
       track(
         EVENTS.FILTER_TOGGLED,
         {
@@ -341,7 +348,8 @@ function renderReviews({ force = false } = {}) {
 
   const existing = document.querySelector('[data-crf-banner="1"]')
   if (existing) existing.remove()
-  container.parentNode.insertBefore(banner, container)
+  const anchor = site.bannerAnchor(container)
+  anchor.parentNode.insertBefore(banner, anchor)
 }
 
 // 변형 확정. 응답(변형 없음과 lastError 포함), 응답 대기 시간 초과, 요청 실패 중 먼저 오는 하나만 반영한다.
@@ -402,7 +410,7 @@ function start() {
       rating_filtered: summary?.ratingFiltered ?? null,
       rating_delta: summary?.ratingDelta ?? null,
     })
-  })
+  }, site.purchase)
 
   applyVariants()
 }
