@@ -34,6 +34,12 @@ describe('쿠팡 부품의 값', () => {
     expect(coupang.watchAttributes).toEqual([])
   })
 
+  it('범위 안내는 주소와 관계없이 페이지를 넘기라는 글이다', () => {
+    for (const pathname of ['/vp/products/1', '/', '', undefined, null]) {
+      expect(coupang.scopeHint(pathname)).toBe('리뷰 페이지를 넘기면 숫자가 늘어납니다')
+    }
+  })
+
   it('체험단 문구는 쿠팡 문구 목록이다', () => {
     expect(coupang.markers).toEqual(SPONSORED_MARKERS)
   })

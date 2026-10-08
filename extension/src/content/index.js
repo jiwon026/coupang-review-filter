@@ -224,6 +224,11 @@ function sponsoredFilterState() {
   }
 }
 
+// 더 보면 숫자가 늘어난다는 안내. 쇼핑몰과 지금 주소에 따라 다르다.
+function currentScopeHint() {
+  return site.scopeHint(window.location.pathname)
+}
+
 function removeBanner() {
   const existing = document.querySelector(BANNER_SELECTOR)
   if (existing) existing.remove()
@@ -357,6 +362,7 @@ function renderConditionView(container, conditionState) {
     container,
     createBanner(summary, {
       copyVariant: state.variants.banner_copy,
+      // 조건 보기에서는 더 봐도 누적하지 않으므로 범위 안내를 주지 않는다. 요약에도 싣지 않는다.
       note: CONDITION_NOTES[conditionState],
       onDetail: openPanel,
     }),
@@ -398,7 +404,11 @@ function renderReviews({ force = false } = {}) {
   state.unobservedCount += countUnseen(reviews)
   const summary = summarize(accumulate(reviews))
   state.lastSummary = summary
-  sendToBackground({ type: MESSAGES.SUMMARY_UPDATED, summary: { ...summary, site: site.id } })
+  const scopeHint = currentScopeHint()
+  sendToBackground({
+    type: MESSAGES.SUMMARY_UPDATED,
+    summary: { ...summary, site: site.id, scopeHint },
+  })
   /* @__PURE__ */ debugLog(
     `${LOG_PREFIX} 리뷰 ${summary.total}건, 체험단 ${summary.sponsoredCount}건, ` +
       `평균 ${summary.ratingOfficial} → 체험단 제외 ${summary.ratingFiltered} ` +
@@ -427,6 +437,7 @@ function renderReviews({ force = false } = {}) {
   const banner = createBanner(summary, {
     hidden: state.hidden,
     copyVariant: state.variants.banner_copy,
+    scopeHint,
     onToggle: (next) => {
       state.hidden = next
       state.userToggled = true

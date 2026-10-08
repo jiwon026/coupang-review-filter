@@ -169,7 +169,16 @@ describe('사이드 패널 배선', () => {
   it('현재 탭의 요약을 GET_SUMMARY 로 받아 그린다', async () => {
     const root = await loadPanel({ summaries: { 5: summaryFor(10) } })
     expect(sent).toContainEqual({ type: 'crf:get-summary', tabId: 5 })
-    expect(root.textContent).toContain('지금까지 확인한 리뷰 10개 기준입니다')
+    expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 10개 기준입니다')
+  })
+
+  it('요약에 실린 범위 안내를 범위 줄에 이어 쓴다', async () => {
+    const hint = '리뷰 페이지를 넘기면 숫자가 늘어납니다'
+    const root = await loadPanel({ summaries: { 5: { ...summaryFor(10), scopeHint: hint } } })
+    expect(root.querySelector('.scope').textContent).toBe(`지금까지 본 리뷰 10개 기준입니다. ${hint}`)
+
+    deliver({ type: 'crf:summary-updated', summary: summaryFor(40) }, { tab: { id: 5 } })
+    expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다')
   })
 
   it('다른 탭의 SUMMARY_UPDATED 는 무시하고 같은 탭이면 갱신한다', async () => {

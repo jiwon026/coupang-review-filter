@@ -20,6 +20,20 @@ describe('무신사 부품의 값', () => {
     expect(musinsa.watchAttributes).toEqual(['data-content-id'])
   })
 
+  it.each(['/review/goods/4633343', '/review/goods/4633343/'])(
+    '후기 전체보기(%s)의 범위 안내는 스크롤하라는 글이다',
+    (pathname) => {
+      expect(musinsa.scopeHint(pathname)).toBe('스크롤해서 더 보면 숫자가 늘어납니다')
+    },
+  )
+
+  it.each(['/products/4633343', '/review/goods', '/app/review/goods/1', '', undefined, null])(
+    '그 밖의 주소(%s)의 범위 안내는 후기 전체보기로 가라는 글이고 던지지 않는다',
+    (pathname) => {
+      expect(musinsa.scopeHint(pathname)).toBe('후기 전체보기에서 더 보면 숫자가 늘어납니다')
+    },
+  )
+
   it('체험단 문구는 무신사 문구 하나다', () => {
     expect(musinsa.markers).toEqual(['이 후기는 제품을 무상으로 제공받아'])
   })

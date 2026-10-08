@@ -168,6 +168,46 @@ describe('무신사에서의 콘텐츠 스크립트', () => {
     })
   })
 
+  describe('범위 안내', () => {
+    const scopes = (doc) =>
+      [...banners(doc)[0].querySelectorAll('.crf-scope')].map((node) => node.textContent)
+
+    it('상품 페이지의 범위 줄은 후기 전체보기로 가라고 알리고 요약에도 같은 안내가 실린다', async () => {
+      const doc = await boot(musinsaFixture)
+
+      expect(scopes(doc)).toEqual(['지금까지 본 리뷰 3개 기준입니다. 후기 전체보기에서 더 보면 숫자가 늘어납니다'])
+      expect(summaries().at(-1).summary.scopeHint).toBe('후기 전체보기에서 더 보면 숫자가 늘어납니다')
+    })
+
+    it('후기 전체보기의 범위 줄은 스크롤하라고 알리고 요약에도 같은 안내가 실린다', async () => {
+      const doc = await boot(musinsaFixture, { url: REVIEW_URL })
+
+      expect(scopes(doc)).toEqual(['지금까지 본 리뷰 3개 기준입니다. 스크롤해서 더 보면 숫자가 늘어납니다'])
+      expect(summaries().at(-1).summary.scopeHint).toBe('스크롤해서 더 보면 숫자가 늘어납니다')
+    })
+
+    it('체험단이 없는 상품에서는 헤드라인 아래에 안내만 보인다', async () => {
+      const doc = await boot(musinsaFixture.replace(NOTICE, '안내'))
+
+      expect(banners(doc)[0].querySelector('.crf-headline').textContent).toBe(
+        '지금까지 본 리뷰 3개 중 체험단 리뷰가 없습니다',
+      )
+      expect(scopes(doc)).toEqual(['후기 전체보기에서 더 보면 숫자가 늘어납니다'])
+    })
+
+    // 조건 보기에서는 누적하지 않으므로 더 봐도 숫자가 늘지 않는다.
+    it('조건 보기에서는 범위 줄에 앞 문장만 쓰고 요약에 안내를 싣지 않는다', async () => {
+      const doc = await boot(musinsaFixture)
+      await setSponsoredOnly(doc, true)
+
+      expect(scopes(doc)).toEqual(['지금까지 본 리뷰 3개 기준입니다'])
+      expect('scopeHint' in summaries().at(-1).summary).toBe(false)
+
+      await setSponsoredOnly(doc, false)
+      expect(scopes(doc)).toEqual(['지금까지 본 리뷰 3개 기준입니다. 후기 전체보기에서 더 보면 숫자가 늘어납니다'])
+    })
+  })
+
   describe('이벤트의 쇼핑몰과 번호', () => {
     it('보낸 모든 이벤트에 site 와 접두 붙은 상품 번호가 실린다', async () => {
       const doc = await boot(
@@ -743,6 +783,16 @@ describe('쿠팡에서의 콘텐츠 스크립트(무신사 지원 뒤)', () => {
     for (const message of tracked()) {
       expect('sponsored_only_view' in message.properties).toBe(false)
     }
+  })
+
+  it('범위 줄은 리뷰 페이지를 넘기라고 알리고 요약에도 같은 안내가 실린다', async () => {
+    const doc = await boot(coupangFixture, { url: COUPANG_URL })
+
+    expect(banners(doc)[0].querySelector('.crf-scope').textContent).toBe(
+      '지금까지 본 리뷰 4개 기준입니다. 리뷰 페이지를 넘기면 숫자가 늘어납니다',
+    )
+    expect(banners(doc)[0].querySelectorAll('.crf-scope')).toHaveLength(1)
+    expect(summaries().at(-1).summary.scopeHint).toBe('리뷰 페이지를 넘기면 숫자가 늘어납니다')
   })
 
   it('쿠팡의 관찰 옵션은 그대로다(속성을 보지 않는다)', async () => {

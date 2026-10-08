@@ -9,6 +9,16 @@ function formatCount(value) {
   return value.toLocaleString('ko-KR')
 }
 
+// 요약은 콘텐츠 스크립트에서 저장소를 거쳐 온 값이다. 범위 안내는 짧은 문자열일 때만 쓴다.
+const SCOPE_HINT_MAX_LENGTH = 60
+
+function scopeText(summary) {
+  const base = `지금까지 본 리뷰 ${formatCount(summary.total)}개 기준입니다`
+  const hint = summary.scopeHint
+  const usable = typeof hint === 'string' && hint !== '' && hint.length <= SCOPE_HINT_MAX_LENGTH
+  return usable ? `${base}. ${hint}` : base
+}
+
 export function renderPanel(root, summary) {
   root.replaceChildren()
 
@@ -40,7 +50,7 @@ export function renderPanel(root, summary) {
   )
   root.appendChild(ratio)
 
-  root.appendChild(el('p', 'scope', `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 기준입니다`))
+  root.appendChild(el('p', 'scope', scopeText(summary)))
 }
 
 const CONSENT_COPY = {

@@ -33,7 +33,53 @@ describe('createBanner', () => {
 
   it('계산 범위를 명시한다', () => {
     const el = createBanner(summary, { hidden: false, onToggle: () => {} })
-    expect(el.textContent).toContain('지금까지 확인한 리뷰')
+    expect(el.textContent).toContain('지금까지 본 리뷰')
+  })
+
+  describe('범위 안내', () => {
+    const HINT = '리뷰 페이지를 넘기면 숫자가 늘어납니다'
+    const clean = {
+      total: 100, sponsoredCount: 0, organicCount: 100, sponsoredRatio: 0,
+      ratingOfficial: 4.5, ratingFiltered: 4.5, ratingDelta: 0,
+    }
+    const scopes = (el) => [...el.querySelectorAll('.crf-scope')].map((node) => node.textContent)
+
+    it('체험단이 있으면 범위 줄에 본 리뷰 수와 안내를 이어 쓴다', () => {
+      const el = createBanner(summary, { hidden: false, onToggle: () => {}, scopeHint: HINT })
+      expect(scopes(el)).toEqual(['지금까지 본 리뷰 1,204개 기준입니다. 리뷰 페이지를 넘기면 숫자가 늘어납니다'])
+    })
+
+    it('안내가 없으면 범위 줄은 앞 문장만 쓴다', () => {
+      for (const options of [{}, { scopeHint: undefined }, { scopeHint: null }, { scopeHint: '' }, { scopeHint: 7 }]) {
+        const el = createBanner(summary, { hidden: false, onToggle: () => {}, ...options })
+        expect(scopes(el)).toEqual(['지금까지 본 리뷰 1,204개 기준입니다'])
+      }
+    })
+
+    it('체험단 0건이면 헤드라인 아래 범위 줄에 안내만 쓴다', () => {
+      const el = createBanner(clean, { hidden: false, onToggle: () => {}, onDetail: () => {}, scopeHint: HINT })
+      expect(el.querySelector('.crf-headline').textContent).toBe('지금까지 본 리뷰 100개 중 체험단 리뷰가 없습니다')
+      expect(scopes(el)).toEqual([HINT])
+      expect([...el.children].map((child) => child.className)).toEqual(['crf-headline', 'crf-scope', 'crf-detail'])
+    })
+
+    it('체험단 0건이고 안내가 없으면 범위 줄이 없다', () => {
+      const el = createBanner(clean, { hidden: false, onToggle: () => {} })
+      expect(el.querySelector('.crf-headline').textContent).toBe('지금까지 본 리뷰 100개 중 체험단 리뷰가 없습니다')
+      expect(scopes(el)).toEqual([])
+    })
+
+    it('요약이 없는 배너에는 안내를 줘도 범위 줄이 없다', () => {
+      const el = createBanner(null, { note: '체험단 후기만 모아 보는 중입니다', scopeHint: HINT })
+      expect([...el.children].map((child) => child.className)).toEqual(['crf-note'])
+    })
+
+    it('banner_copy 의 두 변형은 범위 줄이 같다', () => {
+      const scopeOf = (copyVariant) =>
+        scopes(createBanner(summary, { hidden: false, copyVariant, onToggle: () => {}, scopeHint: HINT }))
+      expect(scopeOf('ratio')).toEqual(scopeOf('rating'))
+      expect(scopeOf('ratio')).toHaveLength(1)
+    })
   })
 
   it('토글을 누르면 콜백에 반대 상태를 넘긴다', () => {

@@ -86,6 +86,15 @@ function sponsoredFilterState(root) {
   return selected ? 'on' : 'off'
 }
 
+// 후기 전체보기는 스크롤하면 이어서 세고 상품 페이지는 카드 10장이 전부라 후기 전체보기로 가야 더 센다.
+const REVIEW_LIST_PATH = '/review/goods/'
+
+function scopeHint(pathname) {
+  return typeof pathname === 'string' && pathname.startsWith(REVIEW_LIST_PATH)
+    ? '스크롤해서 더 보면 숫자가 늘어납니다'
+    : '후기 전체보기에서 더 보면 숫자가 늘어납니다'
+}
+
 export const musinsa = {
   id: 'musinsa',
   hosts: ['www.musinsa.com'],
@@ -106,4 +115,5 @@ export const musinsa = {
   observation: 'batch',
   // 후기 전체보기는 스크롤할 때 카드 요소를 새로 만들지 않고 번호 속성만 바꿔 다시 쓰기도 한다.
   watchAttributes: [REVIEW_ID_ATTRIBUTE],
+  scopeHint,
 }

@@ -53,7 +53,36 @@ describe('renderPanel', () => {
 
   it('누적 범위를 밝힌다', () => {
     renderPanel(root, summary)
-    expect(root.textContent).toContain('지금까지 확인한 리뷰 40개 기준입니다')
+    expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다')
+  })
+
+  it('요약에 범위 안내가 있으면 범위 줄에 이어 쓴다', () => {
+    renderPanel(root, { ...summary, scopeHint: '스크롤해서 더 보면 숫자가 늘어납니다' })
+    expect(root.querySelectorAll('.scope')).toHaveLength(1)
+    expect(root.querySelector('.scope').textContent).toBe(
+      '지금까지 본 리뷰 40개 기준입니다. 스크롤해서 더 보면 숫자가 늘어납니다',
+    )
+  })
+
+  it('범위 안내가 문자열이 아니거나 비었으면 앞 문장만 쓴다', () => {
+    for (const scopeHint of [undefined, null, 7, true, {}, ['안내'], '']) {
+      renderPanel(root, { ...summary, scopeHint })
+      expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다')
+    }
+  })
+
+  it('범위 안내는 60자까지만 받는다', () => {
+    renderPanel(root, { ...summary, scopeHint: '가'.repeat(60) })
+    expect(root.querySelector('.scope').textContent).toBe(`지금까지 본 리뷰 40개 기준입니다. ${'가'.repeat(60)}`)
+
+    renderPanel(root, { ...summary, scopeHint: '가'.repeat(61) })
+    expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다')
+  })
+
+  it('범위 안내는 글자로만 넣는다(태그를 만들지 않는다)', () => {
+    renderPanel(root, { ...summary, scopeHint: '<b>굵게</b>' })
+    expect(root.querySelector('.scope').children).toHaveLength(0)
+    expect(root.querySelector('.scope').textContent).toBe('지금까지 본 리뷰 40개 기준입니다. <b>굵게</b>')
   })
 
   it('요약이 없으면 안내 문구를 보여준다', () => {

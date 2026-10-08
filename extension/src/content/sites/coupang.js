@@ -87,4 +87,6 @@ export const coupang = {
   observation: 'page',
   // 쿠팡은 페이지를 넘기면 카드를 새로 그린다. 속성 변화는 보지 않는다.
   watchAttributes: [],
+  // 숫자가 본 만큼만 센 값임을 알리는 글. 쿠팡은 리뷰 페이지를 넘겨야 더 센다.
+  scopeHint: () => '리뷰 페이지를 넘기면 숫자가 늘어납니다',
 }

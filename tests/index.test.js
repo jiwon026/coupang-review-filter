@@ -232,7 +232,7 @@ describe('content 진입점', () => {
 
   it('누적 범위를 문구로 밝힌다', async () => {
     const doc = await boot(fixture)
-    expect(banners(doc)[0].textContent).toContain('지금까지 확인한 리뷰')
+    expect(banners(doc)[0].textContent).toContain('지금까지 본 리뷰 4개 기준입니다')
   })
 
   it('id 없는 리뷰만 있으면 누적하지 않고 현재 화면만 센다', async () => {

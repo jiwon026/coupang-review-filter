@@ -22,6 +22,14 @@ function createNote(text) {
   return note
 }
 
+function createScope(text) {
+  const scope = document.createElement('p')
+  scope.className = 'crf-scope'
+  scope.textContent = text
+  return scope
+}
+
+// options.scopeHint 는 더 보면 숫자가 늘어난다는 안내다. 없으면 범위 줄에 본 리뷰 수만 쓴다.
 // options.note 는 조건 보기(무신사의 체험단 조건)에서 숨김 버튼 자리에 두는 안내 글이다.
 // summary 가 null 이면 누적이 아직 없는 조건 보기다. 안내 글 한 줄만 둔다.
 export function createBanner(summary, options) {
@@ -34,11 +42,16 @@ export function createBanner(summary, options) {
     return root
   }
 
+  const scopeHint =
+    typeof options.scopeHint === 'string' && options.scopeHint !== '' ? options.scopeHint : null
+
   if (summary.sponsoredCount === 0) {
     const clean = document.createElement('p')
     clean.className = 'crf-headline'
-    clean.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
+    clean.textContent = `지금까지 본 리뷰 ${formatCount(summary.total)}개 중 체험단 리뷰가 없습니다`
     root.appendChild(clean)
+    // 본 리뷰 수는 헤드라인에 이미 있으므로 안내만 쓴다.
+    if (scopeHint !== null) root.appendChild(createScope(scopeHint))
     // 누적에는 체험단이 없는데 화면에는 체험단 후기만 보이는 조건 보기다. 안내 글로 알린다.
     if (options.note) root.appendChild(createNote(options.note))
     if (typeof options.onDetail === 'function') root.appendChild(createDetailButton(options.onDetail))
@@ -83,10 +96,8 @@ export function createBanner(summary, options) {
 
   if (typeof options.onDetail === 'function') root.appendChild(createDetailButton(options.onDetail))
 
-  const scope = document.createElement('p')
-  scope.className = 'crf-scope'
-  scope.textContent = `지금까지 확인한 리뷰 ${formatCount(summary.total)}개 기준입니다`
-  root.appendChild(scope)
+  const scopeBase = `지금까지 본 리뷰 ${formatCount(summary.total)}개 기준입니다`
+  root.appendChild(createScope(scopeHint === null ? scopeBase : `${scopeBase}. ${scopeHint}`))
 
   return root
 }
