@@ -465,6 +465,11 @@ body.landing section h2 {
     order: -1;
   }
 
+  /* 뒤집힌 행에서 사진 칸을 넓힐 때는 사진이 왼쪽이므로 넓은 칸도 왼쪽이다 */
+  .row.flip.row-wide-shot {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  }
+
   .shot-banner img {
     max-width: 500px;
   }
@@ -475,6 +480,10 @@ body.landing section h2 {
 
   .shot-panel img {
     max-width: 260px;
+  }
+
+  .shot-musinsa img {
+    max-width: 500px;
   }
 
   .stats-grid {

@@ -3,7 +3,7 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-// 랜딩 화면의 사진 셋을 만든다. 원본은 release/ 에만 있고(gitignore) 결과는 site/public/img 에 커밋한다.
+// 랜딩 화면의 사진 넷을 만든다. 원본은 release/ 에만 있고(gitignore) 결과는 site/public/img 에 커밋한다.
 // 배너와 패널은 키우면 흐려지므로 크기를 바꾸지 않고 복사한다.
 // 배지는 스토어 제출용 이미지에서 제목 띠를 잘라 내고, 리뷰어 이름 줄과 상품 이름 줄을 흐리게 한다.
 const RAW_DIR = new URL('../release/screenshots/raw/', import.meta.url)
@@ -65,3 +65,5 @@ await mkdir(OUT_DIR, { recursive: true })
 await copyUnchanged('banner-4.8.png', 'banner.png')
 await buildBadge()
 await copyUnchanged('panel-4.8.png', 'panel.png')
+// 무신사 배너는 사용자가 실제 크롬에서 찍은 사진이다. 배너와 탭까지만 담겨 이름, 상품, 후기 본문이 없다.
+await copyUnchanged('musinsa-user.png', 'musinsa.png')

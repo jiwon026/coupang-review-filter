@@ -310,12 +310,13 @@ describe('랜딩', () => {
     expect(wide).toMatch(/\.rating-card\s*\{[^}]*order:\s*0/)
   })
 
-  it('h2 여섯이 순서대로 있고 문구가 같다', () => {
+  it('h2 일곱이 순서대로 있고 문구가 같다', () => {
     expect([...doc.querySelectorAll('h2')].map(norm)).toEqual([
       'PC 크롬에서 설치할 수 있어요',
       '체험단을 뺀 평점을 보여 줍니다',
       '체험단 리뷰에 표시를 붙이고 숨깁니다',
       '패널에서 자세히 봅니다',
+      '무신사에서도 됩니다',
       '통계는 동의한 경우에만',
       '보내지 않는 것',
     ])
@@ -328,30 +329,32 @@ describe('랜딩', () => {
     expect(norm(doc.getElementById('handoff-share'))).toBe('공유하기')
   })
 
-  it('기능 세 줄이 짝짓기 행으로 있고 제목과 문단이 순서대로 글자 그대로다', () => {
+  it('기능 네 줄이 짝짓기 행으로 있고 제목과 문단이 순서대로 글자 그대로다', () => {
     const rows = [...doc.querySelectorAll('#demo .row')]
     expect(rows.map((row) => norm(row.querySelector('h2')))).toEqual([
       '체험단을 뺀 평점을 보여 줍니다',
       '체험단 리뷰에 표시를 붙이고 숨깁니다',
       '패널에서 자세히 봅니다',
+      '무신사에서도 됩니다',
     ])
     expect(rows.map((row) => norm(row.querySelector('p')))).toEqual([
       '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 숫자는 지금까지 본 리뷰를 기준으로 하고 리뷰를 더 보면 본 만큼 더해집니다.',
       '체험단 제공 리뷰에 표시를 붙입니다. 리뷰 위 배너나 확장 패널의 "체험단 리뷰 숨기기" 버튼을 누르면 숨기고, "체험단 리뷰 다시 보기" 를 누르면 다시 보여 줍니다.',
       '체험단 비중을 한눈에 봅니다. 쇼핑몰이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
+      '무신사 상품 페이지와 후기 전체보기에서도 같은 배너가 뜹니다. 무신사가 후기에 직접 붙이는 체험단 표시만 봅니다. 후기 전체보기에서 스크롤하면 본 만큼 숫자가 더해집니다.',
     ])
     for (const row of rows) expect(row.querySelectorAll('h2, p')).toHaveLength(2)
   })
 
-  it('둘째 행만 사진이 왼쪽으로 뒤집히는 flip 행이다', () => {
+  it('둘째와 넷째 행이 사진이 왼쪽으로 뒤집히는 flip 행이다(좌우를 번갈아 놓는다)', () => {
     const rows = [...doc.querySelectorAll('#demo .row')]
-    expect(rows).toHaveLength(3)
-    expect(rows.map((row) => row.classList.contains('flip'))).toEqual([false, true, false])
+    expect(rows).toHaveLength(4)
+    expect(rows.map((row) => row.classList.contains('flip'))).toEqual([false, true, false, true])
   })
 
-  it('첫 행만 넓은 사진 칸 수정 클래스 row-wide-shot 을 가진다', () => {
+  it('가로로 긴 배너 사진이 있는 첫 행과 넷째 행이 넓은 사진 칸 수정 클래스 row-wide-shot 을 가진다', () => {
     const rows = [...doc.querySelectorAll('#demo .row')]
-    expect(rows.map((row) => row.classList.contains('row-wide-shot'))).toEqual([true, false, false])
+    expect(rows.map((row) => row.classList.contains('row-wide-shot'))).toEqual([true, false, false, true])
   })
 
   it('둘째 행 문단의 버튼 이름 둘은 확장 배너의 실제 버튼 이름과 같다', () => {
@@ -474,29 +477,32 @@ describe('랜딩', () => {
     }
   })
 
-  it('사진 셋이 모두 #demo 안에 배너, 배지, 패널 순서로 있고 src, alt, 크기가 그대로다', () => {
+  it('사진 넷이 모두 #demo 안에 배너, 배지, 패널, 무신사 순서로 있고 src, alt, 크기가 그대로다', () => {
     const imgs = [...doc.querySelectorAll('#demo img')]
-    expect(doc.querySelectorAll('img')).toHaveLength(3)
-    expect(imgs.map((img) => img.getAttribute('src'))).toEqual(['/img/banner.png', '/img/badge.jpg', '/img/panel.png'])
+    expect(doc.querySelectorAll('img')).toHaveLength(4)
+    expect(imgs.map((img) => img.getAttribute('src'))).toEqual(['/img/banner.png', '/img/badge.jpg', '/img/panel.png', '/img/musinsa.png'])
     expect(imgs.map((img) => img.getAttribute('alt'))).toEqual([
       '리뷰 평균 5, 체험단 제외 4.8 이라고 알려 주는 배너',
       '체험단 제공 리뷰에 표시가 붙은 쿠팡 리뷰 화면',
       '체험단을 뺀 평점과 체험단 비중을 보여 주는 확장 패널',
+      '무신사 후기 위에 뜬 배너. 지금까지 본 리뷰의 21%가 체험단이고 리뷰 평균 4.8, 체험단 제외 4.7 이라고 알려 준다',
     ])
     expect(imgs.map((img) => [img.getAttribute('width'), img.getAttribute('height')])).toEqual([
       ['815', '237'],
       ['738', '591'],
       ['466', '602'],
+      ['1011', '459'],
     ])
   })
 
   it('각 사진은 자기 행의 글 옆에 있다(행 하나에 사진 하나)', () => {
     const rows = [...doc.querySelectorAll('#demo .row')]
-    expect(rows.map((row) => row.querySelectorAll('img').length)).toEqual([1, 1, 1])
+    expect(rows.map((row) => row.querySelectorAll('img').length)).toEqual([1, 1, 1, 1])
     expect(rows.map((row) => row.querySelector('img').getAttribute('src'))).toEqual([
       '/img/banner.png',
       '/img/badge.jpg',
       '/img/panel.png',
+      '/img/musinsa.png',
     ])
   })
 
@@ -605,6 +611,14 @@ describe('랜딩 스타일시트', () => {
     const columns = 960 - 32 - 40
     const imageColumn = (columns * Number(match[1])) / (1 + Number(match[1]))
     expect(imageColumn).toBeGreaterThanOrEqual(500)
+  })
+
+  it('720px 이상 블록: 뒤집힌 넓은 행은 넓은 칸이 왼쪽(사진 쪽)이고 무신사 사진 폭 상한은 500px 이다', () => {
+    const wide = css.slice(css.indexOf('@media (min-width: 720px)'))
+    expect(wide).toMatch(/\.row\.flip\.row-wide-shot\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.3fr\)\s*minmax\(0,\s*1fr\)/)
+    expect(wide).toMatch(/\.shot-musinsa img\s*\{[^}]*max-width:\s*500px/)
+    // 같은 무게의 규칙이므로 뒤에 와야 이긴다
+    expect(wide.indexOf('.row.flip.row-wide-shot')).toBeGreaterThan(wide.indexOf('.row.row-wide-shot {'))
   })
 
   it('사진은 자기 칸 안에서 가운데에 놓인다', () => {
