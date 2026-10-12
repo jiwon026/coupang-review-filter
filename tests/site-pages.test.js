@@ -251,13 +251,13 @@ describe('랜딩', () => {
   it('제목과 설명(meta description)이 그대로다', () => {
     expect(doc.title).toBe('체험단 리뷰 제거기')
     expect(doc.querySelector('meta[name="description"]').content).toBe(
-      '쿠팡 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기고, 체험단 리뷰를 뺀 평점을 보여 주는 크롬 확장입니다.',
+      '쿠팡과 무신사 상품 페이지에서 체험단 제공 리뷰를 표시하고 숨기고, 체험단 리뷰를 뺀 평점을 보여 주는 크롬 확장입니다.',
     )
   })
 
-  // 1.1.0 이 스토어에 올라가기 전에는 랜딩이 무신사를 말하면 거짓이다. 계획 Task 10(승인 뒤)에서 이 테스트를 뒤집는다.
-  it('랜딩은 아직 무신사를 말하지 않는다', () => {
-    expect(readFileSync(new URL('index.html', PUBLIC_DIR), 'utf8')).not.toContain('무신사')
+  // 1.1.0 이 2026-10-12 에 스토어에 게시된 뒤 랜딩에 무신사를 더했다(계획 4 의 Task 10).
+  it('랜딩이 무신사도 지원한다고 말한다', () => {
+    expect(readFileSync(new URL('index.html', PUBLIC_DIR), 'utf8')).toContain('쿠팡과 무신사 상품 페이지에서')
   })
 
   it('body 에 landing 클래스가 있다', () => {
@@ -267,11 +267,11 @@ describe('랜딩', () => {
   it('첫 화면 문구가 요소별로 글자 그대로 있다', () => {
     expect(norm(doc.querySelector('h1'))).toBe('별점에 섞인 체험단 리뷰, 빼고 보세요')
     expect(norm(doc.querySelector('p.lead'))).toBe(
-      '쿠팡 상품 페이지에서 체험단 리뷰를 표시하고, 숨기고, 체험단 리뷰를 뺀 평점을 보여 줍니다.',
+      '쿠팡과 무신사 상품 페이지에서 체험단 리뷰를 표시하고, 숨기고, 체험단 리뷰를 뺀 평점을 보여 줍니다.',
     )
     expect(norm(doc.getElementById('cta-hero'))).toBe('크롬에 추가')
     expect(norm(doc.getElementById('store-pending'))).toBe('크롬 웹스토어 심사 중입니다. 곧 설치할 수 있어요')
-    expect(norm(doc.querySelector('p.cta-note'))).toBe('무료입니다. 쿠팡 상품 페이지에서만 동작합니다.')
+    expect(norm(doc.querySelector('p.cta-note'))).toBe('무료입니다. 쿠팡과 무신사 상품 페이지에서 동작합니다.')
   })
 
   it('예시 카드가 세 줄(라벨과 예시 표시, 숫자, 설명)을 그대로 담는다', () => {
@@ -336,9 +336,9 @@ describe('랜딩', () => {
       '패널에서 자세히 봅니다',
     ])
     expect(rows.map((row) => norm(row.querySelector('p')))).toEqual([
-      '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 숫자는 지금까지 본 리뷰를 기준으로 하고, 리뷰 다음 페이지로 넘어가면 본 만큼 더해집니다.',
-      '체험단 제공 리뷰에 표시를 붙입니다. 리뷰 위 배너의 "체험단 리뷰 숨기기" 버튼을 누르면 숨기고, "체험단 리뷰 다시 보기" 를 누르면 다시 보여 줍니다.',
-      '체험단 비중을 한눈에 봅니다. 쿠팡이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
+      '리뷰 위에 원래 평균과 체험단 리뷰를 뺀 평점을 나란히 표시합니다. 숫자는 지금까지 본 리뷰를 기준으로 하고 리뷰를 더 보면 본 만큼 더해집니다.',
+      '체험단 제공 리뷰에 표시를 붙입니다. 리뷰 위 배너나 확장 패널의 "체험단 리뷰 숨기기" 버튼을 누르면 숨기고, "체험단 리뷰 다시 보기" 를 누르면 다시 보여 줍니다.',
+      '체험단 비중을 한눈에 봅니다. 쇼핑몰이 리뷰에 직접 붙이는 체험단 안내 문구가 있는 리뷰만 체험단 리뷰로 봅니다. 추측으로 판정하지 않습니다.',
     ])
     for (const row of rows) expect(row.querySelectorAll('h2, p')).toHaveLength(2)
   })
@@ -399,7 +399,7 @@ describe('랜딩', () => {
     const footer = doc.querySelector('footer.site-footer')
     const paragraphs = [...footer.querySelectorAll('p')]
     expect(paragraphs.map(norm)).toEqual([
-      '이 확장은 쿠팡과 관계가 없는 개인이 만든 도구입니다.',
+      '이 확장은 쿠팡, 무신사와 관계가 없는 개인이 만든 도구입니다.',
       '이 페이지는 방문 통계를 기록합니다. 기록하는 내용과 빠지는 방법은 개인정보 처리방침에 있습니다.',
       '개인정보 처리방침',
     ])
