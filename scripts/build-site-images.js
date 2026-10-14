@@ -64,6 +64,7 @@ async function buildBadge() {
 await mkdir(OUT_DIR, { recursive: true })
 await copyUnchanged('banner-4.8.png', 'banner.png')
 await buildBadge()
-await copyUnchanged('panel-4.8.png', 'panel.png')
+// 패널은 1.1.0 의 화면(숨김 버튼, 범위 안내)으로 사용자가 다시 찍은 사진이다.
+await copyUnchanged('panel-1.1.png', 'panel.png')
 // 무신사 배너는 사용자가 실제 크롬에서 찍은 사진이다. 배너와 탭까지만 담겨 이름, 상품, 후기 본문이 없다.
 await copyUnchanged('musinsa-user.png', 'musinsa.png')
