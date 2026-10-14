@@ -22,6 +22,7 @@
 | 긱뉴스 | `https://crf-review-remover.vercel.app/?utm_source=geeknews&utm_medium=community&utm_campaign=launch` |
 | 디스콰이엇 | `https://crf-review-remover.vercel.app/?utm_source=disquiet&utm_medium=community&utm_campaign=launch` |
 | 슬랙 | `https://crf-review-remover.vercel.app/?utm_source=slack&utm_medium=community&utm_campaign=launch` |
+| 카카오톡 | `https://crf-review-remover.vercel.app/?utm_source=kakao&utm_medium=messenger&utm_campaign=launch` |
 | 클리앙(보류) | `https://crf-review-remover.vercel.app/?utm_source=clien&utm_medium=community&utm_campaign=launch` |
 
 지킬 것:
@@ -31,6 +32,7 @@
 - 표식 값은 영문 소문자, 숫자, `_`, `-` 만 쓴다. 다른 글자가 들어가면 랜딩이 그 값을 버린다. 표의 값은 테스트(`tests/site-landing-source.test.js`)가 검사한다
 - 새 채널을 추가하면 이 표와 테스트에 함께 넣는다
 - 인스타그램은 글 본문의 링크가 눌리지 않는다. 프로필의 링크 칸이나 스토리의 링크 스티커에 위 링크를 넣는다
+- 카카오톡은 받는 사람이 대부분 휴대폰으로 연다. 휴대폰에서는 설치 버튼 대신 PC 로 넘기는 안내가 보인다. 카카오톡 안에서 연 페이지는 어디서 왔는지(유입 도메인)가 남지 않으므로 표식이 없으면 `direct` 로 잡힌다. 단체방과 개인 대화를 나눠 보고 싶으면 `utm_campaign` 을 다르게 준다
 - 올린 날짜를 아래 기록에 적는다. 분석할 때 채널별 유입 시점을 맞춰 본다
 
 ## 올린 기록
