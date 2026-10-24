@@ -8,21 +8,24 @@
 
 ## 화면
 
-**리뷰 위 배너.** 원래 평균과 체험단을 뺀 평점, 체험단 비중을 보여 줍니다.
-
-<img src="site/public/img/banner.png" width="600" alt="리뷰 평균 5, 체험단 제외 4.8 이라고 알려 주는 쿠팡 배너">
-
-**체험단 표시.** 체험단 리뷰마다 `체험단 제공 리뷰` 표시가 붙습니다.
-
-<img src="site/public/img/badge.jpg" width="420" alt="체험단 제공 리뷰에 표시가 붙은 쿠팡 리뷰 화면">
-
-**사이드 패널.** 같은 숫자를 자세히 보고, 여기서도 체험단 리뷰를 숨기거나 다시 봅니다. 통계 전송도 여기서 켜고 끕니다.
-
-<img src="site/public/img/panel.png" width="300" alt="체험단을 뺀 평점, 체험단 비중, 체험단 리뷰 다시 보기 버튼이 있는 사이드 패널">
-
-**무신사.** 무신사 상품 페이지와 후기 전체보기에서도 같은 배너가 뜹니다.
-
-<img src="site/public/img/musinsa.png" width="600" alt="무신사 후기 위에 뜬 배너. 체험단 21%, 리뷰 평균 4.8, 체험단 제외 4.7">
+<table>
+  <tr>
+    <td width="50%"><img src="site/public/img/banner.png" alt="리뷰 평균 5, 체험단 제외 4.8 이라고 알려 주는 쿠팡 배너"></td>
+    <td width="50%"><img src="site/public/img/musinsa.png" alt="무신사 후기 위에 뜬 배너. 체험단 21%, 리뷰 평균 4.8, 체험단 제외 4.7"></td>
+  </tr>
+  <tr>
+    <td>쿠팡: 리뷰 위 배너에 체험단을 뺀 평점과 비중</td>
+    <td>무신사: 상품 페이지와 후기 전체보기에서도 같은 배너</td>
+  </tr>
+  <tr>
+    <td align="center"><img src="site/public/img/badge.jpg" width="360" alt="체험단 제공 리뷰에 표시가 붙은 쿠팡 리뷰 화면"></td>
+    <td align="center"><img src="site/public/img/panel.png" width="240" alt="체험단을 뺀 평점, 체험단 비중, 체험단 리뷰 다시 보기 버튼이 있는 사이드 패널"></td>
+  </tr>
+  <tr>
+    <td>체험단 리뷰마다 표시가 붙고 버튼으로 숨깁니다</td>
+    <td>사이드 패널에서 자세히 보고 여기서도 숨깁니다</td>
+  </tr>
+</table>
 
 ## 사용 방법
 
