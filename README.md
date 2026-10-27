@@ -114,5 +114,6 @@
 | `docs/store/listing.md` | 스토어 등록 자료 |
 | `docs/launch/channels.md` | 홍보 채널별 링크와 글 초안 |
 | `docs/development.md` | 개발 방법 |
+| `HANDOFF.md` | 인수인계: 구조, 완료한 일, 남은 일, 결정과 이유, 주의할 점 |
 
 이 확장은 쿠팡, 무신사와 관계가 없는 개인이 만든 도구입니다.
